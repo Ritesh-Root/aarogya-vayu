@@ -38,6 +38,38 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadInitialData();
   setupEventListeners();
   lucide.createIcons();
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const view = urlParams.get('view') || urlParams.get('tab');
+  if (view) {
+    setTimeout(async () => {
+      if (view === 'cmo') {
+        openCmoModal();
+        setTimeout(() => askCmoQuery(1), 200);
+      } else if (view === 'ledger') {
+        openLedgerModal();
+      } else if (view === 'challan') {
+        const rId = (activeRecs && activeRecs.length > 0) ? activeRecs[0].id : 'REC-ABA38C63';
+        showChallanModal(rId);
+      } else if (view === 'facility') {
+        const fId = (facilities && facilities.length > 0) ? facilities[0].id : 'FAC-001';
+        openFacilityDetail(fId);
+      } else if (view === 'map') {
+        const mapEl = document.getElementById('map');
+        if (mapEl) mapEl.scrollIntoView({ behavior: 'instant', block: 'start' });
+        useVoiceTemplate(1);
+        setTimeout(() => submitVoiceIntake(), 200);
+      } else if (view === 'agents') {
+        const term = document.getElementById('agentTerminalBody');
+        if (term) term.scrollIntoView({ behavior: 'instant', block: 'center' });
+        await runAgentPipeline();
+      } else if (view === 'vision') {
+        const btnV = document.getElementById('btnVision');
+        if (btnV) btnV.scrollIntoView({ behavior: 'instant', block: 'center' });
+        await runVisionVerification();
+      }
+    }, 400);
+  }
 });
 
 function initMap() {
