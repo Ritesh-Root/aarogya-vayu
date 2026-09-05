@@ -33,7 +33,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DATA_DIR = "/home/ritesh/aarogya_vayu/data"
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = os.environ.get("DATA_DIR", str(BASE_DIR / "data"))
+STATIC_DIR = os.environ.get("STATIC_DIR", str(BASE_DIR / "static"))
 FACILITIES_PATH = os.path.join(DATA_DIR, "facilities.json")
 MEDICINES_PATH = os.path.join(DATA_DIR, "medicines.json")
 INVENTORY_PATH = os.path.join(DATA_DIR, "inventory.json")
@@ -47,8 +51,31 @@ with open(MEDICINES_PATH, "r") as f:
     medicines_data: List[dict] = json.load(f)
 medicines_dict = {med["id"]: med for med in medicines_data}
 
-with open(INVENTORY_PATH, "r") as f:
-    inventory_data: List[dict] = json.load(f)
+# Load inventory from primary path or fallback
+inv_loaded = False
+for p in [INVENTORY_PATH, "/tmp/inventory.json"]:
+    try:
+        with open(p, "r") as f:
+            inventory_data: List[dict] = json.load(f)
+            inv_loaded = True
+            break
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        continue
+
+if not inv_loaded:
+    with open(INVENTORY_PATH, "r") as f:
+        inventory_data: List[dict] = json.load(f)
+
+def _save_inventory():
+    try:
+        with open(INVENTORY_PATH, "w") as f:
+            json.dump(inventory_data, f, indent=2)
+    except OSError:
+        try:
+            with open("/tmp/inventory.json", "w") as f:
+                json.dump(inventory_data, f, indent=2)
+        except Exception:
+            pass
 
 # Global services
 surge_engine = SurgeEngine(FACILITIES_PATH, MEDICINES_PATH)
@@ -80,11 +107,11 @@ def recompute_recommendations():
 recompute_recommendations()
 
 # Static files mount
-app.mount("/static", StaticFiles(directory="/home/ritesh/aarogya_vayu/static"), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 @app.get("/")
 async def root():
-    return FileResponse("/home/ritesh/aarogya_vayu/static/index.html")
+    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
 @app.get("/api/facilities")
 async def get_facilities():
@@ -143,8 +170,7 @@ async def process_voice_intake(request: VoiceIntakeRequest):
                 break
         
         # Save to disk
-        with open(INVENTORY_PATH, "w") as f:
-            json.dump(inventory_data, f, indent=2)
+        _save_inventory()
 
         # Log audit entry
         audit_ledger.record_entry(
@@ -184,8 +210,7 @@ async def approve_transfer(req: ApprovalRequest):
         donor_item["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         rec_item["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        with open(INVENTORY_PATH, "w") as f:
-            json.dump(inventory_data, f, indent=2)
+        _save_inventory()
 
     rec.status = "APPROVED"
 

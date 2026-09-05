@@ -656,5 +656,46 @@
     },
     "prev_hash": "327465fda526d18c7c75210e89c7b6fe675d5707fc4822f56edcb3e2d3918d7b",
     "current_hash": "5418599b57e98f210158595e2507c3ed7fe4543f374f27fe6a656538e77420f5"
+  },
+  {
+    "index": 47,
+    "timestamp": "2026-09-05T22:37:02.760079Z",
+    "event_type": "CMO_STRATEGIC_QUERY",
+    "approved_by": "DR_SAXENA_CMO",
+    "details": {
+      "question": "What if this smog inversion lasts for 5 more days? Which facilities will stock out first?",
+      "query_type": "WHAT_IF_SURGE_SIMULATION"
+    },
+    "prev_hash": "5418599b57e98f210158595e2507c3ed7fe4543f374f27fe6a656538e77420f5",
+    "current_hash": "1fe51bf5cc2958350c83263bf5468527716b09ba2edebd86ab104a98f0c61097"
+  },
+  {
+    "index": 48,
+    "timestamp": "2026-09-05T22:38:22.859357Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "1fe51bf5cc2958350c83263bf5468527716b09ba2edebd86ab104a98f0c61097",
+    "current_hash": "02a28487efd69e391267c74f397959cd1e853c04ff2586fe3ecf9b8406cdafe2"
+  },
+  {
+    "index": 49,
+    "timestamp": "2026-09-05T22:38:41.428498Z",
+    "event_type": "SHELF_PHOTO_VISION_VERIFICATION",
+    "approved_by": "GEMINI_VISION_AGENT",
+    "details": {
+      "facility_id": "PHC-LKO-01",
+      "visual_count": 16,
+      "reported_count": 15,
+      "status": "VERIFIED_MATCH",
+      "batch_ocr": "BAT-842-26",
+      "expiry_ocr": "NOV 2026"
+    },
+    "prev_hash": "02a28487efd69e391267c74f397959cd1e853c04ff2586fe3ecf9b8406cdafe2",
+    "current_hash": "349d49639974479fb33d5ae8b1b8d953132188a77f9347b9ef1de8adc19116cc"
   }
 ]
