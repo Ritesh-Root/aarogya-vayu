@@ -125,8 +125,8 @@ Aarogya-Vāyu is pre-configured with **20 real, geo-tagged rural health faciliti
 
 ### 1. Clone & Configure
 ```bash
-git clone https://github.com/your-username/aarogya_vayu.git
-cd aarogya_vayu
+git clone https://github.com/Ritesh-Root/aarogya-vayu.git
+cd aarogya-vayu
 
 # Copy environment template
 cp .env.example .env
