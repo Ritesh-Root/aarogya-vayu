@@ -1,0 +1,68 @@
+[
+  {
+    "id": "MED-001",
+    "name": "Salbutamol Respirator Solution (Respules 2.5mg)",
+    "category": "Respiratory / Bronchodilator",
+    "unit": "Respules (vials)",
+    "climate_sensitive": "AQI / Smog",
+    "base_consumption_phc": 20,
+    "base_consumption_chc": 50,
+    "min_buffer_days": 14,
+    "critical_threshold_days": 4
+  },
+  {
+    "id": "MED-002",
+    "name": "Oral Rehydration Salts (ORS Sachets, WHO Formula)",
+    "category": "Fluid Therapy / Electrolytes",
+    "unit": "Sachets",
+    "climate_sensitive": "Heatwave / Drought",
+    "base_consumption_phc": 40,
+    "base_consumption_chc": 100,
+    "min_buffer_days": 14,
+    "critical_threshold_days": 5
+  },
+  {
+    "id": "MED-003",
+    "name": "Dexamethasone Sodium Phosphate Injection (4mg/ml)",
+    "category": "Corticosteroid / Severe Flare-up",
+    "unit": "Ampoules",
+    "climate_sensitive": "AQI / Smog",
+    "base_consumption_phc": 15,
+    "base_consumption_chc": 35,
+    "min_buffer_days": 14,
+    "critical_threshold_days": 3
+  },
+  {
+    "id": "MED-004",
+    "name": "Amoxicillin + Clavulanate 625mg Tablets",
+    "category": "Antibacterial",
+    "unit": "Strips (10 tabs)",
+    "climate_sensitive": "Secondary Respiratory",
+    "base_consumption_phc": 25,
+    "base_consumption_chc": 60,
+    "min_buffer_days": 14,
+    "critical_threshold_days": 4
+  },
+  {
+    "id": "MED-005",
+    "name": "Paracetamol IV Infusion (1000mg/100ml bottle)",
+    "category": "Antipyretic / Analgesic",
+    "unit": "Bottles",
+    "climate_sensitive": "Heat / Infection",
+    "base_consumption_phc": 18,
+    "base_consumption_chc": 45,
+    "min_buffer_days": 14,
+    "critical_threshold_days": 4
+  },
+  {
+    "id": "MED-006",
+    "name": "Cetirizine 10mg Tablets",
+    "category": "Antihistamine / Rhinitis",
+    "unit": "Strips (10 tabs)",
+    "climate_sensitive": "Smog / Dust",
+    "base_consumption_phc": 30,
+    "base_consumption_chc": 80,
+    "min_buffer_days": 14,
+    "critical_threshold_days": 4
+  }
+]

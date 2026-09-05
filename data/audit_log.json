@@ -1,0 +1,660 @@
+[
+  {
+    "index": 0,
+    "timestamp": "2026-09-04T22:04:59.393577Z",
+    "event_type": "GENESIS",
+    "approved_by": "SYSTEM_INITIALIZER",
+    "details": {
+      "message": "Aarogya-V\u0101yu Climate-Health Ledger Initialized for Lucknow-Unnao District Cluster"
+    },
+    "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "current_hash": "68840015de284b49c1a69ecd3b78ae681eb5e03dda7e326a50e4bfcec420a0ff"
+  },
+  {
+    "index": 1,
+    "timestamp": "2026-09-04T22:05:53.492287Z",
+    "event_type": "FRONTLINE_VOICE_REPORT",
+    "approved_by": "STAFF@PHC-UNN-10",
+    "details": {
+      "facility_id": "PHC-UNN-10",
+      "facility_name": "PHC Sikandarpur Karan",
+      "medicine_id": "MED-001",
+      "reported_stock": 15,
+      "dispensed_yesterday": 40,
+      "detected_language": "Hindi",
+      "raw_text": "PHC \u0915\u093e\u0915\u094b\u0930\u0940 \u0938\u0947 \u092c\u094b\u0932 \u0930\u0939\u0947 \u0939\u0948\u0902, \u0938\u093e\u0932\u094d\u092c\u0941\u091f\u093e\u092e\u094b\u0932 \u0915\u0947 \u0938\u093f\u0930\u094d\u092b 15 \u0930\u0947\u0938\u094d\u092a\u094d\u092f\u0942\u0932 \u092c\u091a\u0947 \u0939\u0948\u0902, \u0915\u0932 40 \u092e\u0930\u0940\u091c \u0906\u090f \u0925\u0947\u0964"
+    },
+    "prev_hash": "68840015de284b49c1a69ecd3b78ae681eb5e03dda7e326a50e4bfcec420a0ff",
+    "current_hash": "c8c731b0f008bdae0f3ff83eac1106dbfcbea9bd8bb5b840a8a12608a688bd73"
+  },
+  {
+    "index": 2,
+    "timestamp": "2026-09-04T22:14:02.247626Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 10,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "c8c731b0f008bdae0f3ff83eac1106dbfcbea9bd8bb5b840a8a12608a688bd73",
+    "current_hash": "cf3f1ee9b4a9f06d304c622f92b6491fd32e187c89df0bfbb35e0f6ce30b105b"
+  },
+  {
+    "index": 3,
+    "timestamp": "2026-09-04T22:23:27.440747Z",
+    "event_type": "CMO_STRATEGIC_QUERY",
+    "approved_by": "DR_SAXENA_CMO",
+    "details": {
+      "question": "\u0905\u0917\u0930 \u092f\u0939 \u0938\u094d\u092e\u0949\u0917 5 \u0926\u093f\u0928 \u0914\u0930 \u0930\u0939\u093e \u0924\u094b \u0915\u093f\u0928-\u0915\u093f\u0928 \u0915\u0947\u0902\u0926\u094d\u0930\u094b\u0902 \u092e\u0947\u0902 \u0926\u0935\u093e\u0908 \u0916\u0924\u094d\u092e \u0939\u094b\u0917\u0940?",
+      "query_type": "WHAT_IF_SURGE_SIMULATION"
+    },
+    "prev_hash": "cf3f1ee9b4a9f06d304c622f92b6491fd32e187c89df0bfbb35e0f6ce30b105b",
+    "current_hash": "e0731493b0303c33811c1e6665f7dcd3523cc276c1f5e819236ed46733a8d2de"
+  },
+  {
+    "index": 4,
+    "timestamp": "2026-09-04T22:23:27.487859Z",
+    "event_type": "SHELF_PHOTO_VISION_VERIFICATION",
+    "approved_by": "GEMINI_VISION_AGENT",
+    "details": {
+      "facility_id": "PHC-LKO-01",
+      "visual_count": 16,
+      "reported_count": 15,
+      "status": "VERIFIED_MATCH",
+      "batch_ocr": "BAT-842-26",
+      "expiry_ocr": "NOV 2026"
+    },
+    "prev_hash": "e0731493b0303c33811c1e6665f7dcd3523cc276c1f5e819236ed46733a8d2de",
+    "current_hash": "8d17b744eebe0c8876383e076de15ec2e2d0cf86728e78b42bc9a07e6a6b0813"
+  },
+  {
+    "index": 5,
+    "timestamp": "2026-09-04T22:24:56.222979Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "8d17b744eebe0c8876383e076de15ec2e2d0cf86728e78b42bc9a07e6a6b0813",
+    "current_hash": "ad85e86d79792fb9db06260b6801f6fe2c3c73af59c5654b1b63cb75a2a98dd4"
+  },
+  {
+    "index": 6,
+    "timestamp": "2026-09-04T22:24:56.248045Z",
+    "event_type": "CMO_STRATEGIC_QUERY",
+    "approved_by": "DR_SAXENA_CMO",
+    "details": {
+      "question": "MP \u0938\u093e\u0939\u092c \u0915\u0947 \u0932\u093f\u090f \u0930\u093f\u092a\u094b\u0930\u094d\u091f \u0924\u0948\u092f\u093e\u0930 \u0915\u0930\u094b",
+      "query_type": "PARLIAMENTARY_IMPACT_BRIEF"
+    },
+    "prev_hash": "ad85e86d79792fb9db06260b6801f6fe2c3c73af59c5654b1b63cb75a2a98dd4",
+    "current_hash": "5e11dfca6cdbd16470768f2cc64806c592498ff6ed377b1bf7997d0905f24d3a"
+  },
+  {
+    "index": 7,
+    "timestamp": "2026-09-04T22:24:56.274268Z",
+    "event_type": "SHELF_PHOTO_VISION_VERIFICATION",
+    "approved_by": "GEMINI_VISION_AGENT",
+    "details": {
+      "facility_id": "PHC-LKO-01",
+      "visual_count": 16,
+      "reported_count": 15,
+      "status": "VERIFIED_MATCH",
+      "batch_ocr": "BAT-842-26",
+      "expiry_ocr": "NOV 2026"
+    },
+    "prev_hash": "5e11dfca6cdbd16470768f2cc64806c592498ff6ed377b1bf7997d0905f24d3a",
+    "current_hash": "e0360f64fe99b79b3cfd2e138ca4a1d9f902e079e473123924ff72da3e6b3be7"
+  },
+  {
+    "index": 8,
+    "timestamp": "2026-09-04T22:48:08.869438Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "e0360f64fe99b79b3cfd2e138ca4a1d9f902e079e473123924ff72da3e6b3be7",
+    "current_hash": "30f9a22006eb6d210dbe2efbaeaa20b97655107485f4d3c6e82a9372c0b2278c"
+  },
+  {
+    "index": 9,
+    "timestamp": "2026-09-04T22:51:01.346727Z",
+    "event_type": "FRONTLINE_VOICE_REPORT",
+    "approved_by": "STAFF@PHC-LKO-01",
+    "details": {
+      "facility_id": "PHC-LKO-01",
+      "facility_name": "PHC Kakori",
+      "medicine_id": "MED-001",
+      "reported_stock": 15,
+      "dispensed_yesterday": null,
+      "detected_language": "English / Hinglish",
+      "raw_text": "This is PHC Kakori reporting. We only have 15 respules of Salbutamol left."
+    },
+    "prev_hash": "30f9a22006eb6d210dbe2efbaeaa20b97655107485f4d3c6e82a9372c0b2278c",
+    "current_hash": "f66f88a23eed5bca9b7ac27aaee9cda452775af92f6bfad4eca3498ebd296acd"
+  },
+  {
+    "index": 10,
+    "timestamp": "2026-09-04T22:51:04.363469Z",
+    "event_type": "CMO_STRATEGIC_QUERY",
+    "approved_by": "DR_SAXENA_CMO",
+    "details": {
+      "question": "What if this smog inversion lasts for 5 more days?",
+      "query_type": "WHAT_IF_SURGE_SIMULATION"
+    },
+    "prev_hash": "f66f88a23eed5bca9b7ac27aaee9cda452775af92f6bfad4eca3498ebd296acd",
+    "current_hash": "43803962f36075284668425a33c9361967808a5346cf13ac059aab74f7f43b55"
+  },
+  {
+    "index": 11,
+    "timestamp": "2026-09-04T22:55:28.927875Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "43803962f36075284668425a33c9361967808a5346cf13ac059aab74f7f43b55",
+    "current_hash": "e32e67c696b07f42cf75b31eaf7cf336c7b541c7944cc2721d72a32071eb9484"
+  },
+  {
+    "index": 12,
+    "timestamp": "2026-09-04T22:55:28.931900Z",
+    "event_type": "CMO_STRATEGIC_QUERY",
+    "approved_by": "DR_SAXENA_CMO",
+    "details": {
+      "question": "What if smog lasts 5 more days?",
+      "query_type": "WHAT_IF_SURGE_SIMULATION"
+    },
+    "prev_hash": "e32e67c696b07f42cf75b31eaf7cf336c7b541c7944cc2721d72a32071eb9484",
+    "current_hash": "87ff0f072bca22f91307c20790f25f9ad93c135338619e423a41579edc764d13"
+  },
+  {
+    "index": 13,
+    "timestamp": "2026-09-04T22:55:28.935244Z",
+    "event_type": "SHELF_PHOTO_VISION_VERIFICATION",
+    "approved_by": "GEMINI_VISION_AGENT",
+    "details": {
+      "facility_id": "PHC-LKO-01",
+      "visual_count": 16,
+      "reported_count": 15,
+      "status": "VERIFIED_MATCH",
+      "batch_ocr": "BAT-842-26",
+      "expiry_ocr": "NOV 2026"
+    },
+    "prev_hash": "87ff0f072bca22f91307c20790f25f9ad93c135338619e423a41579edc764d13",
+    "current_hash": "d7dee8fb4c3575163955bddab03cde08e42d7d7af0d3f7afd46a348ed06a4bf3"
+  },
+  {
+    "index": 14,
+    "timestamp": "2026-09-04T22:55:28.938810Z",
+    "event_type": "FRONTLINE_VOICE_REPORT",
+    "approved_by": "STAFF@PHC-LKO-01",
+    "details": {
+      "facility_id": "PHC-LKO-01",
+      "facility_name": "PHC Kakori",
+      "medicine_id": "MED-001",
+      "reported_stock": 15,
+      "dispensed_yesterday": null,
+      "detected_language": "English / Hinglish",
+      "raw_text": "This is PHC Kakori reporting 15 respules of Salbutamol left."
+    },
+    "prev_hash": "d7dee8fb4c3575163955bddab03cde08e42d7d7af0d3f7afd46a348ed06a4bf3",
+    "current_hash": "145197c713ac49a10f28947cb3fc63086d11a8784d574ff0ea08264807c3c4ef"
+  },
+  {
+    "index": 15,
+    "timestamp": "2026-09-04T22:56:19.460903Z",
+    "event_type": "STOCK_TRANSFER_EXECUTED",
+    "approved_by": "Dr. S. K. Saxena",
+    "details": {
+      "recommendation_id": "REC-4AAE3796",
+      "donor": "CHC Malihabad",
+      "recipient": "PHC Kakori",
+      "medicine": "Salbutamol Respirator Solution (Respules 2.5mg)",
+      "units": 400,
+      "batch": "BAT-928-26",
+      "distance_km": 9.7,
+      "officer_comments": "Test automated verification"
+    },
+    "prev_hash": "145197c713ac49a10f28947cb3fc63086d11a8784d574ff0ea08264807c3c4ef",
+    "current_hash": "e7fd08a450c02c0ab9676304ffff087b804c326acbff4707dd15a66f0702e930"
+  },
+  {
+    "index": 16,
+    "timestamp": "2026-09-04T22:56:53.155250Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "e7fd08a450c02c0ab9676304ffff087b804c326acbff4707dd15a66f0702e930",
+    "current_hash": "56600c1119d66260387e3cb82d7178e0275806ee314435cdede4f383286cf7b3"
+  },
+  {
+    "index": 17,
+    "timestamp": "2026-09-04T22:57:04.464521Z",
+    "event_type": "SHELF_PHOTO_VISION_VERIFICATION",
+    "approved_by": "GEMINI_VISION_AGENT",
+    "details": {
+      "facility_id": "PHC-LKO-01",
+      "visual_count": 16,
+      "reported_count": 15,
+      "status": "VERIFIED_MATCH",
+      "batch_ocr": "BAT-842-26",
+      "expiry_ocr": "NOV 2026"
+    },
+    "prev_hash": "56600c1119d66260387e3cb82d7178e0275806ee314435cdede4f383286cf7b3",
+    "current_hash": "51467ede118b3d3e43a407be8ab609827205671f04bf9d4ec1711bee283ee6ce"
+  },
+  {
+    "index": 18,
+    "timestamp": "2026-09-05T17:02:41.330091Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "51467ede118b3d3e43a407be8ab609827205671f04bf9d4ec1711bee283ee6ce",
+    "current_hash": "7f373f918b19af212e2c911bc1ace6b3ace76b1a58d72a873be72759423deee5"
+  },
+  {
+    "index": 19,
+    "timestamp": "2026-09-05T17:09:41.156569Z",
+    "event_type": "CMO_STRATEGIC_QUERY",
+    "approved_by": "DR_SAXENA_CMO",
+    "details": {
+      "question": "How should we prepare our rural PHCs in Lucknow and Unnao for a 4-day spike in PM2.5 above 300?",
+      "query_type": "WHAT_IF_SURGE_SIMULATION"
+    },
+    "prev_hash": "7f373f918b19af212e2c911bc1ace6b3ace76b1a58d72a873be72759423deee5",
+    "current_hash": "aabb10d73c77562fc153398e23a35a00dc4a75d8e283eda3c225153c22e8734f"
+  },
+  {
+    "index": 20,
+    "timestamp": "2026-09-05T17:25:29.254005Z",
+    "event_type": "ENVIRONMENTAL_TELEMETRY_UPDATE",
+    "approved_by": "SATELLITE_FEED_AGENT",
+    "details": {
+      "aqi": 385,
+      "smog_episode": true,
+      "heatwave_alert": false,
+      "corridor": "Lucknow-Unnao Indo-Gangetic Smog Corridor"
+    },
+    "prev_hash": "aabb10d73c77562fc153398e23a35a00dc4a75d8e283eda3c225153c22e8734f",
+    "current_hash": "166aabd5cef477d28a69a48ea20bde1fb29056428cd244567af7624133ba677a"
+  },
+  {
+    "index": 21,
+    "timestamp": "2026-09-05T17:25:31.481035Z",
+    "event_type": "FRONTLINE_VOICE_REPORT",
+    "approved_by": "STAFF@PHC-LKO-01",
+    "details": {
+      "facility_id": "PHC-LKO-01",
+      "facility_name": "PHC Kakori",
+      "medicine_id": "MED-001",
+      "reported_stock": 15,
+      "dispensed_yesterday": 40,
+      "detected_language": "English / Hinglish",
+      "raw_text": "This is PHC Kakori reporting. We only have 15 respules of Salbutamol left and treated 40 acute respiratory patients yesterday."
+    },
+    "prev_hash": "166aabd5cef477d28a69a48ea20bde1fb29056428cd244567af7624133ba677a",
+    "current_hash": "b2354a188a774a492b069b47967920c314b55394a96fb8dd498e7557422b7b69"
+  },
+  {
+    "index": 22,
+    "timestamp": "2026-09-05T17:25:31.485821Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "b2354a188a774a492b069b47967920c314b55394a96fb8dd498e7557422b7b69",
+    "current_hash": "e384db932408057fa284d1ece4dffb94aa5f625f7e5ea0d3bfede3e55a5d571c"
+  },
+  {
+    "index": 23,
+    "timestamp": "2026-09-05T17:25:46.429394Z",
+    "event_type": "CMO_STRATEGIC_QUERY",
+    "approved_by": "DR_SAXENA_CMO",
+    "details": {
+      "question": "What if this smog inversion lasts for 5 more days? Which facilities will stock out first?",
+      "query_type": "WHAT_IF_SURGE_SIMULATION"
+    },
+    "prev_hash": "e384db932408057fa284d1ece4dffb94aa5f625f7e5ea0d3bfede3e55a5d571c",
+    "current_hash": "c293db1fee6beebab3b0b6d33f39eab43d765f9cc1dc61eb4b3e9aaaf9bfdebe"
+  },
+  {
+    "index": 24,
+    "timestamp": "2026-09-05T17:25:46.431919Z",
+    "event_type": "SHELF_PHOTO_VISION_VERIFICATION",
+    "approved_by": "GEMINI_VISION_AGENT",
+    "details": {
+      "facility_id": "PHC-LKO-01",
+      "visual_count": 16,
+      "reported_count": 15,
+      "status": "VERIFIED_MATCH",
+      "batch_ocr": "BAT-842-26",
+      "expiry_ocr": "NOV 2026"
+    },
+    "prev_hash": "c293db1fee6beebab3b0b6d33f39eab43d765f9cc1dc61eb4b3e9aaaf9bfdebe",
+    "current_hash": "f1ba38bd54d612b8c9217d74e4802667ab1fae178d1d5cbf4ce853be5e858597"
+  },
+  {
+    "index": 25,
+    "timestamp": "2026-09-05T17:26:04.277948Z",
+    "event_type": "STOCK_TRANSFER_EXECUTED",
+    "approved_by": "Dr. S. K. Saxena (CMO)",
+    "details": {
+      "recommendation_id": "REC-46192D80",
+      "donor": "CHC Malihabad",
+      "recipient": "CHC Sarojini Nagar",
+      "medicine": "Dexamethasone Sodium Phosphate Injection (4mg/ml)",
+      "units": 230,
+      "batch": "BAT-320-26",
+      "distance_km": 23.8,
+      "officer_comments": "Verified automated transfer protocol"
+    },
+    "prev_hash": "f1ba38bd54d612b8c9217d74e4802667ab1fae178d1d5cbf4ce853be5e858597",
+    "current_hash": "57348ce8ea20a4e92a8c5b80162719ec524abb54ef3d33fd4e17a331959041da"
+  },
+  {
+    "index": 26,
+    "timestamp": "2026-09-05T17:26:08.630989Z",
+    "event_type": "STOCK_TRANSFER_EXECUTED",
+    "approved_by": "Dr. S. K. Saxena (CMO)",
+    "details": {
+      "recommendation_id": "REC-05E529F4",
+      "donor": "PHC Hasanganj",
+      "recipient": "PHC Kakori",
+      "medicine": "Salbutamol Respirator Solution (Respules 2.5mg)",
+      "units": 160,
+      "batch": "BAT-287-26",
+      "distance_km": 29.3,
+      "officer_comments": "Verified automated transfer protocol"
+    },
+    "prev_hash": "57348ce8ea20a4e92a8c5b80162719ec524abb54ef3d33fd4e17a331959041da",
+    "current_hash": "35005767d538d23da0833d9664a6cc95d43c00a499a4e32ae55becbcefda25bc"
+  },
+  {
+    "index": 27,
+    "timestamp": "2026-09-05T17:57:17.977980Z",
+    "event_type": "ENVIRONMENTAL_TELEMETRY_UPDATE",
+    "approved_by": "SATELLITE_FEED_AGENT",
+    "details": {
+      "aqi": 140,
+      "smog_episode": false,
+      "heatwave_alert": true,
+      "corridor": "Central Awadh Heatwave Corridor (Severe Dehydration Risk)"
+    },
+    "prev_hash": "35005767d538d23da0833d9664a6cc95d43c00a499a4e32ae55becbcefda25bc",
+    "current_hash": "308448f6fd3f01c1b0b654c9438ceaf865b5d1a47e9a8b93d7df5ad82961de89"
+  },
+  {
+    "index": 28,
+    "timestamp": "2026-09-05T17:57:18.949925Z",
+    "event_type": "ENVIRONMENTAL_TELEMETRY_UPDATE",
+    "approved_by": "SATELLITE_FEED_AGENT",
+    "details": {
+      "aqi": 140,
+      "smog_episode": false,
+      "heatwave_alert": true,
+      "corridor": "Central Awadh Heatwave Corridor (Severe Dehydration Risk)"
+    },
+    "prev_hash": "308448f6fd3f01c1b0b654c9438ceaf865b5d1a47e9a8b93d7df5ad82961de89",
+    "current_hash": "b3d84ee28444837e393d41078157234142d2dcc5bdf484cfadb245d93ae889a8"
+  },
+  {
+    "index": 29,
+    "timestamp": "2026-09-05T17:57:19.737081Z",
+    "event_type": "ENVIRONMENTAL_TELEMETRY_UPDATE",
+    "approved_by": "SATELLITE_FEED_AGENT",
+    "details": {
+      "aqi": 75,
+      "smog_episode": false,
+      "heatwave_alert": false,
+      "corridor": "Baseline Seasonal Conditions"
+    },
+    "prev_hash": "b3d84ee28444837e393d41078157234142d2dcc5bdf484cfadb245d93ae889a8",
+    "current_hash": "108864dd7b40bd9da3064c5b5aec46dbeb16472d2c3679f33d18f73633fa44d1"
+  },
+  {
+    "index": 30,
+    "timestamp": "2026-09-05T17:57:20.282838Z",
+    "event_type": "ENVIRONMENTAL_TELEMETRY_UPDATE",
+    "approved_by": "SATELLITE_FEED_AGENT",
+    "details": {
+      "aqi": 140,
+      "smog_episode": false,
+      "heatwave_alert": true,
+      "corridor": "Central Awadh Heatwave Corridor (Severe Dehydration Risk)"
+    },
+    "prev_hash": "108864dd7b40bd9da3064c5b5aec46dbeb16472d2c3679f33d18f73633fa44d1",
+    "current_hash": "17b70571b875aa5128058bd7405acc2c1957bdf96b3ce0e2557512c9f6b80064"
+  },
+  {
+    "index": 31,
+    "timestamp": "2026-09-05T17:57:20.654892Z",
+    "event_type": "ENVIRONMENTAL_TELEMETRY_UPDATE",
+    "approved_by": "SATELLITE_FEED_AGENT",
+    "details": {
+      "aqi": 140,
+      "smog_episode": false,
+      "heatwave_alert": true,
+      "corridor": "Central Awadh Heatwave Corridor (Severe Dehydration Risk)"
+    },
+    "prev_hash": "17b70571b875aa5128058bd7405acc2c1957bdf96b3ce0e2557512c9f6b80064",
+    "current_hash": "eca9086d1964b0af1d879d170d6b55aee14c65e502210354d775409824b819c2"
+  },
+  {
+    "index": 32,
+    "timestamp": "2026-09-05T17:57:21.039049Z",
+    "event_type": "ENVIRONMENTAL_TELEMETRY_UPDATE",
+    "approved_by": "SATELLITE_FEED_AGENT",
+    "details": {
+      "aqi": 385,
+      "smog_episode": true,
+      "heatwave_alert": false,
+      "corridor": "Lucknow-Unnao Indo-Gangetic Smog Corridor (Severe Inversion)"
+    },
+    "prev_hash": "eca9086d1964b0af1d879d170d6b55aee14c65e502210354d775409824b819c2",
+    "current_hash": "c7a58de2ad8b3135302854c795e793186eb8cae6618782bbfa93436c0dcebe31"
+  },
+  {
+    "index": 33,
+    "timestamp": "2026-09-05T17:57:21.790517Z",
+    "event_type": "ENVIRONMENTAL_TELEMETRY_UPDATE",
+    "approved_by": "SATELLITE_FEED_AGENT",
+    "details": {
+      "aqi": 140,
+      "smog_episode": false,
+      "heatwave_alert": true,
+      "corridor": "Central Awadh Heatwave Corridor (Severe Dehydration Risk)"
+    },
+    "prev_hash": "c7a58de2ad8b3135302854c795e793186eb8cae6618782bbfa93436c0dcebe31",
+    "current_hash": "0e34715e9e4f6ca9ed7fca72f6066f3a074bf162275083325df123e4a606fd96"
+  },
+  {
+    "index": 34,
+    "timestamp": "2026-09-05T18:11:43.646319Z",
+    "event_type": "ENVIRONMENTAL_TELEMETRY_UPDATE",
+    "approved_by": "SATELLITE_FEED_AGENT",
+    "details": {
+      "aqi": 385,
+      "smog_episode": true,
+      "heatwave_alert": false,
+      "corridor": "Lucknow-Unnao Indo-Gangetic Smog Corridor (Severe Inversion)"
+    },
+    "prev_hash": "0e34715e9e4f6ca9ed7fca72f6066f3a074bf162275083325df123e4a606fd96",
+    "current_hash": "c6e7063d744986c10c9132ff44681db98ba2df7194303cefede148a6f05a4337"
+  },
+  {
+    "index": 35,
+    "timestamp": "2026-09-05T18:11:53.271831Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "c6e7063d744986c10c9132ff44681db98ba2df7194303cefede148a6f05a4337",
+    "current_hash": "86705f1da7c8b30f69b582dcfa99fdd58e7f7b19c12eb768704722def6c27946"
+  },
+  {
+    "index": 36,
+    "timestamp": "2026-09-05T18:34:31.535062Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "CHC-LKO-06",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "86705f1da7c8b30f69b582dcfa99fdd58e7f7b19c12eb768704722def6c27946",
+    "current_hash": "1ad54a008fdb7780e73ae92c7e5c2da1fdb02ddba8f9761b5ebba311936d35b6"
+  },
+  {
+    "index": 37,
+    "timestamp": "2026-09-05T18:34:37.120587Z",
+    "event_type": "SHELF_PHOTO_VISION_VERIFICATION",
+    "approved_by": "GEMINI_VISION_AGENT",
+    "details": {
+      "facility_id": "PHC-LKO-01",
+      "visual_count": 16,
+      "reported_count": 15,
+      "status": "VERIFIED_MATCH",
+      "batch_ocr": "BAT-842-26",
+      "expiry_ocr": "NOV 2026"
+    },
+    "prev_hash": "1ad54a008fdb7780e73ae92c7e5c2da1fdb02ddba8f9761b5ebba311936d35b6",
+    "current_hash": "3527e35b2a7c7091996d37dab7dcb175e55b262664cdabac15dedb2918da224f"
+  },
+  {
+    "index": 38,
+    "timestamp": "2026-09-05T19:13:53.500938Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "3527e35b2a7c7091996d37dab7dcb175e55b262664cdabac15dedb2918da224f",
+    "current_hash": "1defe2fbdf83f4978c347ff18b48ca8a9daf55dc2a27140aae82671e075d3a99"
+  },
+  {
+    "index": 39,
+    "timestamp": "2026-09-05T19:15:45.825186Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "1defe2fbdf83f4978c347ff18b48ca8a9daf55dc2a27140aae82671e075d3a99",
+    "current_hash": "13d582a57e6deffd863ea1d32c47a75aa64ed48ec5d63e2bae4dd8d1cb1d2712"
+  },
+  {
+    "index": 40,
+    "timestamp": "2026-09-05T19:16:21.184472Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "13d582a57e6deffd863ea1d32c47a75aa64ed48ec5d63e2bae4dd8d1cb1d2712",
+    "current_hash": "dc2d96ca1a76f09af0f3be48b3b0dcf47daf8b0605e55d30985ab1183a0b9dad"
+  },
+  {
+    "index": 41,
+    "timestamp": "2026-09-05T19:16:33.770930Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "dc2d96ca1a76f09af0f3be48b3b0dcf47daf8b0605e55d30985ab1183a0b9dad",
+    "current_hash": "4e9ac1e88ad405e5ba263832c28ea6f957de00c16c1f39fd0be1eaeb53da0c0b"
+  },
+  {
+    "index": 42,
+    "timestamp": "2026-09-05T19:17:46.085081Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "4e9ac1e88ad405e5ba263832c28ea6f957de00c16c1f39fd0be1eaeb53da0c0b",
+    "current_hash": "a813a3167b1fc59700620b7a87298cb039d858f91a27a00e17acb6f8384d414e"
+  },
+  {
+    "index": 43,
+    "timestamp": "2026-09-05T19:19:25.250776Z",
+    "event_type": "CMO_STRATEGIC_QUERY",
+    "approved_by": "DR_SAXENA_CMO",
+    "details": {
+      "question": "What if smog lasts 5 more days?",
+      "query_type": "WHAT_IF_SURGE_SIMULATION"
+    },
+    "prev_hash": "a813a3167b1fc59700620b7a87298cb039d858f91a27a00e17acb6f8384d414e",
+    "current_hash": "289a9bc1186d738168e31cbc1ff70ac8cf9007ccfc57f13652fa51a053f5be92"
+  },
+  {
+    "index": 44,
+    "timestamp": "2026-09-05T19:19:54.766539Z",
+    "event_type": "CMO_STRATEGIC_QUERY",
+    "approved_by": "DR_SAXENA_CMO",
+    "details": {
+      "question": "What if smog lasts 5 more days?",
+      "query_type": "WHAT_IF_SURGE_SIMULATION"
+    },
+    "prev_hash": "289a9bc1186d738168e31cbc1ff70ac8cf9007ccfc57f13652fa51a053f5be92",
+    "current_hash": "1548cce46ad326487b9d4ee4a88851ee9d31e09dce0b7b28585eb3036afc1ffe"
+  },
+  {
+    "index": 45,
+    "timestamp": "2026-09-05T19:20:21.431553Z",
+    "event_type": "CMO_STRATEGIC_QUERY",
+    "approved_by": "DR_SAXENA_CMO",
+    "details": {
+      "question": "What if smog lasts 5 more days?",
+      "query_type": "WHAT_IF_SURGE_SIMULATION"
+    },
+    "prev_hash": "1548cce46ad326487b9d4ee4a88851ee9d31e09dce0b7b28585eb3036afc1ffe",
+    "current_hash": "327465fda526d18c7c75210e89c7b6fe675d5707fc4822f56edcb3e2d3918d7b"
+  },
+  {
+    "index": 46,
+    "timestamp": "2026-09-05T21:06:44.779523Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "327465fda526d18c7c75210e89c7b6fe675d5707fc4822f56edcb3e2d3918d7b",
+    "current_hash": "5418599b57e98f210158595e2507c3ed7fe4543f374f27fe6a656538e77420f5"
+  }
+]

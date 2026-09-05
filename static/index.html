@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aarogya-Vāyu | Autonomous Multi-Agent Health Logistics</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Plus Jakarta Sans & Noto Sans Devanagari -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            clay: {
+              bg: '#F9EAE1',
+              card: '#FFFDF9',
+              inner: '#FDF7F2',
+              terracotta: '#DE6B48',
+              terracottaDark: '#C95836',
+              salmon: '#ECA08B',
+              sage: '#98B4A6',
+              sageLight: '#E8F0EC',
+              sand: '#F7D6B5',
+              dark: '#2E221D',
+              muted: '#5C4A44'
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', '"Noto Sans Devanagari"', 'sans-serif'],
+          },
+          boxShadow: {
+            'clay-card': '0 12px 36px -8px rgba(186, 122, 98, 0.16), 0 4px 12px -2px rgba(186, 122, 98, 0.08)',
+            'clay-btn': '0 8px 20px -4px rgba(222, 107, 72, 0.35)',
+            'clay-inset': 'inset 0 2px 4px rgba(255, 255, 255, 0.6), inset 0 -2px 4px rgba(186, 122, 98, 0.1)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    html {
+      font-size: 16px;
+    }
+    body {
+      background-color: #F8EAE1;
+      font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', sans-serif;
+      color: #2E221D;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.5;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #ECA08B;
+      border-radius: 9999px;
+    }
+    button, [role="button"] {
+      transition-property: transform, opacity, background-color, border-color, color, box-shadow;
+      transition-duration: 150ms;
+      transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+    }
+    button:active {
+      transform: scale(0.96);
+    }
+    .pulse-danger {
+      animation: pulseDanger 2s infinite;
+    }
+    @keyframes pulseDanger {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.15); opacity: 0.8; }
+    }
+    #map {
+      height: 440px;
+      width: 100%;
+      border-radius: 1.75rem;
+      z-index: 1;
+    }
+    /* Custom Leaflet Map Pin Styles - Readable Scale */
+    .facility-pin {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+      cursor: pointer;
+    }
+    .facility-pin:hover {
+      transform: scale(1.18) translateY(-4px);
+      z-index: 9999 !important;
+    }
+    .pin-badge {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 9px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 800;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.24);
+      border: 2px solid white;
+      white-space: nowrap;
+      margin-bottom: 2px;
+      font-variant-numeric: tabular-nums;
+    }
+    .pin-bubble {
+      width: 32px;
+      height: 32px;
+      border-radius: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 900;
+      color: white;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.26);
+      border: 2px solid white;
+      position: relative;
+    }
+    .pin-point {
+      width: 0;
+      height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      margin-top: -1px;
+    }
+    .pin-pulse-ring {
+      position: absolute;
+      inset: -7px;
+      border-radius: 16px;
+      animation: pinPulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+      pointer-events: none;
+    }
+    @keyframes pinPulse {
+      0% { transform: scale(0.85); opacity: 0.9; }
+      100% { transform: scale(1.6); opacity: 0; }
+    }
+    /* Moving Vehicle Marker */
+    .courier-van-marker {
+      cursor: pointer;
+      transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1);
+    }
+    .courier-van-marker:hover {
+      transform: scale(1.15) translateY(-2px);
+      z-index: 9999 !important;
+    }
+    /* Environmental Sensor Marker */
+    .sensor-node-marker {
+      cursor: pointer;
+      transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+    }
+    .sensor-node-marker:hover {
+      transform: scale(1.2);
+      z-index: 9999 !important;
+    }
+    /* Frontline Voice Equalizer Waves */
+    .wave-bar {
+      width: 3.5px;
+      border-radius: 9999px;
+      background: #DE6B48;
+      animation: waveDance 1.1s ease-in-out infinite alternate;
+    }
+    @keyframes waveDance {
+      0% { height: 4px; }
+      100% { height: 22px; }
+    }
+    @media print {
+      body * {
+        visibility: hidden !important;
+      }
+      #challanModal, #challanModal * {
+        visibility: visible !important;
+      }
+      #challanModal {
+        position: fixed !important;
+        inset: 0 !important;
+        background: white !important;
+        padding: 2rem !important;
+        z-index: 99999 !important;
+      }
+      #challanModal button {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="h-screen w-screen p-2 sm:p-3 overflow-hidden bg-clay-bg flex">
+
+  <!-- Main Shell with Left Sidebar & Fluid Edge-to-Edge Container -->
+  <div class="w-full h-full flex rounded-[2rem] overflow-hidden shadow-2xl bg-clay-bg border border-white/60">
+
+    <!-- Left Curved Terracotta Navigation Rail -->
+    <aside class="w-16 sm:w-20 md:w-24 bg-gradient-to-b from-clay-terracotta to-clay-terracottaDark p-3 sm:p-4 flex flex-col items-center justify-between text-white shadow-xl relative z-20 flex-shrink-0 h-full">
+      
+      <!-- Top Logo / Hamburger -->
+      <div class="flex flex-col items-center space-y-6">
+        <button onclick="showInfoModal()" class="w-12 h-12 rounded-2xl bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition" title="System Menu & Architecture">
+          <i data-lucide="menu" class="w-6 h-6"></i>
+        </button>
+      </div>
+
+      <!-- Center Nav Icons -->
+      <nav class="flex flex-col items-center space-y-4">
+        <button id="nav-dashboard" onclick="switchTab('dashboard')" class="w-12 h-12 rounded-2xl bg-white text-clay-terracotta shadow-md flex items-center justify-center transition hover:scale-105" title="Dashboard">
+          <i data-lucide="home" class="w-5 h-5"></i>
+        </button>
+        <button id="nav-agents" onclick="switchTab('agents')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="ADK Multi-Agent Terminal">
+          <i data-lucide="bot" class="w-5 h-5"></i>
+        </button>
+        <button id="nav-cmo" onclick="switchTab('cmo')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="CMO Strategic Studio">
+          <i data-lucide="message-square" class="w-5 h-5"></i>
+        </button>
+        <button id="nav-vision" onclick="switchTab('vision')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="Gemini 3.8 Flash Vision Verification">
+          <i data-lucide="camera" class="w-5 h-5"></i>
+        </button>
+        <button id="nav-ledger" onclick="switchTab('ledger')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="Cryptographic Audit Ledger">
+          <i data-lucide="shield-check" class="w-5 h-5"></i>
+        </button>
+      </nav>
+
+      <!-- Bottom Help / User Profile -->
+      <div class="flex flex-col items-center space-y-3">
+        <button onclick="showInfoModal()" class="w-10 h-10 rounded-xl bg-white/15 hover:bg-white/25 flex items-center justify-center text-white/80 transition" title="Help & Overview">
+          <i data-lucide="help-circle" class="w-5 h-5"></i>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main White Rounded Master Canvas (Full Height, Smooth Internal Scroll) -->
+    <main id="mainCanvas" class="flex-1 bg-clay-card rounded-[2rem] p-4 sm:p-6 lg:p-7 flex flex-col gap-6 overflow-y-auto custom-scrollbar h-full">
+
+      <!-- Top Header Row: Notification + Search + Scenario Switcher -->
+      <header class="flex flex-wrap items-center justify-between gap-4">
+        
+        <div class="flex items-center space-x-3 flex-1 max-w-xl">
+          <!-- Notification Bell in Clay Terracotta -->
+          <button onclick="openNotificationsModal()" class="w-12 h-12 rounded-2xl bg-clay-terracotta text-white flex items-center justify-center relative shadow-clay-btn hover:bg-clay-terracottaDark transition" title="Active Surge Alerts & Notifications">
+            <i data-lucide="bell" class="w-5 h-5"></i>
+            <span class="absolute top-2.5 right-2.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-white"></span>
+          </button>
+
+          <!-- Rounded Pill Search Bar -->
+          <div class="relative flex-1">
+            <i data-lucide="search" class="w-5 h-5 text-clay-muted absolute left-4 top-1/2 -translate-y-1/2"></i>
+            <input type="text" id="searchInput" placeholder="Search Primary Health Centres, medicines, or batch..." class="w-full bg-clay-inner border border-clay-salmon/20 rounded-full py-3.5 pl-12 pr-10 text-sm md:text-base text-clay-dark placeholder:text-clay-muted/80 focus:outline-none focus:ring-2 focus:ring-clay-salmon transition shadow-inner font-medium">
+            <button id="clearSearchBtn" onclick="clearSearch()" class="hidden absolute right-3.5 top-1/2 -translate-y-1/2 text-clay-muted hover:text-clay-dark text-sm p-1" title="Clear Search">&times;</button>
+          </div>
+        </div>
+
+        <!-- Atmospheric Scenario Switcher (Warm Pill Buttons) -->
+        <div class="flex items-center space-x-2 bg-clay-inner p-1.5 rounded-full border border-clay-salmon/20">
+          <span class="text-xs sm:text-sm text-clay-muted font-bold px-3">Surge Mode:</span>
+          <button id="scenarioSmog" onclick="switchScenario('smog')" class="px-4 py-2 rounded-full font-bold text-xs sm:text-sm bg-clay-terracotta text-white shadow-clay-btn transition">
+            🌫️ Smog (AQI 385)
+          </button>
+          <button id="scenarioHeat" onclick="switchScenario('heat')" class="px-4 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition">
+            ☀️ Heatwave (43°C)
+          </button>
+          <button id="scenarioNormal" onclick="switchScenario('normal')" class="px-4 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition">
+            🌿 Baseline
+          </button>
+        </div>
+
+      </header>
+
+      <!-- Main Master Grid: Left Canvas (Hero + Cards + Map) & Right Panel (CMO + Actions) -->
+      <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 flex-1">
+
+        <!-- ============================================================== -->
+        <!-- LEFT 8 COLS: Hero Banner, Surge Cards, Map & Voice/Agents -->
+        <!-- ============================================================== -->
+        <div class="xl:col-span-8 flex flex-col space-y-6">
+
+          <!-- Hero Atmospheric Banner Card (Matching Reference Style) -->
+          <div class="relative rounded-[2.25rem] overflow-hidden shadow-clay-card bg-clay-inner border border-clay-salmon/20 p-2 sm:p-3">
+            <div class="relative rounded-[1.85rem] overflow-hidden min-h-[230px] sm:min-h-[270px] flex flex-col justify-end">
+              <!-- Hero Background Image Generated -->
+              <img src="/static/images/hero_autumn.jpg" alt="Aarogya-Vāyu Climate Health Logistics" class="absolute inset-0 w-full h-full object-cover">
+              <div class="absolute inset-0 bg-gradient-to-t from-clay-dark/85 via-clay-dark/25 to-transparent"></div>
+
+              <!-- Floating Environmental Badge Pills (Right Top) -->
+              <div class="absolute top-4 right-4 flex flex-col space-y-2 z-10">
+                <button onclick="switchScenario('normal')" class="w-11 h-11 rounded-2xl bg-clay-sageLight/95 backdrop-blur-md flex items-center justify-center text-clay-sage shadow-sm hover:scale-110 transition cursor-pointer" title="Switch to Baseline Clean Air">
+                  <i data-lucide="wind" class="w-5 h-5 text-emerald-700"></i>
+                </button>
+                <button onclick="switchScenario('smog')" class="w-11 h-11 rounded-2xl bg-[#FFF1DB]/95 backdrop-blur-md flex items-center justify-center text-amber-700 shadow-sm hover:scale-110 transition cursor-pointer" title="Activate Smog Inversion Scenario">
+                  <i data-lucide="umbrella" class="w-5 h-5"></i>
+                </button>
+                <button onclick="filterMedicine('MED-001')" class="w-11 h-11 rounded-2xl bg-clay-sageLight/95 backdrop-blur-md flex items-center justify-center text-emerald-800 shadow-sm hover:scale-110 transition cursor-pointer" title="Filter Essential EDL Medicines">
+                  <i data-lucide="leaf" class="w-5 h-5"></i>
+                </button>
+                <button onclick="switchTab('agents')" class="w-11 h-11 rounded-2xl bg-[#FFE4D6]/95 backdrop-blur-md flex items-center justify-center text-clay-terracotta shadow-sm hover:scale-110 transition cursor-pointer" title="Launch ADK Multi-Agent Pipeline">
+                  <i data-lucide="bot" class="w-5 h-5"></i>
+                </button>
+              </div>
+
+              <!-- Bottom Orange Rounded Banner Bar (Matching Reference Image) -->
+              <div class="relative z-10 m-3 bg-gradient-to-r from-clay-terracotta to-[#E57A5C] rounded-2xl p-4 sm:p-5 text-white shadow-lg flex items-center justify-between">
+                <div>
+                  <div class="flex items-center space-x-2.5">
+                    <span class="w-3 h-3 rounded-full bg-amber-300 animate-ping"></span>
+                    <h2 id="bannerTitle" class="text-xl sm:text-2xl font-black tracking-tight">Lucknow-Unnao Smog Inversion Active</h2>
+                  </div>
+                  <p id="bannerDesc" class="text-xs sm:text-sm text-white/95 mt-1 font-medium">
+                    AQI 385 &bull; PM2.5: 265 µg/m³ &bull; +62% Acute Respiratory Demand &bull; 42h Lag Onset
+                  </p>
+                  <div class="flex flex-wrap items-center gap-x-3.5 gap-y-1 mt-2 text-xs sm:text-sm text-white/90 font-mono">
+                    <span>AQI: <strong id="valAqi" class="text-white font-black">385 (Severe)</strong></span>
+                    <span>•</span>
+                    <span>PM2.5: <strong id="valPm25" class="text-white font-black">265.0 µg/m³</strong></span>
+                    <span>•</span>
+                    <span>Temp: <strong id="valTemp" class="text-white font-black">17.5°C</strong></span>
+                    <span class="hidden sm:inline">•</span>
+                    <span class="hidden sm:inline">Corridor: <strong id="valCorridor" class="text-white font-black">Lucknow-Unnao</strong></span>
+                  </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <span class="text-xs sm:text-sm bg-white/20 text-white font-bold px-3.5 py-1.5 rounded-full backdrop-blur-sm">
+                    Track 3: Smart Health
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Real-Time Corridor Telemetry & Risk KPIs -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+            <div class="bg-clay-inner rounded-2xl p-3.5 border border-clay-salmon/20 shadow-sm flex flex-col justify-between">
+              <span class="text-xs uppercase font-extrabold tracking-wider text-clay-muted">Surge Hotspots</span>
+              <div class="flex items-baseline space-x-1.5 mt-1.5">
+                <span id="statCriticalPhc" class="text-lg sm:text-xl font-black text-red-600">3 Facilities</span>
+              </div>
+              <span class="text-xs font-semibold text-clay-muted mt-0.5">Under 4 Days Cover</span>
+            </div>
+
+            <div class="bg-clay-inner rounded-2xl p-3.5 border border-clay-salmon/20 shadow-sm flex flex-col justify-between">
+              <span class="text-xs uppercase font-extrabold tracking-wider text-clay-muted">Redistribution Orders</span>
+              <div class="flex items-baseline space-x-1.5 mt-1.5">
+                <span id="statActiveTransfers" class="text-lg sm:text-xl font-black text-clay-terracotta">4 Pending</span>
+              </div>
+              <span class="text-xs font-semibold text-clay-muted mt-0.5">OR Solver Optimized</span>
+            </div>
+
+            <div class="bg-clay-inner rounded-2xl p-3.5 border border-clay-salmon/20 shadow-sm flex flex-col justify-between">
+              <span class="text-xs uppercase font-extrabold tracking-wider text-clay-muted">Expiry Salvaged</span>
+              <div class="flex items-baseline space-x-1.5 mt-1.5">
+                <span id="statExpirySaved" class="text-lg sm:text-xl font-black text-emerald-700">90 Units</span>
+              </div>
+              <span class="text-xs font-semibold text-clay-muted mt-0.5">Zero Dump Waste</span>
+            </div>
+
+            <div class="bg-clay-inner rounded-2xl p-3.5 border border-clay-salmon/20 shadow-sm flex flex-col justify-between">
+              <span class="text-xs uppercase font-extrabold tracking-wider text-clay-muted">Avg Transit Distance</span>
+              <div class="flex items-baseline space-x-1.5 mt-1.5">
+                <span id="statAvgDist" class="text-lg sm:text-xl font-black text-clay-dark">18.2 km</span>
+              </div>
+              <span class="text-xs font-semibold text-clay-muted mt-0.5">Sub-60min Courier</span>
+            </div>
+          </div>
+
+          <!-- "Day Schedule" / Surge Priority Cards (4 Square Squircles) -->
+          <div>
+            <div class="flex items-center justify-between mb-3.5 px-1">
+              <h3 class="text-base sm:text-lg font-black text-clay-dark flex items-center space-x-2">
+                <span>Resilience Operations Schedule</span>
+              </h3>
+              <span class="text-xs sm:text-sm text-clay-muted font-bold">Today &bull; 4 Modules Active</span>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              
+              <!-- Card 1: Respiratory Relief -->
+              <div onclick="filterMedicine('MED-001')" class="bg-clay-inner rounded-3xl p-3.5 border border-clay-salmon/20 shadow-sm hover:shadow-md transition cursor-pointer hover:-translate-y-1 flex flex-col items-center text-center">
+                <div class="w-full aspect-square rounded-2xl overflow-hidden mb-2.5 bg-[#FFF8ED]">
+                  <img src="/static/images/card_respiratory.jpg" alt="Respiratory" class="w-full h-full object-cover">
+                </div>
+                <h4 class="text-sm sm:text-base font-black text-clay-dark">Respiratory Surge</h4>
+                <p class="text-xs sm:text-sm text-clay-terracotta font-bold mt-1">10:00 AM &bull; Critical</p>
+              </div>
+
+              <!-- Card 2: Rehydration Kit -->
+              <div onclick="filterMedicine('MED-002')" class="bg-clay-inner rounded-3xl p-3.5 border border-clay-salmon/20 shadow-sm hover:shadow-md transition cursor-pointer hover:-translate-y-1 flex flex-col items-center text-center">
+                <div class="w-full aspect-square rounded-2xl overflow-hidden mb-2.5 bg-[#FFF3E8]">
+                  <img src="/static/images/card_heatwave.jpg" alt="Rehydration" class="w-full h-full object-cover">
+                </div>
+                <h4 class="text-sm sm:text-base font-black text-clay-dark">Rehydration Buffer</h4>
+                <p class="text-xs sm:text-sm text-emerald-700 font-bold mt-1">12:30 PM &bull; Stable</p>
+              </div>
+
+              <!-- Card 3: Medicine Delivery -->
+              <div onclick="switchTab('dashboard')" class="bg-clay-inner rounded-3xl p-3.5 border border-clay-salmon/20 shadow-sm hover:shadow-md transition cursor-pointer hover:-translate-y-1 flex flex-col items-center text-center">
+                <div class="w-full aspect-square rounded-2xl overflow-hidden mb-2.5 bg-[#E8F2EC]">
+                  <img src="/static/images/card_transfer.jpg" alt="Delivery" class="w-full h-full object-cover">
+                </div>
+                <h4 class="text-sm sm:text-base font-black text-clay-dark">Van Courier Route</h4>
+                <p class="text-xs sm:text-sm text-amber-700 font-bold mt-1">02:15 PM &bull; 18.2 km</p>
+              </div>
+
+              <!-- Card 4: Rural Health AI -->
+              <div onclick="switchTab('agents')" class="bg-clay-inner rounded-3xl p-3.5 border border-clay-salmon/20 shadow-sm hover:shadow-md transition cursor-pointer hover:-translate-y-1 flex flex-col items-center text-center">
+                <div class="w-full aspect-square rounded-2xl overflow-hidden mb-2.5 bg-[#FBF5E8]">
+                  <img src="/static/images/card_agent_network.jpg" alt="Health AI" class="w-full h-full object-cover">
+                </div>
+                <h4 class="text-sm sm:text-base font-black text-clay-dark">ADK Autonomous AI</h4>
+                <p class="text-xs sm:text-sm text-indigo-700 font-bold mt-1">03:45 PM &bull; 6 Agents</p>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Interactive GIS Map & Frontline Voice Ingestion -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            
+            <!-- Map Container (7 cols) -->
+            <div class="lg:col-span-7 bg-clay-inner rounded-3xl p-5 border border-clay-salmon/20 shadow-sm flex flex-col justify-between space-y-3">
+              <div class="flex flex-wrap items-center justify-between gap-2.5">
+                <div>
+                  <h4 class="text-sm sm:text-base font-black text-clay-dark flex items-center space-x-1.5">
+                    <span>District Cluster Redistribution GIS</span>
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  </h4>
+                  <span class="text-xs font-semibold text-clay-muted">Lucknow-Unnao Dynamic Multi-Echelon Network</span>
+                </div>
+                <!-- Layer Filter Chips -->
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <button id="mapLayerAll" onclick="setMapLayerFilter('all')" class="px-3 py-1.5 rounded-full text-xs font-bold bg-clay-terracotta text-white shadow-sm transition">All Layers</button>
+                  <button id="mapLayerFacs" onclick="setMapLayerFilter('facilities')" class="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-clay-dark border border-clay-salmon/30 hover:bg-clay-bg transition">🏥 Facilities</button>
+                  <button id="mapLayerCouriers" onclick="setMapLayerFilter('couriers')" class="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-clay-dark border border-clay-salmon/30 hover:bg-clay-bg transition">🚑 Couriers</button>
+                  <button id="mapLayerPlume" onclick="setMapLayerFilter('plume')" class="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-clay-dark border border-clay-salmon/30 hover:bg-clay-bg transition">🌫️ Smog Plume</button>
+                  <button id="mapLayerSensors" onclick="setMapLayerFilter('sensors')" class="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-clay-dark border border-clay-salmon/30 hover:bg-clay-bg transition">📡 Sensors</button>
+                </div>
+              </div>
+
+              <!-- Map Viewport with Floating Glassmorphic Telemetry HUD -->
+              <div class="relative overflow-hidden rounded-[1.75rem] border border-clay-salmon/30 shadow-inner">
+                <div id="map"></div>
+
+                <!-- Floating Glassmorphic Telemetry HUD (Top-Right) -->
+                <div class="absolute top-3 right-3 z-[400] bg-white/95 backdrop-blur-md p-3.5 rounded-2xl shadow-xl border border-white/90 text-xs space-y-2 max-w-[250px] pointer-events-auto">
+                  <div class="flex items-center justify-between font-black text-clay-dark border-b border-clay-salmon/20 pb-1.5">
+                    <span class="flex items-center space-x-1.5">
+                      <span class="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+                      <span class="text-xs sm:text-sm font-extrabold">Atmospheric GIS HUD</span>
+                    </span>
+                    <span class="text-clay-terracotta font-mono text-[10px] font-black bg-clay-terracotta/10 px-1.5 py-0.5 rounded">LIVE</span>
+                  </div>
+                  <div class="text-slate-700 flex justify-between font-medium">
+                    <span>Plume Sector:</span>
+                    <strong id="hudCorridor" class="text-clay-dark font-extrabold">Lucknow-Unnao</strong>
+                  </div>
+                  <div class="text-slate-700 flex justify-between font-medium">
+                    <span>Boundary Trapping:</span>
+                    <strong id="hudInversion" class="text-red-600 font-extrabold">Severe (180m AGL)</strong>
+                  </div>
+                  <div class="text-slate-700 flex justify-between font-medium">
+                    <span>Wind Trapping:</span>
+                    <strong class="text-slate-900 font-extrabold">NW 3.4 km/h</strong>
+                  </div>
+                  <div class="text-slate-700 flex justify-between border-t border-clay-salmon/15 pt-1.5 font-medium">
+                    <span>Active Couriers:</span>
+                    <strong id="hudCouriers" class="text-emerald-700 font-extrabold flex items-center space-x-1">
+                      <span>2 En Route</span>
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Map Footer Controls & Real-Time Legend -->
+              <div class="pt-1.5 flex flex-wrap items-center justify-between text-xs text-clay-muted gap-2.5">
+                <div class="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-xs font-semibold text-clay-dark">
+                  <span class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> <span>Critical Stockout</span></span>
+                  <span class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> <span>Surge Warning</span></span>
+                  <span class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> <span>Surplus Donor</span></span>
+                  <span class="flex items-center space-x-1.5"><span>🚑</span> <span>Active Van</span></span>
+                  <span class="flex items-center space-x-1.5"><span>📡</span> <span>Air Station</span></span>
+                </div>
+                <div class="flex items-center space-x-3">
+                  <button onclick="simulateCourierTransitStep()" class="text-xs sm:text-sm text-clay-terracotta hover:text-clay-terracottaDark font-black flex items-center space-x-1.5" title="Simulate courier delivery step">
+                    <span>⚡ Dispatch Pulse</span>
+                  </button>
+                  <button onclick="fitMapBounds()" class="text-xs sm:text-sm text-clay-terracotta hover:underline font-black">Center Map</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Frontline Voice Intake Card (5 cols) -->
+            <div class="lg:col-span-5 bg-clay-inner rounded-3xl p-5 border border-clay-salmon/20 shadow-sm flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-2.5">
+                  <h4 class="text-sm sm:text-base font-black text-clay-dark flex items-center space-x-1.5">
+                    <span>🎙️ Frontline Voice Intake</span>
+                  </h4>
+                  <span class="text-xs bg-clay-terracotta/10 text-clay-terracotta font-black px-2.5 py-1 rounded-full">Gemini 3.8 Flash</span>
+                </div>
+                <p class="text-xs sm:text-sm text-clay-muted font-medium mb-3.5 leading-relaxed">
+                  Frontline health staff record 10-second updates in English or Hindi. Gemma 2 provides offline edge fallback.
+                </p>
+
+                <div class="space-y-3">
+                  <select id="voiceFacilitySelect" class="w-full bg-white border border-clay-salmon/30 rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm text-clay-dark focus:outline-none focus:ring-2 focus:ring-clay-salmon font-semibold shadow-sm">
+                    <option value="">Auto-Detect from Voice Transcript</option>
+                  </select>
+                  <textarea id="voiceTranscript" rows="3" class="w-full bg-white border border-clay-salmon/30 rounded-2xl p-3.5 text-xs sm:text-sm text-clay-dark placeholder-clay-muted focus:outline-none focus:ring-2 focus:ring-clay-salmon font-medium" placeholder="e.g. This is PHC Kakori reporting. We only have 15 respules of Salbutamol left and treated 40 acute respiratory patients yesterday."></textarea>
+
+                  <!-- Sample Buttons -->
+                  <div class="flex flex-wrap gap-2">
+                    <button onclick="loadSampleVoice(1)" class="text-xs bg-white hover:bg-clay-bg text-clay-dark px-3 py-1.5 rounded-full border border-clay-salmon/30 font-bold transition">
+                      🔴 "Kakori: 15 Salbutamol respules..."
+                    </button>
+                    <button onclick="loadSampleVoice(2)" class="text-xs bg-white hover:bg-clay-bg text-clay-dark px-3 py-1.5 rounded-full border border-clay-salmon/30 font-bold transition">
+                      🟡 "Sarojini Nagar: 120 ORS sachets..."
+                    </button>
+                  </div>
+
+                  <!-- Audio Waveform Equalizer (WOW Factor) -->
+                  <div id="voiceWaveform" class="hidden items-center justify-center space-x-1.5 py-2 px-3.5 bg-clay-terracotta/5 rounded-2xl border border-clay-terracotta/20">
+                    <span class="text-xs font-bold text-clay-terracotta mr-2 flex items-center">
+                      <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping mr-1.5"></span> Audio Input Active
+                    </span>
+                    <div class="wave-bar h-2.5"></div>
+                    <div class="wave-bar h-5"></div>
+                    <div class="wave-bar h-7"></div>
+                    <div class="wave-bar h-4"></div>
+                    <div class="wave-bar h-8"></div>
+                    <div class="wave-bar h-6"></div>
+                    <div class="wave-bar h-2.5"></div>
+                    <div class="wave-bar h-7"></div>
+                    <div class="wave-bar h-5"></div>
+                    <div class="wave-bar h-2.5"></div>
+                  </div>
+
+                  <div class="flex items-center space-x-2.5 pt-1">
+                    <button id="btnSubmitVoice" onclick="submitVoiceIntake()" class="flex-1 bg-clay-terracotta hover:bg-clay-terracottaDark text-white font-black py-3 px-4 rounded-full text-xs sm:text-sm shadow-clay-btn transition flex items-center justify-center space-x-1.5">
+                      <span>Process &amp; Commit Record</span>
+                    </button>
+                    <button onclick="recordMockMic()" id="btnMic" class="p-3 bg-white text-clay-terracotta hover:bg-clay-terracotta hover:text-white rounded-full border border-clay-salmon/30 transition">
+                      <i data-lucide="mic" class="w-4 h-4"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Output card -->
+              <div id="voiceResultBox" class="hidden mt-3 bg-white rounded-2xl p-3.5 text-xs sm:text-sm space-y-2.5 border border-clay-salmon/30 shadow-sm">
+                <div class="flex items-center justify-between">
+                  <span id="voiceResultBadge" class="text-xs font-black text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-full">QA VERIFIED</span>
+                  <span id="voiceConfidence" class="text-clay-muted text-xs font-bold">98% Confidence</span>
+                </div>
+                <div class="text-clay-dark flex justify-between font-semibold">
+                  <span>Facility: <strong id="voiceFacName" class="text-clay-dark font-black">PHC Kakori</strong></span>
+                  <span>Medicine: <strong id="voiceMedName" class="text-clay-terracotta font-black">Salbutamol 2.5mg</strong></span>
+                </div>
+                <div class="flex items-center justify-between text-clay-muted text-xs pt-1.5 border-t border-clay-salmon/20 font-medium">
+                  <span>Reported Stock: <strong id="voiceStockQty" class="text-clay-terracotta font-black">15 units</strong></span>
+                  <span>Dispensed: <strong id="voiceDispQty" class="text-clay-dark font-black">--</strong></span>
+                </div>
+                <div id="voiceActionText" class="text-xs text-emerald-800 bg-emerald-50 font-semibold p-2 rounded-xl border border-emerald-200"></div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Multi-Agent ADK Live Terminal -->
+          <div class="bg-clay-inner rounded-3xl p-5 border border-clay-salmon/20 shadow-sm space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div class="flex items-center space-x-3">
+                <span class="relative flex h-3.5 w-3.5">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
+                </span>
+                <div>
+                  <div class="flex items-center space-x-2 flex-wrap">
+                    <h3 class="text-base sm:text-lg font-black text-clay-dark tracking-tight">Google ADK Autonomous Multi-Agent Terminal</h3>
+                    <span class="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300/60 px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider">LIVE ORCHESTRATION</span>
+                  </div>
+                  <p class="text-xs text-clay-muted font-medium">Sentinel (Earth Engine) &bull; Frontline Intake (EDL-UP-2026) &bull; Logistics (OR-Tools) &bull; Governance (HMIS Dispatch)</p>
+                </div>
+              </div>
+              <div class="flex items-center space-x-2">
+                <button id="btnRunAgents" onclick="runAgentPipeline()" class="bg-clay-terracotta hover:bg-clay-terracottaDark text-white font-black text-xs sm:text-sm px-5 py-2.5 rounded-full shadow-clay-btn transition flex items-center space-x-2 group">
+                  <i data-lucide="play" class="w-4 h-4 fill-current group-hover:scale-110 transition-transform"></i>
+                  <span>Run ADK Pipeline (Live Demo)</span>
+                </button>
+              </div>
+            </div>
+            
+            <!-- Terminal Console Window with macOS-style Header -->
+            <div class="rounded-2xl overflow-hidden border border-slate-800 shadow-2xl bg-[#0c1017]">
+              <!-- Console Chrome Bar -->
+              <div class="bg-[#161c28] px-4 py-2.5 flex items-center justify-between border-b border-slate-800 select-none">
+                <div class="flex items-center space-x-2">
+                  <div class="flex items-center space-x-1.5">
+                    <span class="w-3 h-3 rounded-full bg-rose-500/80 inline-block shadow-sm"></span>
+                    <span class="w-3 h-3 rounded-full bg-amber-400/80 inline-block shadow-sm"></span>
+                    <span class="w-3 h-3 rounded-full bg-emerald-400/80 inline-block shadow-sm"></span>
+                  </div>
+                  <span class="text-slate-400 text-xs font-mono font-semibold pl-2">adk-orchestrator@aarogya-vayu:~ (Gemini 2.5 Pro + OR-Tools)</span>
+                </div>
+                <div class="flex items-center space-x-2 text-[11px] font-mono text-slate-400">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span class="hidden sm:inline text-emerald-400 font-bold">4 AGENTS ACTIVE</span>
+                  <span class="text-slate-600">|</span>
+                  <span class="text-slate-300">latency: 142ms</span>
+                </div>
+              </div>
+
+              <!-- Terminal Body -->
+              <div id="agentTerminalBody" class="p-4 sm:p-5 font-mono text-xs sm:text-sm text-slate-200 space-y-3 min-h-[300px] max-h-[460px] overflow-y-auto custom-scrollbar leading-relaxed">
+                <div class="space-y-1.5 text-slate-400 text-xs">
+                  <p><span class="text-emerald-400">✓</span> Connected to Google ADK Mesh (Protocol v2.4, Vertex AI Grounding Store)</p>
+                  <p><span class="text-emerald-400">✓</span> Environmental Sentinel: Sentinel-5P + INSAT-3DR data stream active</p>
+                  <p><span class="text-emerald-400">✓</span> Frontline Intake Engine: Multilingual ASR + EDL-UP-2026 grounder online</p>
+                  <p><span class="text-emerald-400">✓</span> Operations Research Transfer Solver: Simplex-Greedy Routing Matrix calibrated</p>
+                  <p class="pt-2 text-slate-400 italic">// Standby. Click <span class="text-clay-terracotta font-bold">"Run ADK Pipeline"</span> above to trigger real-time multi-agent negotiation and transfer execution.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ============================================================== -->
+        <!-- RIGHT 4 COLS: Doctor Profile, Critical Watchlist & Actions -->
+        <!-- ============================================================== -->
+        <div class="xl:col-span-4 flex flex-col space-y-6">
+
+          <!-- User / CMO Profile Card (Matching "Jack" Profile in Reference) -->
+          <div class="bg-clay-inner rounded-3xl p-4 sm:p-5 border border-clay-salmon/20 shadow-sm flex items-center justify-between">
+            <div class="flex items-center space-x-3.5">
+              <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden bg-clay-sageLight shadow-sm flex-shrink-0">
+                <img src="/static/images/cmo_avatar.jpg" alt="Dr. S. K. Saxena" class="w-full h-full object-cover">
+              </div>
+              <div>
+                <h3 class="text-base sm:text-lg font-black text-clay-dark">Dr. S. K. Saxena</h3>
+                <p class="text-xs sm:text-sm text-clay-muted font-medium">Chief Medical Officer &bull; District Health Society</p>
+              </div>
+            </div>
+            <button onclick="openCmoModal()" class="bg-clay-terracotta hover:bg-clay-terracottaDark text-white text-xs sm:text-sm font-extrabold px-4 py-2.5 rounded-full shadow-clay-btn transition">
+              CMO Studio
+            </button>
+          </div>
+
+          <!-- "Critical Facilities Watchlist" (Matching "October Holidays" in Reference) -->
+          <div class="bg-clay-inner rounded-3xl p-5 border border-clay-salmon/20 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-base sm:text-lg font-black text-clay-dark">Surge Stockout Watch</h3>
+              <span class="text-xs text-clay-terracotta font-extrabold">Critical (&lt; 4d Cover)</span>
+            </div>
+
+            <!-- List items with thumbnail, title, metric and pill button -->
+            <div id="criticalWatchlist" class="space-y-3">
+              
+              <!-- Item 1 -->
+              <div class="flex items-center justify-between bg-white p-3.5 rounded-2xl border border-clay-salmon/20 shadow-sm">
+                <div class="flex items-center space-x-3">
+                  <div class="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center text-red-600 font-black text-sm">
+                    PHC
+                  </div>
+                  <div>
+                    <h4 class="text-sm font-black text-clay-dark">PHC Kakori</h4>
+                    <p class="text-xs text-red-500 font-bold">Salbutamol &bull; 1.6 Days Cover</p>
+                  </div>
+                </div>
+                <div class="text-right flex items-center space-x-2">
+                  <span class="text-sm font-black text-clay-dark">15 Units</span>
+                  <button onclick="runTransferFor('PHC-LKO-01')" class="text-xs bg-clay-terracotta hover:bg-clay-terracottaDark text-white px-3.5 py-1.5 rounded-full font-bold shadow-sm transition">
+                    Solve
+                  </button>
+                </div>
+              </div>
+
+              <!-- Item 2 -->
+              <div class="flex items-center justify-between bg-white p-3.5 rounded-2xl border border-clay-salmon/20 shadow-sm">
+                <div class="flex items-center space-x-3">
+                  <div class="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center text-red-600 font-black text-sm">
+                    CHC
+                  </div>
+                  <div>
+                    <h4 class="text-sm font-black text-clay-dark">CHC Sarojini Nagar</h4>
+                    <p class="text-xs text-red-500 font-bold">Salbutamol &bull; 1.3 Days Cover</p>
+                  </div>
+                </div>
+                <div class="text-right flex items-center space-x-2">
+                  <span class="text-sm font-black text-clay-dark">28 Units</span>
+                  <button onclick="runTransferFor('CHC-LKO-06')" class="text-xs bg-clay-terracotta hover:bg-clay-terracottaDark text-white px-3.5 py-1.5 rounded-full font-bold shadow-sm transition">
+                    Solve
+                  </button>
+                </div>
+              </div>
+
+              <!-- Item 3 -->
+              <div class="flex items-center justify-between bg-white p-3.5 rounded-2xl border border-clay-salmon/20 shadow-sm">
+                <div class="flex items-center space-x-3">
+                  <div class="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 font-black text-sm">
+                    PHC
+                  </div>
+                  <div>
+                    <h4 class="text-sm font-black text-clay-dark">PHC Chinhat</h4>
+                    <p class="text-xs text-amber-600 font-bold">Dexamethasone &bull; 4.2 Days Cover</p>
+                  </div>
+                </div>
+                <div class="text-right flex items-center space-x-2">
+                  <span class="text-sm font-black text-clay-dark">45 Units</span>
+                  <button onclick="runTransferFor('PHC-LKO-05')" class="text-xs bg-clay-terracotta/10 text-clay-terracotta hover:bg-clay-terracotta hover:text-white px-3.5 py-1.5 rounded-full font-bold transition">
+                    View
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- "Redistribution Actions" (Matching "Party planning" in Reference) -->
+          <div class="bg-clay-inner rounded-3xl p-5 border border-clay-salmon/20 shadow-sm space-y-3.5">
+            <div class="flex items-center justify-between">
+              <h3 class="text-base sm:text-lg font-black text-clay-dark">Dispatch Authorization</h3>
+              <span class="text-xs text-emerald-700 font-extrabold">Near-Expiry Salvaged</span>
+            </div>
+
+            <!-- Action Card Stream -->
+            <div id="recommendationsList" class="space-y-3">
+              <div class="text-center py-4 text-clay-muted text-sm font-medium">Loading active transfer orders...</div>
+            </div>
+          </div>
+
+          <!-- Gemini 3.8 Flash Vision Shelf Card -->
+          <div class="bg-clay-inner rounded-3xl p-5 border border-clay-salmon/20 shadow-sm space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-sm sm:text-base font-black text-clay-dark flex items-center space-x-1.5">
+                <i data-lucide="camera" class="w-4 h-4 text-cyan-600"></i>
+                <span>Gemini 3.8 Flash Vision Verification</span>
+              </span>
+              <span class="text-xs bg-cyan-100 text-cyan-800 font-extrabold px-2.5 py-1 rounded-full">OCR VERIFIED</span>
+            </div>
+            <p class="text-xs sm:text-sm text-clay-muted font-medium">
+              Nurse shelf photo cross-check &bull; Batch &amp; expiry certification
+            </p>
+            <button onclick="runVisionVerification()" id="btnVision" class="w-full bg-white hover:bg-clay-bg text-cyan-800 border border-cyan-300 font-bold py-2.5 rounded-2xl text-xs sm:text-sm shadow-sm transition flex items-center justify-center space-x-2">
+              <span>Scan Cupboard Image (BAT-842-26)</span>
+            </button>
+            <div id="visionResultBox" class="hidden mt-2 p-3.5 bg-white rounded-2xl border border-cyan-300 text-xs sm:text-sm space-y-1.5">
+              <div class="flex justify-between font-extrabold text-cyan-900">
+                <span>OCR: Asthalin 2.5mg</span>
+                <span class="text-emerald-600 font-black">16 Units Verified</span>
+              </div>
+              <p id="visionSummaryText" class="text-clay-muted italic text-xs font-medium"></p>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- CMO Conversational Modal / Studio -->
+  <div id="cmoModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-clay-card rounded-[2.5rem] max-w-4xl w-full p-7 sm:p-9 space-y-5 shadow-2xl border border-white max-h-[92vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-center justify-between border-b border-clay-salmon/20 pb-4">
+        <div class="flex items-center space-x-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-clay-terracotta text-white flex items-center justify-center font-black text-lg shadow-sm">
+            CMO
+          </div>
+          <div>
+            <h3 class="text-xl sm:text-2xl font-black text-clay-dark">Chief Medical Officer Strategic Studio</h3>
+            <p class="text-xs sm:text-sm text-clay-muted font-medium">Powered by Gemini 3.8 Flash &bull; Natural Language What-If Strategic Simulation</p>
+          </div>
+        </div>
+        <button onclick="closeCmoModal()" class="text-clay-muted hover:text-clay-dark text-3xl font-bold leading-none cursor-pointer">&times;</button>
+      </div>
+
+      <!-- Quick prompts -->
+      <div class="space-y-2">
+        <span class="text-xs sm:text-sm font-extrabold text-clay-muted uppercase tracking-wider">Quick Inquiries:</span>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="askCmoQuery(1)" class="text-xs sm:text-sm bg-clay-inner hover:bg-clay-bg text-clay-dark px-4 py-2 rounded-full font-bold border border-clay-salmon/30 transition shadow-sm cursor-pointer">
+            🌪️ "What if this smog lasts 5 more days?"
+          </button>
+          <button onclick="askCmoQuery(2)" class="text-xs sm:text-sm bg-clay-inner hover:bg-clay-bg text-clay-dark px-4 py-2 rounded-full font-bold border border-clay-salmon/30 transition shadow-sm cursor-pointer">
+            💊 "Can Levosalbutamol substitute for Salbutamol?"
+          </button>
+          <button onclick="askCmoQuery(3)" class="text-xs sm:text-sm bg-clay-inner hover:bg-clay-bg text-clay-dark px-4 py-2 rounded-full font-bold border border-clay-salmon/30 transition shadow-sm cursor-pointer">
+            🏛️ "Constituency Briefing Report for the Hon. MP"
+          </button>
+        </div>
+      </div>
+
+      <!-- Input box -->
+      <div class="flex gap-2.5 pt-2">
+        <input type="text" id="cmoQueryInput" class="flex-1 bg-clay-inner rounded-full px-6 py-3.5 text-sm sm:text-base text-clay-dark placeholder-clay-muted focus:outline-none focus:ring-2 focus:ring-clay-salmon border-0 shadow-inner font-medium" placeholder="Ask anything in English or Hindi (what-if scenarios, drug substitutions, impact)...">
+        <button onclick="submitCmoQuery()" class="bg-clay-terracotta hover:bg-clay-terracottaDark text-white font-black px-7 py-3.5 rounded-full text-sm sm:text-base shadow-clay-btn transition cursor-pointer">
+          Ask
+        </button>
+      </div>
+
+      <!-- Output bubble -->
+      <div id="cmoResponseBox" class="hidden bg-clay-inner p-5 sm:p-6 rounded-3xl text-sm sm:text-base space-y-3.5 border border-clay-salmon/20 leading-relaxed">
+        <div class="flex items-center justify-between">
+          <span id="cmoQueryTypeBadge" class="text-xs font-black bg-clay-terracotta/10 text-clay-terracotta px-3 py-1 rounded-full">SCENARIO RESULT</span>
+          <span class="text-xs text-clay-muted font-bold">Grounded via District Inventory Store</span>
+        </div>
+        <p id="cmoAnswerText" class="text-clay-dark leading-relaxed font-normal"></p>
+        <div id="cmoMetaBox" class="text-xs sm:text-sm font-bold text-clay-terracotta pt-1"></div>
+        <div class="flex items-center justify-between pt-2.5 border-t border-clay-salmon/20">
+          <button id="btnTtsSpeak" onclick="speakCurrentCmoBriefing()" class="inline-flex items-center space-x-2 text-xs sm:text-sm text-clay-terracotta hover:text-clay-terracottaDark font-bold bg-clay-terracotta/10 hover:bg-clay-terracotta/20 px-4 py-2 rounded-full transition cursor-pointer">
+            <i data-lucide="volume-2" class="w-4 h-4"></i>
+            <span id="btnTtsLabel">🔊 Read Briefing Aloud</span>
+          </button>
+          <span id="cmoTtsStatus" class="text-xs text-clay-muted italic"></span>
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-2">
+        <button onclick="closeCmoModal()" class="px-6 py-2.5 bg-clay-inner hover:bg-clay-bg text-clay-dark rounded-full text-sm font-bold transition cursor-pointer">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Formal Challan Modal -->
+  <div id="challanModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-[2.5rem] max-w-xl sm:max-w-2xl w-full p-7 space-y-4 shadow-2xl border border-clay-salmon/30 max-h-[92vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3.5">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-clay-terracotta text-white flex items-center justify-center font-black text-sm">UP</div>
+          <div>
+            <h4 class="text-base sm:text-lg font-black text-clay-dark">Government of Uttar Pradesh &bull; Health Society</h4>
+            <p class="text-xs sm:text-sm text-clay-muted font-medium">Inter-Facility Emergency Medicine Transfer Challan</p>
+          </div>
+        </div>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-3xl font-bold leading-none cursor-pointer">&times;</button>
+      </div>
+
+      <div class="bg-clay-inner rounded-2xl p-5 text-sm space-y-3 border border-clay-salmon/20 font-sans">
+        <div class="flex justify-between text-clay-muted font-medium">
+          <span>Challan ID: <strong id="modalChallanId" class="text-clay-terracotta font-mono font-bold">CHALLAN-UP-20260905</strong></span>
+          <span>Date: <span id="modalDate" class="font-bold text-clay-dark">5 Sep 2026</span></span>
+        </div>
+        <div class="grid grid-cols-2 gap-3 pt-2.5 border-t border-clay-salmon/20">
+          <div>
+            <span class="text-clay-muted block text-xs uppercase font-extrabold tracking-wider">Donor (Surplus)</span>
+            <strong id="modalDonor" class="text-sm sm:text-base font-black text-clay-dark">CHC Nawabganj</strong>
+          </div>
+          <div>
+            <span class="text-clay-muted block text-xs uppercase font-extrabold tracking-wider">Recipient (Deficit)</span>
+            <strong id="modalRecipient" class="text-sm sm:text-base font-black text-red-600">PHC Kakori</strong>
+          </div>
+        </div>
+        <div class="pt-2.5 border-t border-clay-salmon/20">
+          <span class="text-clay-muted block text-xs uppercase font-extrabold tracking-wider">Allocated Medicine</span>
+          <div class="flex justify-between items-center text-sm sm:text-base font-black text-clay-dark mt-1">
+            <span id="modalMed">Salbutamol Respules 2.5mg</span>
+            <span id="modalUnits" class="text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full text-xs sm:text-sm font-black">90 Units</span>
+          </div>
+        </div>
+        <div class="flex justify-between text-xs sm:text-sm text-clay-muted pt-1.5 font-medium">
+          <span>Batch: <span id="modalBatch" class="font-mono text-clay-dark font-bold">BAT-842-26</span></span>
+          <span>Distance: <span id="modalDist" class="font-black text-clay-dark">18.2 km</span></span>
+        </div>
+        <div class="bg-white p-3 rounded-xl border border-clay-salmon/20 text-xs sm:text-sm text-clay-dark font-medium leading-relaxed">
+          <p id="modalRationale">Redistribution prevents impending stockout while eliminating shelf expiry waste.</p>
+        </div>
+        <div class="text-xs text-clay-muted font-mono pt-1">
+          SHA-256 Hash: <span id="modalHash" class="text-slate-600 break-all font-semibold"></span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end space-x-3 pt-2">
+        <button onclick="closeModal()" class="px-5 py-2.5 bg-clay-inner text-clay-dark rounded-full text-sm font-bold transition cursor-pointer">Close</button>
+        <button onclick="window.print()" class="px-5 py-2.5 bg-clay-terracotta text-white rounded-full text-sm font-black shadow-clay-btn transition flex items-center space-x-2 cursor-pointer">
+          <i data-lucide="printer" class="w-4 h-4"></i>
+          <span>Print Challan</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cryptographic Audit Ledger Modal -->
+  <div id="ledgerModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-[2.5rem] max-w-4xl w-full p-7 space-y-4 shadow-2xl border border-clay-salmon/30 max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3.5">
+        <div class="flex items-center space-x-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-clay-terracotta text-white flex items-center justify-center font-bold">
+            <i data-lucide="shield-check" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <h3 class="text-lg sm:text-xl font-black text-clay-dark">Tamper-Evident Cryptographic Audit Ledger</h3>
+            <p class="text-xs sm:text-sm text-clay-muted font-medium">SHA-256 Hash Chaining &bull; Statutory Compliance with UP Clinical Establishment Act</p>
+          </div>
+        </div>
+        <button onclick="closeLedgerModal()" class="text-slate-400 hover:text-slate-600 text-3xl font-bold leading-none cursor-pointer">&times;</button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto custom-scrollbar border border-clay-salmon/20 rounded-2xl">
+        <table class="w-full text-left text-xs sm:text-sm">
+          <thead class="bg-clay-inner text-clay-dark sticky top-0 border-b border-clay-salmon/20 font-black">
+            <tr>
+              <th class="py-3 px-3.5">#</th>
+              <th class="py-3 px-3.5">Time</th>
+              <th class="py-3 px-3.5">Event Type</th>
+              <th class="py-3 px-3.5">Authorized By</th>
+              <th class="py-3 px-3.5">Details</th>
+              <th class="py-3 px-3.5">SHA-256 Hash</th>
+            </tr>
+          </thead>
+          <tbody id="auditTableBody" class="divide-y divide-clay-salmon/10 text-clay-dark font-medium">
+            <tr>
+              <td colspan="6" class="text-center py-6 text-clay-muted text-sm font-semibold">Loading cryptographic ledger...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="flex justify-between items-center pt-2">
+        <span class="text-xs sm:text-sm text-emerald-700 font-bold flex items-center space-x-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>Ledger Integrity Verified &bull; All 4 Nodes Synchronized</span>
+        </span>
+        <button onclick="closeLedgerModal()" class="px-6 py-2.5 bg-clay-inner hover:bg-clay-bg text-clay-dark rounded-full text-sm font-bold transition cursor-pointer">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active Notifications & Alerts Modal -->
+  <div id="notificationsModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-[2.5rem] max-w-xl sm:max-w-2xl w-full p-7 space-y-4 shadow-2xl border border-clay-salmon/30 max-h-[90vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3.5">
+        <div class="flex items-center space-x-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-clay-terracotta text-white flex items-center justify-center font-bold">
+            <i data-lucide="bell" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <h3 class="text-lg sm:text-xl font-black text-clay-dark">Active Resilience Alerts</h3>
+            <p class="text-xs sm:text-sm text-clay-muted font-medium">Real-time climate surge telemetry &amp; logistics warnings</p>
+          </div>
+        </div>
+        <button onclick="closeNotificationsModal()" class="text-slate-400 hover:text-slate-600 text-3xl font-bold leading-none cursor-pointer">&times;</button>
+      </div>
+
+      <div class="space-y-3.5">
+        <div class="p-4 bg-red-50 rounded-2xl border border-red-200 text-xs sm:text-sm space-y-1.5">
+          <div class="flex items-center justify-between font-black text-red-800">
+            <span class="text-sm sm:text-base">🌫️ Severe Smog Episode Active</span>
+            <span class="text-xs bg-red-200 text-red-900 px-2.5 py-1 rounded-full font-bold">AQI 385 &bull; Severe</span>
+          </div>
+          <p class="text-red-700 text-xs sm:text-sm leading-relaxed font-medium">
+            Thermal inversion in Lucknow-Unnao corridor driving +62% acute bronchospasm surge with 42h lag onset.
+          </p>
+        </div>
+
+        <div class="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-xs sm:text-sm space-y-1.5">
+          <div class="flex items-center justify-between font-black text-amber-800">
+            <span class="text-sm sm:text-base">⚠️ Imminent Rural PHC Stockout</span>
+            <span class="text-xs bg-amber-200 text-amber-900 px-2.5 py-1 rounded-full font-bold">1.6 Days Cover</span>
+          </div>
+          <p class="text-amber-700 text-xs sm:text-sm leading-relaxed font-medium">
+            PHC Kakori has only 15 Salbutamol respules remaining. Transfer order from CHC Nawabganj awaiting sign-off.
+          </p>
+        </div>
+
+        <div class="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs sm:text-sm space-y-1.5">
+          <div class="flex items-center justify-between font-black text-emerald-800">
+            <span class="text-sm sm:text-base">🚚 Green Corridor Optimization</span>
+            <span class="text-xs bg-emerald-200 text-emerald-900 px-2.5 py-1 rounded-full font-bold">90 Units Salvaged</span>
+          </div>
+          <p class="text-emerald-700 text-xs sm:text-sm leading-relaxed font-medium">
+            Near-expiry batches (74 days shelf-life) scheduled for priority reallocation to eliminate shelf expiry dump waste.
+          </p>
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-2">
+        <button onclick="closeNotificationsModal()" class="px-6 py-2.5 bg-clay-inner hover:bg-clay-bg text-clay-dark rounded-full text-sm font-bold transition cursor-pointer">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help & Architecture Overview Modal -->
+  <div id="infoModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-[2.5rem] max-w-3xl w-full p-7 space-y-4 shadow-2xl border border-clay-salmon/30 max-h-[90vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3.5">
+        <div class="flex items-center space-x-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-clay-terracotta text-white flex items-center justify-center font-bold">
+            <i data-lucide="help-circle" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <h3 class="text-lg sm:text-xl font-black text-clay-dark">Aarogya-Vāyu | System Architecture &amp; Demo Guide</h3>
+            <p class="text-xs sm:text-sm text-clay-muted font-medium">Build with AI &bull; Track 3: Smart Health &amp; Supply Chain Resilience</p>
+          </div>
+        </div>
+        <button onclick="closeInfoModal()" class="text-slate-400 hover:text-slate-600 text-3xl font-bold leading-none cursor-pointer">&times;</button>
+      </div>
+
+      <div class="space-y-4 text-xs sm:text-sm text-clay-dark leading-relaxed">
+        <div class="p-4 bg-clay-inner rounded-2xl border border-clay-salmon/20">
+          <h4 class="font-black text-clay-terracotta text-sm sm:text-base mb-1.5">Autonomous Multi-Agent Resilience Pipeline</h4>
+          <p class="text-clay-muted leading-relaxed font-medium">
+            Unlike static linear pipelines, Aarogya-Vāyu utilizes Google’s Agent Development Kit (ADK) where 4 specialized AI agents collaborate dynamically:
+          </p>
+          <ul class="list-disc list-inside mt-2.5 space-y-1.5 text-xs sm:text-sm text-clay-dark font-medium">
+            <li><strong>Atmospheric Sentinel Agent:</strong> Ingests OpenAQ &amp; IMD feeds, detects thermal smog inversions and heatwaves.</li>
+            <li><strong>Frontline Intake Agent:</strong> Gemini 3.8 Flash multimodal parser extracts stock reports from voice updates with Gemma 2 edge fallback.</li>
+            <li><strong>Logistics Optimization Agent:</strong> Gemini tool-calling triggers an Operations Research mixed-integer solver to minimize stockout probabilities and shelf expiry waste.</li>
+            <li><strong>Governance &amp; Audit Agent:</strong> Cryptographic SHA-256 hash chaining guarantees statutory compliance with UP Clinical Establishment Act.</li>
+          </ul>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <div class="p-4 bg-white rounded-2xl border border-clay-salmon/30 shadow-sm">
+            <h5 class="font-black text-clay-terracotta text-sm mb-1.5">🎮 Live Interactive Features</h5>
+            <ul class="text-xs sm:text-sm space-y-1.5 text-clay-muted font-medium">
+              <li>&bull; Click <strong>Run ADK Pipeline</strong> to observe live multi-agent collaboration.</li>
+              <li>&bull; Click <strong>Solve</strong> on any facility to route emergency stock.</li>
+              <li>&bull; Test <strong>Frontline Voice Intake</strong> with sample transcripts.</li>
+              <li>&bull; Switch between <strong>Smog, Heatwave, and Baseline</strong>.</li>
+            </ul>
+          </div>
+          <div class="p-4 bg-white rounded-2xl border border-clay-salmon/30 shadow-sm">
+            <h5 class="font-black text-clay-terracotta text-sm mb-1.5">🔍 Verification &amp; Compliance</h5>
+            <ul class="text-xs sm:text-sm space-y-1.5 text-clay-muted font-medium">
+              <li>&bull; Open <strong>CMO Studio</strong> for strategic what-if evaluations.</li>
+              <li>&bull; Click <strong>Scan Cupboard Image</strong> for Gemini 3.8 Vision OCR.</li>
+              <li>&bull; Click the <strong>Shield icon</strong> to view the SHA-256 ledger.</li>
+              <li>&bull; Click <strong>Approve &amp; Dispatch</strong> to issue official transfer challans.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-2">
+        <button onclick="closeInfoModal()" class="px-6 py-2.5 bg-clay-terracotta text-white rounded-full text-sm font-black shadow-clay-btn transition cursor-pointer">Got it, Let's Explore</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Comprehensive Facility Command Center Modal (WOW Factor) -->
+  <div id="facilityDetailModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-[2.5rem] max-w-4xl w-full p-7 sm:p-8 space-y-4 shadow-2xl border border-clay-salmon/30 max-h-[90vh] flex flex-col">
+      <!-- Header -->
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3.5 flex-shrink-0">
+        <div class="flex items-center space-x-3.5">
+          <div id="facDetailIcon" class="w-14 h-14 rounded-2xl bg-clay-terracotta text-white flex items-center justify-center font-black text-lg shadow-sm">
+            PHC
+          </div>
+          <div>
+            <div class="flex items-center space-x-2.5">
+              <h3 id="facDetailName" class="text-xl sm:text-2xl font-black text-clay-dark">PHC Kakori</h3>
+              <span id="facDetailBadge" class="text-xs bg-red-100 text-red-700 font-black px-2.5 py-1 rounded-full border border-red-200">CRITICAL STOCKOUT RISK</span>
+            </div>
+            <p id="facDetailSub" class="text-xs sm:text-sm text-clay-muted font-semibold">Lucknow District &bull; Dr. Ananya Srivastava (Medical Officer)</p>
+          </div>
+        </div>
+        <button onclick="closeFacilityDetail()" class="text-slate-400 hover:text-slate-700 text-3xl font-bold leading-none transition cursor-pointer">&times;</button>
+      </div>
+
+      <!-- Facility Specs Telemetry Grid -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-shrink-0">
+        <div class="bg-clay-inner p-3 rounded-2xl border border-clay-salmon/20 text-center">
+          <span class="text-xs text-clay-muted uppercase font-extrabold tracking-wider block">Population</span>
+          <strong id="facDetailPop" class="text-sm sm:text-base text-clay-dark tabular-nums font-black">48,500</strong>
+        </div>
+        <div class="bg-clay-inner p-3 rounded-2xl border border-clay-salmon/20 text-center">
+          <span class="text-xs text-clay-muted uppercase font-extrabold tracking-wider block">Inpatient Beds</span>
+          <strong id="facDetailBeds" class="text-sm sm:text-base text-clay-dark tabular-nums font-black">12 Beds</strong>
+        </div>
+        <div class="bg-clay-inner p-3 rounded-2xl border border-clay-salmon/20 text-center">
+          <span class="text-xs text-clay-muted uppercase font-extrabold tracking-wider block">Cold Chain</span>
+          <strong id="facDetailCold" class="text-sm sm:text-base text-emerald-600 font-black">Active (Solar+Grid)</strong>
+        </div>
+        <div class="bg-clay-inner p-3 rounded-2xl border border-clay-salmon/20 text-center">
+          <span class="text-xs text-clay-muted uppercase font-extrabold tracking-wider block">Telemetry Node</span>
+          <strong id="facDetailCoords" class="text-sm sm:text-base text-clay-dark font-mono font-black">26.88°N, 80.80°E</strong>
+        </div>
+      </div>
+
+      <!-- Inventory Table Body -->
+      <div class="flex-1 overflow-y-auto custom-scrollbar space-y-2.5 pr-1">
+        <div class="flex items-center justify-between pb-1.5">
+          <h4 class="text-sm sm:text-base font-black text-clay-dark flex items-center space-x-2">
+            <i data-lucide="boxes" class="w-4 h-4 text-clay-terracotta"></i>
+            <span>Essential Medicine Stock Telemetry (6 Monitored Formulations)</span>
+          </h4>
+          <span class="text-xs text-clay-muted font-bold">Climate-Adjusted Surge Demand</span>
+        </div>
+
+        <div id="facDetailMedicineList" class="space-y-2.5">
+          <!-- Dynamically populated by JS -->
+        </div>
+      </div>
+
+      <!-- Action Footer -->
+      <div class="flex items-center justify-between pt-3.5 border-t border-slate-100 flex-shrink-0">
+        <button onclick="closeFacilityDetail()" class="px-5 py-2.5 bg-clay-inner hover:bg-clay-bg text-clay-dark rounded-full text-sm font-bold transition cursor-pointer">
+          Close Inspector
+        </button>
+        <button id="facDetailSolveBtn" onclick="runTransferFor(currentInspectFacilityId)" class="px-6 py-2.5 bg-clay-terracotta hover:bg-clay-terracottaDark text-white rounded-full text-sm font-black shadow-clay-btn transition flex items-center space-x-2 cursor-pointer">
+          <i data-lucide="zap" class="w-4 h-4 fill-current"></i>
+          <span>Trigger Lateral AI Rebalance</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <script>lucide.createIcons();</script>
+</body>
+</html>
