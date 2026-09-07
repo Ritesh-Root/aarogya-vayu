@@ -4,10 +4,28 @@ import concurrent.futures
 import pytest
 from fastapi.testclient import TestClient
 
+import multiprocessing
 from app.main import app, storage, active_recommendations
 from app.models import TransferRecommendation
+from app.storage import StorageError
 
 client = TestClient(app)
+
+def _process_issue_stock_worker(facility_id: str, med_id: str, batch_num: str, return_queue):
+    t_client = TestClient(app)
+    res = t_client.post(f"/api/clinic/{facility_id}/stock-action", json={
+        "facility_id": facility_id,
+        "medicine_id": med_id,
+        "batch_number": batch_num,
+        "action_type": "STOCK_ISSUED",
+        "quantity": 10,
+        "expected_version": 1,
+        "reason": "Multiprocess concurrent stock test",
+        "operator_name": "Process Worker",
+        "operator_role": "PHARMACIST"
+    })
+    return_queue.put(res.status_code)
+
 
 # Pristine storage snapshots for test isolation
 _PRISTINE_INV = storage.inv_path.read_text() if storage.inv_path.exists() else None
@@ -649,4 +667,124 @@ def test_system_capabilities_endpoint():
     assert "durable_storage" in caps
     assert "append-only" in caps["audit_integrity"]
     assert "concurrency_engine" in caps
+
+
+def test_independent_process_competing_stock_requests():
+    """
+    Independent OS Process Concurrency Contract:
+    Spawns 2 distinct operating system processes competing for the same 10 units.
+    Kernel fcntl.flock serializes transactions:
+    - Exactly 1 process succeeds (HTTP 200).
+    - Exactly 1 process fails with optimistic version/stock conflict (HTTP 409).
+    - Final stock is exactly 0, never negative.
+    """
+    facility_id = "PHC-LKO-01"
+    med_id = "MED-PROC-01"
+    batch_num = "BAT-PROC-01"
+
+    inv, cons, idem, _ = storage.load_all()
+    inv.append({
+        "facility_id": facility_id,
+        "facility_name": "PHC Kakori",
+        "medicine_id": med_id,
+        "medicine_name": "Paracetamol IV",
+        "batch_number": batch_num,
+        "expiry_date": "2027-12-31",
+        "days_to_expiry": 400,
+        "daily_consumption_base": 5.0,
+        "on_hand": 10,
+        "reserved": 0,
+        "quarantined": 0,
+        "available": 10,
+        "current_stock": 10,
+        "pack_size": 10,
+        "unit": "Bottles",
+        "version": 1,
+        "is_frozen": False,
+        "last_updated": "2026-09-08 00:00:00"
+    })
+    storage.commit_transaction(inv, cons, idem)
+
+    ctx = multiprocessing.get_context("spawn")
+    queue = ctx.Queue()
+
+    p1 = ctx.Process(target=_process_issue_stock_worker, args=(facility_id, med_id, batch_num, queue))
+    p2 = ctx.Process(target=_process_issue_stock_worker, args=(facility_id, med_id, batch_num, queue))
+
+    p1.start()
+    p2.start()
+
+    p1.join(timeout=10)
+    p2.join(timeout=10)
+
+    results = []
+    while not queue.empty():
+        results.append(queue.get())
+
+    assert len(results) == 2, f"Expected 2 process results, got: {results}"
+    assert sorted(results) == [200, 409], f"Unexpected multi-process status codes: {results}"
+
+    inv_final, _, _, _ = storage.load_all()
+    final_item = next(i for i in inv_final if i["facility_id"] == facility_id and i["medicine_id"] == med_id and i.get("batch_number") == batch_num)
+    assert final_item["on_hand"] == 0
+    assert final_item["available"] == 0
+
+
+def test_transaction_retry_does_not_duplicate_audit_events():
+    """
+    Audit Ledger Idempotency Contract:
+    Verify that repeating a commit_transaction with the identical audit entry
+    (matching current_hash) does not append duplicate blocks to audit_log.json.
+    """
+    inv, cons, idem, audit = storage.load_all()
+    initial_audit_count = len(audit)
+
+    test_audit_entry = {
+        "index": initial_audit_count,
+        "timestamp": "2026-09-08T04:00:00.000000Z",
+        "event_type": "TEST_RETRY_IDEMPOTENCY_EVENT",
+        "approved_by": "TEST_RUNNER",
+        "details": {"test": "retry_deduplication"},
+        "prev_hash": "0" * 64,
+        "current_hash": f"mock_hash_{uuid.uuid4().hex}"
+    }
+
+    # First commit: appends new audit entry
+    storage.commit_transaction(inv, cons, idem, test_audit_entry)
+    _, _, _, audit_after_1 = storage.load_all()
+    assert len(audit_after_1) == initial_audit_count + 1
+
+    # Simulated retry with identical audit entry: must NOT append duplicate!
+    storage.commit_transaction(inv, cons, idem, test_audit_entry)
+    _, _, _, audit_after_2 = storage.load_all()
+    assert len(audit_after_2) == initial_audit_count + 1, "Duplicate audit block was appended on retry!"
+
+
+def test_storage_failure_produces_no_partial_mutation_or_false_success():
+    """
+    Atomicity & Rollback Protection Contract:
+    Simulates a mid-transaction crash or failure in mutation_fn.
+    Verifies that:
+    1. The exception propagates cleanly (no false HTTP 200).
+    2. Durable storage on disk is completely untouched (no partial/corrupt state).
+    """
+    inv_before, cons_before, idem_before, audit_before = storage.load_all()
+    orig_item = inv_before[0]
+    orig_stock = orig_item["on_hand"]
+
+    def faulty_mutation(inv, cons, idem, audit):
+        # Mutate in memory
+        inv[0]["on_hand"] = 99999
+        # Crash before returning
+        raise RuntimeError("Simulated catastrophic crash during transactional validation")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        storage.execute_in_transaction(faulty_mutation)
+
+    assert "Simulated catastrophic crash" in str(exc_info.value)
+
+    # Verify on-disk state is 100% intact with zero partial writes
+    inv_after, _, _, _ = storage.load_all()
+    assert inv_after[0]["on_hand"] == orig_stock
+
 

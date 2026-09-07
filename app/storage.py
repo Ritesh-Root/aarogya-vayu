@@ -25,6 +25,7 @@ class StorageManager:
 
         self.backend = os.environ.get("STORAGE_BACKEND", "demo").strip().lower()
         self._lock = threading.RLock()
+        self.lock_path = self.tmp_dir / ".storage.lock"
 
         # Check firestore configuration upfront if specified
         self.firestore_client = None
@@ -167,10 +168,32 @@ class StorageManager:
             except Exception as e:
                 raise StorageError(f"Atomic commit failed on local storage: {e}")
 
+    def _acquire_process_lock(self):
+        try:
+            import fcntl
+            self.lock_path.parent.mkdir(parents=True, exist_ok=True)
+            fd = open(self.lock_path, "a+")
+            fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
+            return fd
+        except Exception:
+            return None
+
+    def _release_process_lock(self, fd):
+        if fd:
+            try:
+                import fcntl
+                fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+            except Exception:
+                pass
+            try:
+                fd.close()
+            except Exception:
+                pass
+
     def execute_in_transaction(self, mutation_fn):
         """
         Executes a transactional mutation function with guaranteed atomicity and concurrency protection:
-        - Demo mode: Acquires process-level threading lock, loads state, calls mutation_fn(inventory, consignments, idempotency, audit_log),
+        - Demo mode: Acquires process-level threading lock and kernel fcntl.flock, loads state, calls mutation_fn(inventory, consignments, idempotency, audit_log),
           persists results inside the lock.
         - Firestore mode: Uses Google Cloud Firestore's @firestore.transactional to ensure reads occur within the transaction
           and optimistic concurrency conflicts trigger automatic retries or rollbacks.
@@ -209,12 +232,16 @@ class StorageManager:
             except Exception as e:
                 raise StorageError(f"Firestore transaction execution failed: {e}")
 
-        # Demo Mode (Thread-Safe Transactional Execution)
+        # Demo Mode (Thread-Safe and Process-Safe Transactional Execution)
         with self._lock:
-            inv, cons, idem, audit = self.load_all()
-            result, new_inv, new_cons, new_idem, new_audit = mutation_fn(inv, cons, idem, audit)
-            self.commit_transaction(new_inv, new_cons, new_idem, new_audit)
-            return result
+            p_fd = self._acquire_process_lock()
+            try:
+                inv, cons, idem, audit = self.load_all()
+                result, new_inv, new_cons, new_idem, new_audit = mutation_fn(inv, cons, idem, audit)
+                self.commit_transaction(new_inv, new_cons, new_idem, new_audit)
+                return result
+            finally:
+                self._release_process_lock(p_fd)
 
     def _read_json_file(self, primary_path: Path, fallback_path: Path, default: Any) -> Any:
         for p in [fallback_path, primary_path]:
