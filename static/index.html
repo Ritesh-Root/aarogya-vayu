@@ -221,7 +221,7 @@
         <button id="nav-cmo" onclick="switchTab('cmo')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="CMO Strategic Studio">
           <i data-lucide="message-square" class="w-5 h-5"></i>
         </button>
-        <button id="nav-vision" onclick="switchTab('vision')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="Gemini 3.8 Flash Vision Verification">
+        <button id="nav-vision" onclick="switchTab('vision')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="Gemini 2.5 Flash Vision Verification">
           <i data-lucide="camera" class="w-5 h-5"></i>
         </button>
         <button id="nav-ledger" onclick="switchTab('ledger')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="Cryptographic Audit Ledger">
@@ -501,7 +501,7 @@
                   <h4 class="text-sm sm:text-base font-black text-clay-dark flex items-center space-x-1.5">
                     <span>🎙️ Frontline Voice Intake</span>
                   </h4>
-                  <span class="text-xs bg-clay-terracotta/10 text-clay-terracotta font-black px-2.5 py-1 rounded-full">Gemini 3.8 Flash</span>
+                  <span class="text-xs bg-clay-terracotta/10 text-clay-terracotta font-black px-2.5 py-1 rounded-full">Gemini 2.5 Flash</span>
                 </div>
                 <p class="text-xs sm:text-sm text-clay-muted font-medium mb-3.5 leading-relaxed">
                   Frontline health staff record 10-second updates in English or Hindi. Gemma 2 provides offline edge fallback.
@@ -561,7 +561,17 @@
                   <span>Facility: <strong id="voiceFacName" class="text-clay-dark font-black">PHC Kakori</strong></span>
                   <span>Medicine: <strong id="voiceMedName" class="text-clay-terracotta font-black">Salbutamol 2.5mg</strong></span>
                 </div>
-                <div class="flex items-center justify-between text-clay-muted text-xs pt-1.5 border-t border-clay-salmon/20 font-medium">
+                <div class="bg-clay-inner/70 p-2 rounded-xl border border-clay-salmon/15 text-xs text-clay-dark space-y-0.5 font-medium">
+                  <div class="flex justify-between">
+                    <span class="text-clay-muted">EDL Grounding:</span>
+                    <strong id="voiceEdlCode" class="font-mono text-clay-terracotta">MED-001 (EDL-UP-2026)</strong>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-clay-muted">Form &amp; Strength:</span>
+                    <span id="voiceFormStrength" class="font-semibold text-clay-dark">Respules / Nebulizer (2.5mg)</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between text-clay-muted text-xs pt-1 border-t border-clay-salmon/20 font-medium">
                   <span>Reported Stock: <strong id="voiceStockQty" class="text-clay-terracotta font-black">15 units</strong></span>
                   <span>Dispensed: <strong id="voiceDispQty" class="text-clay-dark font-black">--</strong></span>
                 </div>
@@ -734,12 +744,12 @@
             </div>
           </div>
 
-          <!-- Gemini 3.8 Flash Vision Shelf Card -->
+          <!-- Gemini 2.5 Flash Vision Shelf Card -->
           <div class="bg-clay-inner rounded-3xl p-5 border border-clay-salmon/20 shadow-sm space-y-3">
             <div class="flex items-center justify-between">
               <span class="text-sm sm:text-base font-black text-clay-dark flex items-center space-x-1.5">
                 <i data-lucide="camera" class="w-4 h-4 text-cyan-600"></i>
-                <span>Gemini 3.8 Flash Vision Verification</span>
+                <span>Gemini 2.5 Flash Vision Verification</span>
               </span>
               <span class="text-xs bg-cyan-100 text-cyan-800 font-extrabold px-2.5 py-1 rounded-full">OCR VERIFIED</span>
             </div>
@@ -776,7 +786,7 @@
           </div>
           <div>
             <h3 class="text-xl sm:text-2xl font-black text-clay-dark">Chief Medical Officer Strategic Studio</h3>
-            <p class="text-xs sm:text-sm text-clay-muted font-medium">Powered by Gemini 3.8 Flash &bull; Natural Language What-If Strategic Simulation</p>
+            <p class="text-xs sm:text-sm text-clay-muted font-medium">Powered by Gemini 2.5 Flash &bull; Natural Language What-If Strategic Simulation</p>
           </div>
         </div>
         <button onclick="closeCmoModal()" class="text-clay-muted hover:text-clay-dark text-3xl font-bold leading-none cursor-pointer">&times;</button>
@@ -924,11 +934,17 @@
       </div>
 
       <div class="flex justify-between items-center pt-2">
-        <span class="text-xs sm:text-sm text-emerald-700 font-bold flex items-center space-x-2">
+        <span id="ledgerIntegrityStatus" class="text-xs sm:text-sm text-emerald-700 font-bold flex items-center space-x-2">
           <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>Ledger Integrity Verified &bull; All 4 Nodes Synchronized</span>
+          <span>Ledger Integrity Verified &bull; Cryptographic Hash Chain Active</span>
         </span>
-        <button onclick="closeLedgerModal()" class="px-6 py-2.5 bg-clay-inner hover:bg-clay-bg text-clay-dark rounded-full text-sm font-bold transition cursor-pointer">Close</button>
+        <div class="flex space-x-2">
+          <button onclick="verifyAuditLedgerLive()" class="px-4 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-full text-xs font-bold transition cursor-pointer flex items-center space-x-1.5">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+            <span>Verify Live Integrity</span>
+          </button>
+          <button onclick="closeLedgerModal()" class="px-6 py-2.5 bg-clay-inner hover:bg-clay-bg text-clay-dark rounded-full text-sm font-bold transition cursor-pointer">Close</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1011,8 +1027,8 @@
           </p>
           <ul class="list-disc list-inside mt-2.5 space-y-1.5 text-xs sm:text-sm text-clay-dark font-medium">
             <li><strong>Atmospheric Sentinel Agent:</strong> Ingests OpenAQ &amp; IMD feeds, detects thermal smog inversions and heatwaves.</li>
-            <li><strong>Frontline Intake Agent:</strong> Gemini 3.8 Flash multimodal parser extracts stock reports from voice updates with Gemma 2 edge fallback.</li>
-            <li><strong>Logistics Optimization Agent:</strong> Gemini tool-calling triggers an Operations Research mixed-integer solver to minimize stockout probabilities and shelf expiry waste.</li>
+            <li><strong>Frontline Intake Agent:</strong> Gemini 2.5 Flash multimodal parser extracts stock reports from voice updates with Gemma 2 edge fallback.</li>
+            <li><strong>Logistics Optimization Agent:</strong> Gemini tool-calling triggers a deterministic constrained multi-objective solver to minimize stockout probabilities and shelf expiry waste.</li>
             <li><strong>Governance &amp; Audit Agent:</strong> Cryptographic SHA-256 hash chaining guarantees statutory compliance with UP Clinical Establishment Act.</li>
           </ul>
         </div>
@@ -1031,7 +1047,7 @@
             <h5 class="font-black text-clay-terracotta text-sm mb-1.5">🔍 Verification &amp; Compliance</h5>
             <ul class="text-xs sm:text-sm space-y-1.5 text-clay-muted font-medium">
               <li>&bull; Open <strong>CMO Studio</strong> for strategic what-if evaluations.</li>
-              <li>&bull; Click <strong>Scan Cupboard Image</strong> for Gemini 3.8 Vision OCR.</li>
+              <li>&bull; Click <strong>Scan Cupboard Image</strong> for Gemini 2.5 Vision OCR.</li>
               <li>&bull; Click the <strong>Shield icon</strong> to view the SHA-256 ledger.</li>
               <li>&bull; Click <strong>Approve &amp; Dispatch</strong> to issue official transfer challans.</li>
             </ul>

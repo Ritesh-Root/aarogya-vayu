@@ -22,7 +22,7 @@
 In rural India, Primary Health Centre (PHC) medicine availability hovers between **17% and 51%**, with stockouts lasting **4 to 14 weeks**. When winter smog blankets agricultural corridors or summer heatwaves strike, acute respiratory illnesses and heatstroke surge by **30% to 50% within 48 to 72 hours**. Existing government systems (e-Aushadhi / DVDMS) rely on backward-looking 30-day paper procurement cycles and offer zero horizontal inter-facility coordination. As a result, one clinic turns away breathless children while a neighboring clinic 18 km away sits on 300 surplus medicine units expiring into bio-waste.
 
 ### The Solution
-Aarogya-Vāyu is a multi-agent decision support system that links **environmental satellite telemetry** (Google Earth Engine, Sentinel-5P, Google Maps AQ API) with **frontline multilingual voice reporting** (Google Cloud STT + Gemini 3.5 Flash). It predicts impending stockouts with a 48–72 hour lead time and uses a **deterministic Operations Research solver** to orchestrate surplus-to-deficit redistributions within a 35 km radius, saving near-expiry medicines and preventing stockouts with human-in-the-loop CMO sign-off.
+Aarogya-Vāyu is a multi-agent decision support system that links **environmental satellite telemetry** (Google Earth Engine, Sentinel-5P, Google Maps AQ API) with **frontline multilingual voice reporting** (Google Cloud STT + Google Gemini 2.5 Flash). It predicts impending stockouts with a 48–72 hour lead time and uses a **deterministic Operations Research solver** to orchestrate surplus-to-deficit redistributions within a 35 km radius, saving near-expiry medicines and preventing stockouts with human-in-the-loop CMO sign-off.
 
 ---
 
@@ -61,7 +61,7 @@ Aarogya-Vāyu is a multi-agent decision support system that links **environmenta
   - *Environmental Sentinel:* Earth Engine Sentinel-5P + INSAT-3DR.
   - *Frontline Intake:* Google Cloud STT v2 + Vertex AI EDL Grounding.
   - *Demand Forecaster:* Vertex AI AutoML Tabular Forecaster (P10/P50/P90 quantiles).
-  - *Logistics Agent:* Gemini 3.5 Flash Tool Calling + SciPy Linear Programming.
+  - *Logistics Agent:* Gemini 2.5 Flash Tool Calling + Deterministic Constrained Allocator.
   - *Governance Agent:* Cryptographic SHA-256 Audit Trail + Bilingual Action Cards.
 
 ### Slide 5: The Interactive Dashboard (Live Demonstration)
@@ -98,7 +98,7 @@ In a standard district corridor of 20 rural PHCs and CHCs (serving ~840,000 rura
 ## 5. Anticipated Judge Q&A Defense
 
 #### Q1: "Why use an Operations Research solver instead of letting Gemini decide the transfer amounts directly?"
-**Answer:** Large Language Models excel at natural language understanding, reasoning, and tool orchestration, but they are prone to arithmetic hallucination when solving multi-constraint numerical systems. In public health logistics, moving the wrong quantity could trigger a secondary stockout at the donor facility or violate legal safety reserve mandates. By using **Gemini Function Calling (`calculate_optimal_transfer`)**, the agent reasons about the strategy while delegating the mathematics to a deterministic, legally verifiable SciPy linear programming solver.
+**Answer:** Large Language Models excel at natural language understanding, reasoning, and tool orchestration, but they are prone to arithmetic hallucination when solving multi-constraint numerical systems. In public health logistics, moving the wrong quantity could trigger a secondary stockout at the donor facility or violate legal safety reserve mandates. By using **Gemini Function Calling (`calculate_optimal_transfer`)**, the agent reasons about the strategy while delegating the mathematics to a deterministic, legally verifiable constrained optimization solver.
 
 #### Q2: "What happens if a rural PHC has no internet connectivity?"
 **Answer:** Aarogya-Vāyu incorporates **Edge Resilience Architecture**. In offline mode, frontline voice queries can be transcribed and evaluated locally on-device using a compressed **Gemma 2B** edge model. Voice updates and stock alerts are buffered in an encrypted SQLite store and automatically synchronized with the cloud central ledger the moment GSM/4G connectivity is re-established. For ultra-critical stockouts (<5 units), an automated SMS fallback alert is triggered via GSM tower.

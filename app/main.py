@@ -98,10 +98,15 @@ current_env = EnvironmentalReading(
 active_recommendations: Dict[str, TransferRecommendation] = {}
 
 def recompute_recommendations():
-    global active_recommendations
     risks = surge_engine.assess_facility_risks(inventory_data, current_env)
     recs = optimizer.optimize(risks, inventory_data)
-    active_recommendations = {r.id: r for r in recs}
+    # Retain approved recommendations for idempotent challan verification
+    approved = {rid: r for rid, r in active_recommendations.items() if r.status == "APPROVED"}
+    active_recommendations.clear()
+    active_recommendations.update(approved)
+    for r in recs:
+        if r.id not in active_recommendations:
+            active_recommendations[r.id] = r
 
 # Initial computation
 recompute_recommendations()
@@ -159,7 +164,7 @@ async def get_recommendations():
 async def process_voice_intake(request: VoiceIntakeRequest):
     result = await voice_service.parse_and_validate(request)
 
-    if result.quality_checks_passed:
+    if result.quality_checks_passed and not result.requires_confirmation:
         # Update in-memory inventory
         updated = False
         for item in inventory_data:
@@ -197,44 +202,87 @@ async def approve_transfer(req: ApprovalRequest):
     if not rec:
         raise HTTPException(status_code=404, detail="Recommendation not found")
 
+    # True Idempotency: Return existing challan if already approved
     if rec.status == "APPROVED":
-        return {"status": "already_approved", "recommendation": rec}
+        return {
+            "status": "APPROVED",
+            "already_approved": True,
+            "dispatch_challan_id": rec.challan_id or f"CHALLAN-UP-{datetime.now().strftime('%Y%m%d')}-{rec.id}",
+            "authorized_by": rec.authorized_by or req.officer_name,
+            "timestamp": rec.approved_at or datetime.utcnow().isoformat() + "Z",
+            "cryptographic_hash": rec.cryptographic_hash or "REPLAY_IDEMPOTENT",
+            "recommendation": rec.model_dump()
+        }
 
-    # Execute inventory transfer in memory
+    # Locate inventory records
     donor_item = next((i for i in inventory_data if i["facility_id"] == rec.donor_facility_id and i["medicine_id"] == rec.medicine_id), None)
     rec_item = next((i for i in inventory_data if i["facility_id"] == rec.recipient_facility_id and i["medicine_id"] == rec.medicine_id), None)
 
-    if donor_item and rec_item:
-        donor_item["current_stock"] = max(0, donor_item["current_stock"] - rec.units_to_transfer)
-        rec_item["current_stock"] += rec.units_to_transfer
-        donor_item["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        rec_item["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if not donor_item:
+        raise HTTPException(status_code=404, detail=f"Donor inventory record not found for facility {rec.donor_facility_id}")
+    if not rec_item:
+        raise HTTPException(status_code=404, detail=f"Recipient inventory record not found for facility {rec.recipient_facility_id}")
 
-        _save_inventory()
+    # 1. Strict stock conservation check: prevent inventing stock out of thin air
+    if donor_item["current_stock"] < rec.units_to_transfer:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Stock conservation conflict: Donor {rec.donor_facility_name} has {donor_item['current_stock']} units available, which is insufficient for requested transfer of {rec.units_to_transfer} units."
+        )
 
-    rec.status = "APPROVED"
+    # 2. Donor surge-adjusted safety floor check: prevent depleting donors into critical stockout
+    min_floor = rec.donor_min_reserve_units
+    if min_floor <= 0:
+        min_floor = int(donor_item.get("daily_consumption_base", 5.0) * 14)
 
-    # Immutable Audit Log
+    if (donor_item["current_stock"] - rec.units_to_transfer) < min_floor:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Clinical safety violation: Transfer of {rec.units_to_transfer} units would deplete donor {rec.donor_facility_name} to {donor_item['current_stock'] - rec.units_to_transfer} units, below mandatory safety reserve of {min_floor} units. Recommendation is stale."
+        )
+
+    # 3. Exact conservation execution: Delta(donor) + Delta(recipient) == 0
+    donor_item["current_stock"] -= rec.units_to_transfer
+    rec_item["current_stock"] += rec.units_to_transfer
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    donor_item["last_updated"] = now_str
+    rec_item["last_updated"] = now_str
+
+    _save_inventory()
+
+    # 4. Mint official government transfer challan & seal in chained SHA-256 ledger
+    challan_id = f"CHALLAN-UP-{datetime.now().strftime('%Y%m%d')}-{rec.id}"
     entry = audit_ledger.record_entry(
         event_type="STOCK_TRANSFER_EXECUTED",
         details={
             "recommendation_id": rec.id,
-            "donor": rec.donor_facility_name,
-            "recipient": rec.recipient_facility_name,
-            "medicine": rec.medicine_name,
-            "units": rec.units_to_transfer,
-            "batch": rec.batch_number,
+            "challan_id": challan_id,
+            "donor_id": rec.donor_facility_id,
+            "donor_name": rec.donor_facility_name,
+            "recipient_id": rec.recipient_facility_id,
+            "recipient_name": rec.recipient_facility_name,
+            "medicine_id": rec.medicine_id,
+            "medicine_name": rec.medicine_name,
+            "units_transferred": rec.units_to_transfer,
+            "batch_number": rec.batch_number,
             "distance_km": rec.distance_km,
-            "officer_comments": req.comments
+            "officer_comments": req.comments,
+            "idempotency_key": req.idempotency_key
         },
         approved_by=req.officer_name
     )
+
+    rec.status = "APPROVED"
+    rec.challan_id = challan_id
+    rec.cryptographic_hash = entry["current_hash"]
+    rec.authorized_by = req.officer_name
+    rec.approved_at = entry["timestamp"]
 
     recompute_recommendations()
 
     return {
         "status": "APPROVED",
-        "dispatch_challan_id": f"CHALLAN-UP-{datetime.now().strftime('%Y%m%d')}-{rec.id}",
+        "dispatch_challan_id": challan_id,
         "authorized_by": req.officer_name,
         "timestamp": entry["timestamp"],
         "cryptographic_hash": entry["current_hash"],
@@ -244,6 +292,14 @@ async def approve_transfer(req: ApprovalRequest):
 @app.get("/api/audit-log")
 async def get_audit_log():
     return audit_ledger.get_recent_entries(limit=25)
+
+@app.get("/api/audit-log/verify")
+async def verify_audit_log():
+    """
+    Cryptographically validates the entire SHA-256 hash chain from genesis to head.
+    Enables live judge audit and proves tamper-evidence.
+    """
+    return audit_ledger.verify_chain_integrity()
 
 from app.agent_orchestrator import MultiAgentResilienceOrchestrator
 
@@ -284,7 +340,7 @@ async def cmo_chat(payload: Dict[str, Any] = Body(...)):
 @app.post("/api/vision/verify-shelf-photo")
 async def verify_shelf_photo(payload: Dict[str, Any] = Body(...)):
     """
-    Gemini 3.8 Flash Vision endpoint for medicine shelf verification.
+    Gemini 2.5 Flash Multimodal Vision endpoint for medicine shelf verification.
     Extracts medicine packaging, OCRs batch & expiry dates, estimates unit counts.
     """
     image_name = payload.get("image_name", "phc_kakori_shelf_01.jpg")

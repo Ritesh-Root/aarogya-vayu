@@ -18,3 +18,8 @@ service_account.json
 # Logs & Cache
 *.log
 .DS_Store
+.vercel
+.env*
+video_assets/
+*.mp3
+.pytest_cache/

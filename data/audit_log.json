@@ -697,5 +697,274 @@
     },
     "prev_hash": "02a28487efd69e391267c74f397959cd1e853c04ff2586fe3ecf9b8406cdafe2",
     "current_hash": "349d49639974479fb33d5ae8b1b8d953132188a77f9347b9ef1de8adc19116cc"
+  },
+  {
+    "index": 50,
+    "timestamp": "2026-09-05T23:37:43.193960Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "349d49639974479fb33d5ae8b1b8d953132188a77f9347b9ef1de8adc19116cc",
+    "current_hash": "d2485853d588ed0d17536d82de1a0954d0dca8090fd781c83b0f565f27e3c13c"
+  },
+  {
+    "index": 51,
+    "timestamp": "2026-09-05T23:37:45.836541Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "d2485853d588ed0d17536d82de1a0954d0dca8090fd781c83b0f565f27e3c13c",
+    "current_hash": "1f3f40488892e45b1c6183bbd92a35c4ed35f26c21f194316c0771e443c2f45c"
+  },
+  {
+    "index": 52,
+    "timestamp": "2026-09-05T23:39:34.425437Z",
+    "event_type": "FRONTLINE_VOICE_REPORT",
+    "approved_by": "STAFF@PHC-LKO-01",
+    "details": {
+      "facility_id": "PHC-LKO-01",
+      "facility_name": "PHC Kakori",
+      "medicine_id": "MED-001",
+      "reported_stock": 15,
+      "dispensed_yesterday": null,
+      "detected_language": "Hindi",
+      "raw_text": "PHC \u0915\u093e\u0915\u094b\u0930\u0940 \u0938\u0947 \u092c\u094b\u0932 \u0930\u0939\u0947 \u0939\u0948\u0902, \u0938\u093e\u0902\u0938 \u0915\u0940 \u0926\u0935\u093e\u0908 \u0915\u0947 \u0938\u093f\u0930\u094d\u092b 15 \u0930\u0947\u0938\u094d\u092a\u094d\u092f\u0942\u0932 \u092c\u091a\u0947 \u0939\u0948\u0902\u2026"
+    },
+    "prev_hash": "1f3f40488892e45b1c6183bbd92a35c4ed35f26c21f194316c0771e443c2f45c",
+    "current_hash": "cc9a7f2768971e8804a1ee479afaa8b4c3194bdebd71416b96cc424c1df84588"
+  },
+  {
+    "index": 53,
+    "timestamp": "2026-09-05T23:39:43.624714Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "cc9a7f2768971e8804a1ee479afaa8b4c3194bdebd71416b96cc424c1df84588",
+    "current_hash": "c63655136ecb817405f397a2938205610845283bb8c512720a02ead703a897ed"
+  },
+  {
+    "index": 54,
+    "timestamp": "2026-09-05T23:39:46.041521Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-LKO-01",
+      "steps_count": 8,
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "c63655136ecb817405f397a2938205610845283bb8c512720a02ead703a897ed",
+    "current_hash": "240ab69a045a2f2864e0bb1984fe71a1a4c45e09d9f1e8bbe14c8f3c218f5a53"
+  },
+  {
+    "index": 55,
+    "timestamp": "2026-09-07T21:45:45.725124Z",
+    "event_type": "STOCK_TRANSFER_EXECUTED",
+    "approved_by": "Dr. Test CMO",
+    "details": {
+      "recommendation_id": "REC-BBFE0598",
+      "challan_id": "CHALLAN-UP-20260908-REC-BBFE0598",
+      "donor_id": "PHC-UNN-02",
+      "donor_name": "PHC Hasanganj",
+      "recipient_id": "PHC-LKO-01",
+      "recipient_name": "PHC Kakori",
+      "medicine_id": "MED-003",
+      "medicine_name": "Dexamethasone Sodium Phosphate Injection (4mg/ml)",
+      "units_transferred": 50,
+      "batch_number": "BAT-200-26",
+      "distance_km": 29.3,
+      "officer_comments": "Unit test verified dispatch",
+      "idempotency_key": null
+    },
+    "prev_hash": "240ab69a045a2f2864e0bb1984fe71a1a4c45e09d9f1e8bbe14c8f3c218f5a53",
+    "current_hash": "225d643add56ee69853593bab502930809fa8cb9249987c7eb41162c241877d5"
+  },
+  {
+    "index": 56,
+    "timestamp": "2026-09-07T21:45:48.885233Z",
+    "event_type": "FRONTLINE_VOICE_REPORT",
+    "approved_by": "STAFF@PHC-LKO-01",
+    "details": {
+      "facility_id": "PHC-LKO-01",
+      "facility_name": "PHC Kakori",
+      "medicine_id": "MED-001",
+      "reported_stock": 15,
+      "dispensed_yesterday": 40,
+      "detected_language": "Hindi",
+      "raw_text": "PHC \u0915\u093e\u0915\u094b\u0930\u0940 \u0938\u0947 \u092c\u094b\u0932 \u0930\u0939\u0947 \u0939\u0948\u0902, \u0938\u093e\u0902\u0938 \u0915\u0940 \u0926\u0935\u093e\u0908 \u0915\u0947 \u0938\u093f\u0930\u094d\u092b 15 \u0930\u0947\u0938\u094d\u092a\u094d\u092f\u0942\u0932 \u092c\u091a\u0947 \u0939\u0948\u0902, \u0915\u0932 40 \u092e\u0930\u0940\u091c \u0906\u090f \u0925\u0947\u0964"
+    },
+    "prev_hash": "225d643add56ee69853593bab502930809fa8cb9249987c7eb41162c241877d5",
+    "current_hash": "8e9b1b2d9b861d014cf8a274534763297e023fdfcc6d21463c40befcfc867ed4"
+  },
+  {
+    "index": 57,
+    "timestamp": "2026-09-07T21:46:10.512301Z",
+    "event_type": "STOCK_TRANSFER_EXECUTED",
+    "approved_by": "Dr. Test CMO",
+    "details": {
+      "recommendation_id": "REC-0DC7E8BD",
+      "challan_id": "CHALLAN-UP-20260908-REC-0DC7E8BD",
+      "donor_id": "PHC-UNN-02",
+      "donor_name": "PHC Hasanganj",
+      "recipient_id": "PHC-LKO-01",
+      "recipient_name": "PHC Kakori",
+      "medicine_id": "MED-003",
+      "medicine_name": "Dexamethasone Sodium Phosphate Injection (4mg/ml)",
+      "units_transferred": 10,
+      "batch_number": "BAT-200-26",
+      "distance_km": 29.3,
+      "officer_comments": "Unit test verified dispatch",
+      "idempotency_key": null
+    },
+    "prev_hash": "8e9b1b2d9b861d014cf8a274534763297e023fdfcc6d21463c40befcfc867ed4",
+    "current_hash": "b17a12f7c099bed83cbdd4efd640f0a7b11587a36ecfd482f150e6051c06e9ac"
+  },
+  {
+    "index": 58,
+    "timestamp": "2026-09-07T21:46:11.381160Z",
+    "event_type": "FRONTLINE_VOICE_REPORT",
+    "approved_by": "STAFF@PHC-LKO-01",
+    "details": {
+      "facility_id": "PHC-LKO-01",
+      "facility_name": "PHC Kakori",
+      "medicine_id": "MED-001",
+      "reported_stock": 15,
+      "dispensed_yesterday": 40,
+      "detected_language": "Hindi",
+      "raw_text": "PHC \u0915\u093e\u0915\u094b\u0930\u0940 \u0938\u0947 \u092c\u094b\u0932 \u0930\u0939\u0947 \u0939\u0948\u0902, \u0938\u093e\u0902\u0938 \u0915\u0940 \u0926\u0935\u093e\u0908 \u0915\u0947 \u0938\u093f\u0930\u094d\u092b 15 \u0930\u0947\u0938\u094d\u092a\u094d\u092f\u0942\u0932 \u092c\u091a\u0947 \u0939\u0948\u0902, \u0915\u0932 40 \u092e\u0930\u0940\u091c \u0906\u090f \u0925\u0947\u0964"
+    },
+    "prev_hash": "b17a12f7c099bed83cbdd4efd640f0a7b11587a36ecfd482f150e6051c06e9ac",
+    "current_hash": "0cc3038357b4b6c4807f03254c6f660a204194ce332cbc05cb04893f996cf5b5"
+  },
+  {
+    "index": 59,
+    "timestamp": "2026-09-07T21:46:35.841101Z",
+    "event_type": "STOCK_TRANSFER_EXECUTED",
+    "approved_by": "Dr. Test CMO",
+    "details": {
+      "recommendation_id": "REC-FA0C1033",
+      "challan_id": "CHALLAN-UP-20260908-REC-FA0C1033",
+      "donor_id": "PHC-UNN-02",
+      "donor_name": "PHC Hasanganj",
+      "recipient_id": "PHC-LKO-01",
+      "recipient_name": "PHC Kakori",
+      "medicine_id": "MED-003",
+      "medicine_name": "Dexamethasone Sodium Phosphate Injection (4mg/ml)",
+      "units_transferred": 10,
+      "batch_number": "BAT-200-26",
+      "distance_km": 29.3,
+      "officer_comments": "Unit test verified dispatch",
+      "idempotency_key": null
+    },
+    "prev_hash": "0cc3038357b4b6c4807f03254c6f660a204194ce332cbc05cb04893f996cf5b5",
+    "current_hash": "daaaee96fa98ec260162b718f5ba86ce0a7cc181cc859188812b7736fedb369c"
+  },
+  {
+    "index": 60,
+    "timestamp": "2026-09-07T21:46:36.855519Z",
+    "event_type": "FRONTLINE_VOICE_REPORT",
+    "approved_by": "STAFF@PHC-LKO-01",
+    "details": {
+      "facility_id": "PHC-LKO-01",
+      "facility_name": "PHC Kakori",
+      "medicine_id": "MED-001",
+      "reported_stock": 15,
+      "dispensed_yesterday": 40,
+      "detected_language": "Hindi",
+      "raw_text": "PHC \u0915\u093e\u0915\u094b\u0930\u0940 \u0938\u0947 \u092c\u094b\u0932 \u0930\u0939\u0947 \u0939\u0948\u0902, \u0938\u093e\u0902\u0938 \u0915\u0940 \u0926\u0935\u093e\u0908 \u0915\u0947 \u0938\u093f\u0930\u094d\u092b 15 \u0930\u0947\u0938\u094d\u092a\u094d\u092f\u0942\u0932 \u092c\u091a\u0947 \u0939\u0948\u0902, \u0915\u0932 40 \u092e\u0930\u0940\u091c \u0906\u090f \u0925\u0947\u0964"
+    },
+    "prev_hash": "daaaee96fa98ec260162b718f5ba86ce0a7cc181cc859188812b7736fedb369c",
+    "current_hash": "6561c16031886297697ff6f769b9a39b8a0a99aca51abbc0817e06f7e5a342bf"
+  },
+  {
+    "index": 61,
+    "timestamp": "2026-09-07T21:46:47.798719Z",
+    "event_type": "STOCK_TRANSFER_EXECUTED",
+    "approved_by": "Dr. Test CMO",
+    "details": {
+      "recommendation_id": "REC-23BA5EB0",
+      "challan_id": "CHALLAN-UP-20260908-REC-23BA5EB0",
+      "donor_id": "CHC-UNN-01",
+      "donor_name": "CHC Nawabganj",
+      "recipient_id": "CHC-LKO-06",
+      "recipient_name": "CHC Sarojini Nagar",
+      "medicine_id": "MED-003",
+      "medicine_name": "Dexamethasone Sodium Phosphate Injection (4mg/ml)",
+      "units_transferred": 20,
+      "batch_number": "BAT-578-26",
+      "distance_km": 25.7,
+      "officer_comments": "Unit test verified dispatch",
+      "idempotency_key": null
+    },
+    "prev_hash": "6561c16031886297697ff6f769b9a39b8a0a99aca51abbc0817e06f7e5a342bf",
+    "current_hash": "3cdcae33e8e4b9cb86fa4121cfed27a6b42e6a47ae032da5150e4533d76c0517"
+  },
+  {
+    "index": 62,
+    "timestamp": "2026-09-07T21:46:48.883106Z",
+    "event_type": "FRONTLINE_VOICE_REPORT",
+    "approved_by": "STAFF@PHC-LKO-01",
+    "details": {
+      "facility_id": "PHC-LKO-01",
+      "facility_name": "PHC Kakori",
+      "medicine_id": "MED-001",
+      "reported_stock": 15,
+      "dispensed_yesterday": 40,
+      "detected_language": "Hindi",
+      "raw_text": "PHC \u0915\u093e\u0915\u094b\u0930\u0940 \u0938\u0947 \u092c\u094b\u0932 \u0930\u0939\u0947 \u0939\u0948\u0902, \u0938\u093e\u0902\u0938 \u0915\u0940 \u0926\u0935\u093e\u0908 \u0915\u0947 \u0938\u093f\u0930\u094d\u092b 15 \u0930\u0947\u0938\u094d\u092a\u094d\u092f\u0942\u0932 \u092c\u091a\u0947 \u0939\u0948\u0902, \u0915\u0932 40 \u092e\u0930\u0940\u091c \u0906\u090f \u0925\u0947\u0964"
+    },
+    "prev_hash": "3cdcae33e8e4b9cb86fa4121cfed27a6b42e6a47ae032da5150e4533d76c0517",
+    "current_hash": "84a8072eeea14cfe6e3cbaea7c8719735d8bd069d21c52f51aec94261bfcf2c5"
+  },
+  {
+    "index": 63,
+    "timestamp": "2026-09-07T21:48:20.517702Z",
+    "event_type": "STOCK_TRANSFER_EXECUTED",
+    "approved_by": "Dr. Test CMO",
+    "details": {
+      "recommendation_id": "REC-7411F6D7",
+      "challan_id": "CHALLAN-UP-20260908-REC-7411F6D7",
+      "donor_id": "PHC-UNN-02",
+      "donor_name": "PHC Hasanganj",
+      "recipient_id": "PHC-LKO-01",
+      "recipient_name": "PHC Kakori",
+      "medicine_id": "MED-003",
+      "medicine_name": "Dexamethasone Sodium Phosphate Injection (4mg/ml)",
+      "units_transferred": 10,
+      "batch_number": "BAT-200-26",
+      "distance_km": 29.3,
+      "officer_comments": "Unit test verified dispatch",
+      "idempotency_key": null
+    },
+    "prev_hash": "84a8072eeea14cfe6e3cbaea7c8719735d8bd069d21c52f51aec94261bfcf2c5",
+    "current_hash": "7f9fe5c700dd15109f44a0ff05f1f4f86b30726def2e190761e38f0ed9574b9f"
+  },
+  {
+    "index": 64,
+    "timestamp": "2026-09-07T21:48:21.893069Z",
+    "event_type": "FRONTLINE_VOICE_REPORT",
+    "approved_by": "STAFF@PHC-LKO-01",
+    "details": {
+      "facility_id": "PHC-LKO-01",
+      "facility_name": "PHC Kakori",
+      "medicine_id": "MED-001",
+      "reported_stock": 15,
+      "dispensed_yesterday": 40,
+      "detected_language": "Hindi",
+      "raw_text": "PHC \u0915\u093e\u0915\u094b\u0930\u0940 \u0938\u0947 \u092c\u094b\u0932 \u0930\u0939\u0947 \u0939\u0948\u0902, \u0938\u093e\u0902\u0938 \u0915\u0940 \u0926\u0935\u093e\u0908 \u0915\u0947 \u0938\u093f\u0930\u094d\u092b 15 \u0930\u0947\u0938\u094d\u092a\u094d\u092f\u0942\u0932 \u092c\u091a\u0947 \u0939\u0948\u0902, \u0915\u0932 40 \u092e\u0930\u0940\u091c \u0906\u090f \u0925\u0947\u0964"
+    },
+    "prev_hash": "7f9fe5c700dd15109f44a0ff05f1f4f86b30726def2e190761e38f0ed9574b9f",
+    "current_hash": "b96550f1e4a879c3f05e3954bd3a30c01040ff25086a07701a638a1a78542d44"
   }
 ]

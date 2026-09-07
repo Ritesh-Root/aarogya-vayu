@@ -73,10 +73,15 @@ class TransferRecommendation(BaseModel):
     recipient_initial_coverage_days: float
     recipient_new_coverage_days: float
     donor_remaining_coverage_days: float
+    donor_min_reserve_units: int = 0
     expiry_waste_prevented: bool
     rationale_en: str
     rationale_hi: str
     status: str = "PENDING_APPROVAL"
+    challan_id: Optional[str] = None
+    cryptographic_hash: Optional[str] = None
+    authorized_by: Optional[str] = None
+    approved_at: Optional[str] = None
 
 class VoiceIntakeRequest(BaseModel):
     facility_id: Optional[str] = None
@@ -89,11 +94,17 @@ class VoiceIntakeResponse(BaseModel):
     facility_name: str
     medicine_id: str
     medicine_name: str
+    medicine_code: str = ""
+    standard_name: str = ""
+    dosage_form: str = ""
+    strength: str = ""
+    edl_category: str = ""
     reported_stock: int
     dispensed_yesterday: Optional[int]
     confidence_score: float
     detected_language: str
     quality_checks_passed: bool
+    requires_confirmation: bool = False
     anomaly_flag: Optional[str] = None
     raw_transcript: str
     action_taken: str
@@ -102,3 +113,4 @@ class ApprovalRequest(BaseModel):
     recommendation_id: str
     officer_name: str = "Dr. S. K. Saxena (Chief Medical Officer, District Health Society)"
     comments: Optional[str] = None
+    idempotency_key: Optional[str] = None

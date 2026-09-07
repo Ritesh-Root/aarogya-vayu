@@ -4,12 +4,12 @@
     "facility_name": "PHC Kakori",
     "medicine_id": "MED-001",
     "medicine_name": "Salbutamol Respirator Solution (Respules 2.5mg)",
-    "current_stock": 175,
+    "current_stock": 15,
     "daily_consumption_base": 20,
     "batch_number": "BAT-859-26",
     "expiry_date": "2027-03-10",
     "days_to_expiry": 186,
-    "last_updated": "2026-09-05 22:56:08"
+    "last_updated": "2026-09-08 03:18:21"
   },
   {
     "facility_id": "PHC-LKO-01",
@@ -28,12 +28,12 @@
     "facility_name": "PHC Kakori",
     "medicine_id": "MED-003",
     "medicine_name": "Dexamethasone Sodium Phosphate Injection (4mg/ml)",
-    "current_stock": 41,
+    "current_stock": 121,
     "daily_consumption_base": 15,
     "batch_number": "BAT-189-26",
     "expiry_date": "2027-07-21",
     "days_to_expiry": 319,
-    "last_updated": "2026-09-04 17:34:25"
+    "last_updated": "2026-09-08 03:18:20"
   },
   {
     "facility_id": "PHC-LKO-01",
@@ -388,12 +388,12 @@
     "facility_name": "CHC Sarojini Nagar",
     "medicine_id": "MED-003",
     "medicine_name": "Dexamethasone Sodium Phosphate Injection (4mg/ml)",
-    "current_stock": 300,
+    "current_stock": 320,
     "daily_consumption_base": 35,
     "batch_number": "BAT-911-26",
     "expiry_date": "2027-04-13",
     "days_to_expiry": 220,
-    "last_updated": "2026-09-05 22:56:04"
+    "last_updated": "2026-09-08 03:16:47"
   },
   {
     "facility_id": "CHC-LKO-06",
@@ -748,12 +748,12 @@
     "facility_name": "CHC Nawabganj",
     "medicine_id": "MED-003",
     "medicine_name": "Dexamethasone Sodium Phosphate Injection (4mg/ml)",
-    "current_stock": 1036,
+    "current_stock": 1016,
     "daily_consumption_base": 35,
     "batch_number": "BAT-578-26",
     "expiry_date": "2026-11-12",
     "days_to_expiry": 68,
-    "last_updated": "2026-09-04 13:34:25"
+    "last_updated": "2026-09-08 03:16:47"
   },
   {
     "facility_id": "CHC-UNN-01",
@@ -820,12 +820,12 @@
     "facility_name": "PHC Hasanganj",
     "medicine_id": "MED-003",
     "medicine_name": "Dexamethasone Sodium Phosphate Injection (4mg/ml)",
-    "current_stock": 542,
+    "current_stock": 462,
     "daily_consumption_base": 15,
     "batch_number": "BAT-200-26",
     "expiry_date": "2026-11-16",
     "days_to_expiry": 72,
-    "last_updated": "2026-09-05 02:34:25"
+    "last_updated": "2026-09-08 03:18:20"
   },
   {
     "facility_id": "PHC-UNN-02",

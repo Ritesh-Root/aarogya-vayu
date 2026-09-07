@@ -5,6 +5,51 @@ import httpx
 from typing import Dict, Any, Optional, Tuple
 from app.models import VoiceIntakeRequest, VoiceIntakeResponse
 
+MEDICINE_CLINICAL_SPECS = {
+    "MED-001": {
+        "medicine_code": "MED-001",
+        "standard_name": "Salbutamol Respirator Solution (Respules 2.5mg)",
+        "dosage_form": "Respules / Nebulizer Solution",
+        "strength": "2.5mg / 2.5ml",
+        "edl_category": "Schedule H - Essential Respiratory (EDL-UP-2026: LKO-COR-01)"
+    },
+    "MED-002": {
+        "medicine_code": "MED-002",
+        "standard_name": "Oral Rehydration Salts (ORS Sachets, WHO Formula)",
+        "dosage_form": "Oral Powder Sachets",
+        "strength": "20.5g WHO Low-Osmolarity Formula",
+        "edl_category": "Essential Electrolyte & Fluid Replacement (EDL-UP-2026: LKO-COR-02)"
+    },
+    "MED-003": {
+        "medicine_code": "MED-003",
+        "standard_name": "Dexamethasone Sodium Phosphate Injection (4mg/ml)",
+        "dosage_form": "Parenteral Injection / Ampoule",
+        "strength": "4mg / 1ml",
+        "edl_category": "Critical Care Corticosteroid (EDL-UP-2026: LKO-COR-03)"
+    },
+    "MED-004": {
+        "medicine_code": "MED-004",
+        "standard_name": "Amoxicillin + Clavulanate 625mg Tablets",
+        "dosage_form": "Film-Coated Tablet Strip",
+        "strength": "500mg Amox + 125mg Clav",
+        "edl_category": "Broad-Spectrum Antibacterial (EDL-UP-2026: LKO-COR-04)"
+    },
+    "MED-005": {
+        "medicine_code": "MED-005",
+        "standard_name": "Paracetamol IV Infusion (1000mg/100ml bottle)",
+        "dosage_form": "Intravenous Infusion Bottle",
+        "strength": "1000mg / 100ml",
+        "edl_category": "Emergency Antipyretic / Analgesic (EDL-UP-2026: LKO-COR-05)"
+    },
+    "MED-006": {
+        "medicine_code": "MED-006",
+        "standard_name": "Cetirizine 10mg Tablets",
+        "dosage_form": "Film-Coated Tablet Strip",
+        "strength": "10mg",
+        "edl_category": "Essential Antihistaminic (EDL-UP-2026: LKO-COR-06)"
+    }
+}
+
 class VoiceIntakeService:
     def __init__(self, facilities: Dict[str, dict], medicines: Dict[str, dict]):
         self.facilities = facilities
@@ -113,8 +158,10 @@ class VoiceIntakeService:
             # content is JSON string per response_format
             return json.loads(content)
 
+
     async def _call_gemini(self, text: str, hint_facility_id: Optional[str]) -> Optional[Dict[str, Any]]:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={self.gemini_api_key}"
+        model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.gemini_api_key}"
         
         system_prompt = (
             "You are an expert AI clinical data parser for rural Indian Primary Health Centres (PHCs). "
@@ -154,7 +201,15 @@ class VoiceIntakeService:
         confidence = float(extracted.get("confidence", 0.92))
         fac_meta = self.facilities.get(fac_id, {"name": f"Facility {fac_id}"})
         med_meta = self.medicines.get(med_id, {"name": f"Medicine {med_id}"})
-        # Reuse heuristic quality checks
+        specs = MEDICINE_CLINICAL_SPECS.get(med_id, {
+            "medicine_code": med_id,
+            "standard_name": med_meta.get("name", med_id),
+            "dosage_form": "Standard Formulation",
+            "strength": "Standard",
+            "edl_category": "EDL-UP-2026 Essential Medicine"
+        })
+
+        # Quality checks and anomaly flags
         anomaly_flag = None
         quality_passed = True
         if reported < 0:
@@ -163,19 +218,28 @@ class VoiceIntakeService:
         elif reported > 5000:
             quality_passed = False
             anomaly_flag = "Implausibly high stock (>5,000 units) for a rural facility. Flagged for verification."
+
+        requires_confirm = (not quality_passed) or (confidence < 0.75)
+
         return VoiceIntakeResponse(
             facility_id=fac_id,
             facility_name=fac_meta["name"],
             medicine_id=med_id,
-            medicine_name=med_meta["name"],
+            medicine_name=specs["standard_name"],
+            medicine_code=specs["medicine_code"],
+            standard_name=specs["standard_name"],
+            dosage_form=specs["dosage_form"],
+            strength=specs["strength"],
+            edl_category=specs["edl_category"],
             reported_stock=reported,
             dispensed_yesterday=dispensed,
             confidence_score=confidence if quality_passed else 0.45,
             detected_language="Hindi" if lang_hint == "hi" else "English / Hinglish",
             quality_checks_passed=quality_passed,
+            requires_confirmation=requires_confirm,
             anomaly_flag=anomaly_flag,
             raw_transcript=raw_text,
-            action_taken=f"Updated facility inventory ledger to {reported} units. Risk engine recomputed." if quality_passed else "Held in audit queue for officer review.",
+            action_taken=f"Updated facility inventory ledger to {reported} units. Risk engine recomputed." if (quality_passed and not requires_confirm) else "Held in audit queue for MOIC verification."
         )
 
     def _transliterated_match(self, eng_word: str, text: str) -> bool:
@@ -221,15 +285,30 @@ class VoiceIntakeService:
         if not matched_fac_id:
             matched_fac_id = "PHC-LKO-01"
 
-        # Match Medicine
-        matched_med_id = "MED-001"  # default to Salbutamol for demo scenario
+        # Match Medicine with comprehensive dialect synonyms
+        matched_med_id = "MED-001"  # default fallback
         med_keywords = {
-            "MED-001": ["salbutamol", "inhaler", "respule", "साल्बुटामोल", "रेस्प्यूल", "अस्थमा", "dama"],
-            "MED-002": ["ors", "sachet", "electrolyte", "ओआरएस", "घोल", "डिहाइड्रेशन", "churan"],
-            "MED-003": ["dexamethasone", "dexa", "injection", "डेक्सामेथासोन", "इंजेक्शन", "सूजन"],
-            "MED-004": ["amoxicillin", "amoxy", "mox", "एमोक्सिसिलिन", "एंटीबायोटिक"],
-            "MED-005": ["paracetamol", "pcm", "fever", "पैरासिटामोल", "बुखार"],
-            "MED-006": ["cetirizine", "citrizen", "alerid", "सिट्रिजिन", "एलर्जी", "खांसी"]
+            "MED-001": [
+                "salbutamol", "inhaler", "respule", "साल्बुटामोल", "रेस्प्यूल", "अस्थमा", "dama", 
+                "दमा", "saans", "सांस", "सांस की दवाई", "साँस", "साँस की दवा", "asthalin", "अस्थलीन",
+                "nebulizer", "नेबुलाइजर"
+            ],
+            "MED-002": [
+                "ors", "sachet", "electrolyte", "ओआरएस", "घोल", "डिहाइड्रेशन", "churan", 
+                "दस्त", "dast", "electral", "इलेक्ट्रल", "jeevarakshak"
+            ],
+            "MED-003": [
+                "dexamethasone", "dexa", "injection", "डेक्सामेथासोन", "डेक्सा", "इंजेक्शन", "सूजन", "anaphylaxis"
+            ],
+            "MED-004": [
+                "amoxicillin", "amoxy", "mox", "एमोक्सिसिलिन", "एंटीबायोटिक", "clav", "clavam", "क्लेवाम"
+            ],
+            "MED-005": [
+                "paracetamol", "pcm", "fever", "पैरासिटामोल", "बुखार", "bukhar", "calpol", "डोल"
+            ],
+            "MED-006": [
+                "cetirizine", "citrizen", "alerid", "सिट्रिजिन", "एलर्जी", "खांसी", "khansi", "allergy"
+            ]
         }
 
         for mid, kw_list in med_keywords.items():
@@ -267,18 +346,32 @@ class VoiceIntakeService:
             anomaly_flag = "Implausibly high stock (>5,000 units) for a rural facility. Flagged for verification."
 
         fac_meta = self.facilities.get(matched_fac_id, {"name": "PHC Kakori"})
-        med_meta = self.medicines.get(matched_med_id, {"name": "Salbutamol Respirator Solution (Respules 2.5mg)"})
+        specs = MEDICINE_CLINICAL_SPECS.get(matched_med_id, {
+            "medicine_code": matched_med_id,
+            "standard_name": "Salbutamol Respirator Solution (Respules 2.5mg)",
+            "dosage_form": "Respules / Nebulizer Solution",
+            "strength": "2.5mg / 2.5ml",
+            "edl_category": "Schedule H - Essential Respiratory (EDL-UP-2026: LKO-COR-01)"
+        })
+
+        requires_confirm = (not quality_passed)
 
         return VoiceIntakeResponse(
             facility_id=matched_fac_id,
             facility_name=fac_meta["name"],
             medicine_id=matched_med_id,
-            medicine_name=med_meta["name"],
+            medicine_name=specs["standard_name"],
+            medicine_code=specs["medicine_code"],
+            standard_name=specs["standard_name"],
+            dosage_form=specs["dosage_form"],
+            strength=specs["strength"],
+            edl_category=specs["edl_category"],
             reported_stock=reported_stock,
             dispensed_yesterday=dispensed_yesterday,
             confidence_score=0.96 if quality_passed else 0.45,
             detected_language="Hindi" if lang == "hi" else "English / Hinglish",
             quality_checks_passed=quality_passed,
+            requires_confirmation=requires_confirm,
             anomaly_flag=anomaly_flag,
             raw_transcript=text,
             action_taken=f"Updated facility inventory ledger to {reported_stock} units. Risk engine recomputed." if quality_passed else "Held in audit queue for officer review."

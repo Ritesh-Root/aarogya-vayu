@@ -926,6 +926,32 @@ async function fetchAuditLog() {
   }
 }
 
+async function verifyAuditLedgerLive() {
+  const statusEl = document.getElementById('ledgerIntegrityStatus');
+  if (statusEl) {
+    statusEl.innerHTML = `<span class="text-amber-600 font-bold animate-pulse">Recalculating SHA-256 hashes across entire ledger chain...</span>`;
+  }
+  try {
+    const res = await fetch('/api/audit-log/verify');
+    const result = await res.json();
+    if (result.valid) {
+      if (statusEl) {
+        statusEl.innerHTML = `
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+          <span class="text-emerald-700 font-extrabold">Chain Certified (100% Intact) &bull; ${result.total_blocks} Blocks &bull; Head: <code class="font-mono text-emerald-900 bg-emerald-100 px-1 py-0.5 rounded">${result.head_hash ? result.head_hash.substring(0, 10) + '...' : 'Genesis'}</code></span>
+        `;
+      }
+    } else {
+      if (statusEl) {
+        statusEl.innerHTML = `<span class="text-red-600 font-bold">⚠️ Tampering Detected: ${result.error}</span>`;
+      }
+    }
+    if (window.lucide) lucide.createIcons();
+  } catch (err) {
+    console.error("verifyAuditLedgerLive error:", err);
+  }
+}
+
 function showWaveformBriefly(ms = 2400) {
   const wave = document.getElementById('voiceWaveform');
   if (wave) {
@@ -971,7 +997,7 @@ async function submitVoiceIntake() {
   const facId = facSelect ? (facSelect.value || null) : null;
   const btn = document.getElementById('btnSubmitVoice');
   btn.disabled = true;
-  btn.innerHTML = `<span>Processing Audio with Gemini 3.8 Flash...</span>`;
+  btn.innerHTML = `<span>Processing Audio with Gemini 2.5 Flash / EDL Grounding...</span>`;
 
   try {
     const res = await fetch('/api/voice-intake', {
@@ -1012,6 +1038,10 @@ async function submitVoiceIntake() {
     if (stockEl) stockEl.textContent = `${result.reported_stock} units`;
     const dispEl = document.getElementById('voiceDispQty');
     if (dispEl) dispEl.textContent = result.dispensed_yesterday !== null ? `${result.dispensed_yesterday} units` : 'N/A';
+    const edlEl = document.getElementById('voiceEdlCode');
+    if (edlEl) edlEl.textContent = `${result.medicine_code || result.medicine_id} (${result.edl_category ? 'Verified Grounding' : 'EDL-UP-2026'})`;
+    const formEl = document.getElementById('voiceFormStrength');
+    if (formEl) formEl.textContent = `${result.dosage_form || 'Standard Form'} • ${result.strength || ''}`;
     const actionEl = document.getElementById('voiceActionText');
     if (actionEl) actionEl.textContent = result.anomaly_flag || result.action_taken;
 
@@ -1341,7 +1371,7 @@ async function submitCmoQuery() {
 
   const box = document.getElementById('cmoResponseBox');
   box.classList.remove('hidden');
-  document.getElementById('cmoAnswerText').innerHTML = '<span class="text-indigo-400 animate-pulse">// Strategic Insight Agent (Gemini 3.8 Flash) evaluating scenario...</span>';
+  document.getElementById('cmoAnswerText').innerHTML = '<span class="text-indigo-400 animate-pulse">// Strategic Insight Agent (Gemini 2.5 Flash) evaluating scenario...</span>';
   document.getElementById('cmoMetaBox').textContent = '';
 
   try {

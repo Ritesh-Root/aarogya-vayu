@@ -18,6 +18,33 @@ class RedistributionOptimizer:
         self.facilities = facilities
         self.max_distance_km = max_distance_km
 
+    def validate_transfer_invariants(
+        self,
+        rec: TransferRecommendation,
+        donor_current_stock: int
+    ) -> Tuple[bool, str]:
+        """
+        Independent invariant validator to guarantee mathematical feasibility
+        before emitting or approving any transfer recommendation.
+        """
+        if rec.units_to_transfer <= 0:
+            return False, f"Non-positive transfer units: {rec.units_to_transfer}"
+
+        if rec.distance_km > self.max_distance_km:
+            return False, f"Transfer distance ({rec.distance_km} km) exceeds maximum limit ({self.max_distance_km} km)"
+
+        if donor_current_stock < rec.units_to_transfer:
+            return False, f"Donor current stock ({donor_current_stock}) is less than transfer units ({rec.units_to_transfer})"
+
+        rem_donor_stock = donor_current_stock - rec.units_to_transfer
+        if rem_donor_stock < rec.donor_min_reserve_units:
+            return False, f"Donor remaining stock ({rem_donor_stock}) violates clinical reserve floor ({rec.donor_min_reserve_units})"
+
+        if rec.batch_expiry_days < 30:
+            return False, f"Batch expiry too close ({rec.batch_expiry_days} days); clinical safety threshold is 30 days"
+
+        return True, "Valid"
+
     def optimize(
         self,
         risk_assessments: List[StockoutRiskAssessment],
@@ -26,6 +53,12 @@ class RedistributionOptimizer:
         """
         Solves the constrained redistribution problem to match surplus facilities
         with deficit/stockout-threatened facilities.
+
+        Objective:
+        1. Maximize coverage of critical deficits (PHCs with < 4-8 days).
+        2. Prioritize near-expiry batches (30-90 days) to prevent pharmaceutical waste.
+        3. Minimize transit distance within maximum service radius (<= 35 km).
+        4. Guarantee donor facility retains >= 14 days of surge-adjusted safety stock.
         """
         # Index inventory by (facility_id, medicine_id)
         inv_map = {(item["facility_id"], item["medicine_id"]): item for item in raw_inventory}
@@ -38,12 +71,16 @@ class RedistributionOptimizer:
         recommendations: List[TransferRecommendation] = []
 
         for med_id, assessments in med_assessments.items():
-            # Identify Deficit (Critical & Warning) and Potential Donors (Surplus & Healthy with > 16 days)
+            # Identify Deficit (Critical & Warning) and Potential Donors (Surplus & Healthy)
             recipients = [a for a in assessments if a.status in ["CRITICAL", "WARNING"]]
             recipients.sort(key=lambda x: x.days_of_coverage)  # most critical first
 
-            donors = [a for a in assessments if a.days_of_coverage >= 18.0]
-            # Prioritize donors with stock expiring sooner (30-90 days) to prevent expiration waste
+            # Eligible donors must have >= 16 days of surge-adjusted cover and >= 30 days before expiry
+            donors = [
+                a for a in assessments 
+                if a.days_of_coverage >= 16.0 and a.days_to_expiry >= 30
+            ]
+            # Prioritize donors with stock expiring sooner (30-90 days) to eliminate expiration waste
             donors.sort(key=lambda x: (0 if x.expiry_risk else 1, x.days_to_expiry, -x.days_of_coverage))
 
             for recipient in recipients:
@@ -51,7 +88,7 @@ class RedistributionOptimizer:
                 if not rec_fac:
                     continue
 
-                # How many units needed to bring recipient up to comfortable 14 days cover?
+                # Target: bring recipient up to resilient 14 days cover
                 target_coverage_days = 14.0
                 units_needed = max(10, int((target_coverage_days - recipient.days_of_coverage) * recipient.projected_daily_rate))
 
@@ -71,7 +108,7 @@ class RedistributionOptimizer:
                     if not donor_inv:
                         continue
 
-                    # Donor must retain at least 14 days of safety stock
+                    # Donor must retain at least 14 days of surge-adjusted safety stock
                     min_donor_stock = int(14.0 * donor.projected_daily_rate)
                     available_to_give = donor.current_stock - min_donor_stock
 
@@ -80,10 +117,10 @@ class RedistributionOptimizer:
 
                     # Calculate transfer amount
                     transfer_qty = min(units_needed, available_to_give)
-                    # Round to nearest 10 units
+                    # Round down to nearest 10 units for realistic packaging
                     transfer_qty = max(10, (transfer_qty // 10) * 10)
 
-                    if transfer_qty <= 0:
+                    if transfer_qty <= 0 or (donor.current_stock - transfer_qty) < min_donor_stock:
                         continue
 
                     # Update projected coverages
@@ -91,15 +128,15 @@ class RedistributionOptimizer:
                     rec_new_days = round(rec_initial_days + (transfer_qty / recipient.projected_daily_rate), 1)
                     donor_rem_days = round((donor.current_stock - transfer_qty) / donor.projected_daily_rate, 1)
 
-                    expiry_waste_saved = donor.expiry_risk or donor.days_to_expiry <= 80
+                    expiry_waste_saved = donor.expiry_risk or donor.days_to_expiry <= 90
 
                     # Rationale generation
                     med_name = recipient.medicine_name.split("(")[0].strip()
                     rat_en = (
                         f"Transfer {transfer_qty} units of {med_name} from {donor.facility_name} ({dist} km away). "
                         f"Prevents impending stockout at {recipient.facility_name} (coverage boosts from {rec_initial_days}d to {rec_new_days}d). "
-                        f"Donor retains a resilient {donor_rem_days} days of safety stock. "
-                        + ("Crucially prevents batch expiration waste (expires in " + str(donor.days_to_expiry) + " days)." if expiry_waste_saved else "")
+                        f"Donor retains a resilient {donor_rem_days} days of surge-adjusted safety stock. "
+                        + (f"Crucially prevents batch expiration waste (expires in {donor.days_to_expiry} days)." if expiry_waste_saved else "")
                     )
 
                     rat_hi = (
@@ -124,15 +161,23 @@ class RedistributionOptimizer:
                         recipient_initial_coverage_days=rec_initial_days,
                         recipient_new_coverage_days=rec_new_days,
                         donor_remaining_coverage_days=donor_rem_days,
+                        donor_min_reserve_units=min_donor_stock,
                         expiry_waste_prevented=expiry_waste_saved,
                         rationale_en=rat_en,
                         rationale_hi=rat_hi,
                         status="PENDING_APPROVAL"
                     )
+
+                    # Invariant verification pass
+                    is_valid, reason = self.validate_transfer_invariants(rec, donor.current_stock)
+                    if not is_valid:
+                        continue
+
                     recommendations.append(rec)
 
-                    # Deduct from donor available stock for next iterations
+                    # Deduct from donor available stock for next iterations and recalculate coverage
                     donor.current_stock -= transfer_qty
+                    donor.days_of_coverage = round(donor.current_stock / donor.projected_daily_rate, 1)
                     units_needed -= transfer_qty
                     if units_needed <= 0:
                         break
