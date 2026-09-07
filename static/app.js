@@ -1968,6 +1968,26 @@ async function loadClinicDesk(facilityId) {
       badgeEl.textContent = `${data.facility.type} • ${data.facility.district} District • Pop: ${(data.facility.population_served || 20000).toLocaleString()}`;
     }
 
+    // Fetch and display safe system capability indicator
+    if (!window._systemCapsLoaded) {
+      fetch('/api/system/capabilities')
+        .then(r => r.json())
+        .then(caps => {
+          window._systemCapsLoaded = true;
+          const capBadge = document.getElementById('systemCapabilityBadge');
+          if (capBadge) {
+            const isDurable = caps.durable_storage;
+            const storageLabel = caps.storage_backend === 'firestore' ? 'Cloud Firestore (Durable)' : 'Demo Mode (Ephemeral)';
+            capBadge.innerHTML = `Storage: <strong>${storageLabel}</strong> &bull; Audit: <strong>Hash-Linked SHA-256</strong>`;
+            if (!isDurable) {
+              capBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300';
+            } else {
+              capBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300';
+            }
+          }
+        }).catch(() => {});
+    }
+
     // Render Action Priorities
     renderClinicActionItems(data.action_items || []);
 

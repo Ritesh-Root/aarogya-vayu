@@ -526,3 +526,127 @@ def test_concurrent_competing_stock_requests():
     final_item = next(i for i in inv_final if i["facility_id"] == facility_id and i["medicine_id"] == med_id)
     assert final_item["on_hand"] == 0
     assert final_item["available"] == 0
+
+
+def test_reconciliation_cancel_reservations_updates_consignments_and_batch_atomically():
+    """
+    Validates that CANCEL_RESERVATIONS reconciliation:
+    1. Updates affected TransferConsignment status to 'CANCELLED' with audit hash and condition notes.
+    2. Decrements batch 'reserved' quantity by exactly the cancelled units.
+    3. Eliminates reconciliation deficit and unfreezes batch.
+    4. Persists both mutations atomically together in storage.
+    """
+    donor_fac = "CHC-LKO-02"
+    recipient_fac = "PHC-LKO-01"
+    med_id = "MED-004"
+    batch_num = "BAT-AMOX-CANCEL-TEST"
+
+    # Seed donor batch with 30 on hand, 30 reserved (available 0)
+    inv, cons, idem, _ = storage.load_all()
+    inv.append({
+        "facility_id": donor_fac,
+        "facility_name": "CHC Malihabad",
+        "medicine_id": med_id,
+        "medicine_name": "Amoxicillin",
+        "batch_number": batch_num,
+        "expiry_date": "2027-12-31",
+        "days_to_expiry": 450,
+        "daily_consumption_base": 10.0,
+        "on_hand": 30,
+        "reserved": 30,
+        "quarantined": 0,
+        "available": 0,
+        "current_stock": 30,
+        "pack_size": 10,
+        "unit": "Strips",
+        "version": 1,
+        "is_frozen": False,
+        "last_updated": "2026-09-08 00:00:00"
+    })
+
+    # Seed an approved consignment for this batch reserving 30 units
+    cid = f"CONS-CANCEL-TEST-{uuid.uuid4().hex[:6]}"
+    cons[cid] = {
+        "id": cid,
+        "challan_id": f"CHAL-{uuid.uuid4().hex[:6]}",
+        "donor_facility_id": donor_fac,
+        "donor_facility_name": "CHC Malihabad",
+        "recipient_facility_id": recipient_fac,
+        "recipient_facility_name": "PHC Kakori",
+        "medicine_id": med_id,
+        "medicine_name": "Amoxicillin",
+        "batch_number": batch_num,
+        "expiry_date": "2027-12-31",
+        "days_to_expiry": 450,
+        "pack_size": 10,
+        "distance_km": 14.2,
+        "units_requested": 30,
+        "units_dispatched": 0,
+        "units_accepted": 0,
+        "units_quarantined": 0,
+        "units_missing": 0,
+        "status": "APPROVED_RESERVED",
+        "authorized_by": "Dr. S. K. Saxena (CMO)",
+        "approved_at": "2026-09-08 00:00:00",
+        "cryptographic_hash": "dummy_initial_hash"
+    }
+    storage.commit_transaction(inv, cons, idem)
+
+    # Pharmacist finds only 10 units on shelf (20 units deficit against 30 reserved!)
+    count_res = client.post(f"/api/clinic/{donor_fac}/stock-action", json={
+        "facility_id": donor_fac,
+        "medicine_id": med_id,
+        "batch_number": batch_num,
+        "action_type": "PHYSICAL_COUNT",
+        "quantity": 10,
+        "reason": "Physical count revealed missing stock against pending consignment"
+    })
+    assert count_res.status_code == 200
+    cs_data = count_res.json()
+    assert cs_data["reconciliation_exception"] is True
+    assert cs_data["reconciliation_deficit"] == 20
+
+    # MOIC resolves by cancelling the consignment to release the reservation
+    resolve_res = client.post(f"/api/clinic/{donor_fac}/resolve-reconciliation", json={
+        "facility_id": donor_fac,
+        "medicine_id": med_id,
+        "batch_number": batch_num,
+        "resolution_type": "CANCEL_RESERVATIONS",
+        "cancelled_consignment_ids": [cid],
+        "supervisor_name": "Dr. S. K. Saxena (MOIC)",
+        "supervisor_role": "MOIC",
+        "resolution_notes": "Cancelled pending transfer due to confirmed physical shelf loss"
+    })
+    assert resolve_res.status_code == 200
+    res_data = resolve_res.json()
+    assert res_data["success"] is True
+    assert res_data["is_frozen"] is False
+    assert res_data["new_reserved"] == 0
+    assert res_data["new_on_hand"] == 10
+    assert res_data["new_available"] == 10
+
+    # Verify both inventory and consignment updated together in durable storage
+    inv_post, cons_post, _, _ = storage.load_all()
+    updated_item = next(i for i in inv_post if i["facility_id"] == donor_fac and i["medicine_id"] == med_id and i.get("batch_number") == batch_num)
+    assert updated_item["is_frozen"] is False
+    assert updated_item["reserved"] == 0
+    assert updated_item["reconciliation_deficit"] == 0
+    assert updated_item["available"] == 10
+
+    cancelled_cons = cons_post[cid]
+    assert cancelled_cons["status"] == "CANCELLED"
+    assert "Cancelled by Dr. S. K. Saxena" in cancelled_cons["condition_notes"]
+    assert cancelled_cons["cryptographic_hash"] is not None
+
+
+def test_system_capabilities_endpoint():
+    """Verify safe capability indicator returns transparent runtime metadata without credentials."""
+    res = client.get("/api/system/capabilities")
+    assert res.status_code == 200
+    caps = res.json()
+    assert "storage_backend" in caps
+    assert caps["auth_mode"] == "demo_role_simulation"
+    assert "durable_storage" in caps
+    assert "append-only" in caps["audit_integrity"]
+    assert "concurrency_engine" in caps
+

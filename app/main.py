@@ -114,6 +114,28 @@ async def get_facilities():
 async def get_medicines():
     return medicines_data
 
+@app.get("/api/system/capabilities")
+async def get_system_capabilities():
+    """
+    Exposes safe runtime capability metadata to clients and auditors:
+    - storage_backend: 'demo' (local JSON) or 'firestore' (GCP Cloud Firestore)
+    - auth_mode: 'demo_role_simulation' (header/client role simulation)
+    - durable_storage: True if cloud/distributed persistent storage is configured, False for ephemeral serverless /tmp
+    - audit_integrity: append-only with hash-linked SHA-256 tamper-evident verification
+    - concurrency_engine: describes isolation boundaries
+    """
+    is_firestore = (storage.backend == "firestore")
+    return {
+        "storage_backend": storage.backend,
+        "auth_mode": "demo_role_simulation",
+        "durable_storage": is_firestore,
+        "ephemeral_warning": not is_firestore,
+        "audit_integrity": "append-only through application operations with hash-linked SHA-256 tamper-evident verification",
+        "concurrency_engine": "google.cloud.firestore.transactional (cross-instance)" if is_firestore else "process-level threading.RLock (single-instance isolated)",
+        "version": "0.1.0",
+        "environment": "production" if os.environ.get("VERCEL") else "development"
+    }
+
 @app.get("/api/environmental")
 async def get_environmental():
     multipliers = surge_engine.calculate_surge_multipliers(current_env)
