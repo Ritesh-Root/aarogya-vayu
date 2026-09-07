@@ -1527,6 +1527,238 @@
     </div>
   </div>
 
+  <!-- ============================================================== -->
+  <!-- 4. RESOLVE RECONCILIATION EXCEPTION & OVER-COMMITMENT MODAL -->
+  <!-- ============================================================== -->
+  <div id="resolveReconciliationModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-clay-card rounded-[2.5rem] max-w-2xl w-full p-6 sm:p-8 space-y-5 shadow-2xl border border-white max-h-[92vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-center justify-between pb-3 border-b border-clay-salmon/20">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center">
+            <i data-lucide="shield-alert" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-black text-clay-dark">Resolve Reconciliation Exception</h3>
+            <p class="text-xs text-clay-muted font-medium">Supervisor Audit & Over-Commitment Resolution (MOIC Authority)</p>
+          </div>
+        </div>
+        <button onclick="closeResolveReconciliationModal()" class="w-8 h-8 rounded-full bg-clay-inner hover:bg-clay-salmon/20 flex items-center justify-center text-clay-muted hover:text-clay-dark transition cursor-pointer">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Batch Context & Deficit Warning -->
+      <div class="bg-red-50 rounded-2xl p-4 border border-red-200 text-xs space-y-2">
+        <div class="flex justify-between items-center font-extrabold text-red-900">
+          <span id="reconModalMedName" class="text-sm">Medicine Name</span>
+          <span id="reconModalDeficitBadge" class="px-2.5 py-1 rounded-full text-xs font-black bg-red-600 text-white font-mono">Deficit: 20 units</span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center pt-1 font-mono">
+          <div class="bg-white/80 rounded-xl p-2 border border-red-100">
+            <span class="text-[9px] uppercase font-bold text-slate-500 block">Physical Shelf</span>
+            <span id="reconModalOnHand" class="text-xs font-black text-slate-800">100</span>
+          </div>
+          <div class="bg-white/80 rounded-xl p-2 border border-red-100">
+            <span class="text-[9px] uppercase font-bold text-amber-700 block">Active Reserved</span>
+            <span id="reconModalReserved" class="text-xs font-black text-amber-800">110</span>
+          </div>
+          <div class="bg-white/80 rounded-xl p-2 border border-red-100">
+            <span class="text-[9px] uppercase font-bold text-red-700 block">Quarantined</span>
+            <span id="reconModalQuarantined" class="text-xs font-black text-red-800">10</span>
+          </div>
+          <div class="bg-white/80 rounded-xl p-2 border border-red-100">
+            <span class="text-[9px] uppercase font-bold text-slate-500 block">Net Balance</span>
+            <span id="reconModalNetBalance" class="text-xs font-black text-red-600">-20</span>
+          </div>
+        </div>
+        <p id="reconModalFreezeExplanation" class="text-[11px] text-red-800 leading-relaxed pt-1">
+          Active transfer reservations and quarantined stock exceed physical shelf count. All stock issues and outbound dispatches are frozen until this deficit is resolved.
+        </p>
+      </div>
+
+      <!-- Resolution Mode Tabs -->
+      <div>
+        <label class="block text-xs font-black uppercase tracking-wider text-clay-muted mb-2">Select Resolution Protocol</label>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <button type="button" onclick="setReconResolutionType('SUPERVISOR_RECOUNT')" id="btnReconRecount" class="p-3 rounded-xl border-2 border-clay-terracotta bg-clay-salmon/10 font-bold text-xs text-clay-dark text-left transition flex flex-col justify-between cursor-pointer">
+            <span class="font-black text-clay-terracotta">Supervisor Recount</span>
+            <span class="text-[10px] text-clay-muted mt-1">Recount physical shelf stock</span>
+          </button>
+          <button type="button" onclick="setReconResolutionType('CANCEL_RESERVATIONS')" id="btnReconCancel" class="p-3 rounded-xl border border-clay-salmon/20 bg-white font-bold text-xs text-clay-dark text-left transition flex flex-col justify-between hover:bg-clay-inner cursor-pointer">
+            <span class="font-black text-amber-800">Cancel Conflicting</span>
+            <span class="text-[10px] text-clay-muted mt-1">Release active reservations</span>
+          </button>
+          <button type="button" onclick="setReconResolutionType('ADJUST_QUARANTINE')" id="btnReconQuarantine" class="p-3 rounded-xl border border-clay-salmon/20 bg-white font-bold text-xs text-clay-dark text-left transition flex flex-col justify-between hover:bg-clay-inner cursor-pointer">
+            <span class="font-black text-slate-700">Adjust Quarantine</span>
+            <span class="text-[10px] text-clay-muted mt-1">Reclassify hold inventory</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Resolution Specific Inputs -->
+      <div id="reconRecountSection" class="space-y-1.5">
+        <label class="block text-xs font-black uppercase tracking-wider text-clay-muted">Verified Physical Shelf Count</label>
+        <div class="relative">
+          <input type="number" id="reconVerifiedCountInput" min="0" step="1" class="w-full bg-white border border-clay-salmon/30 rounded-xl py-2.5 px-4 text-lg font-black text-clay-dark focus:outline-none focus:ring-2 focus:ring-clay-terracotta" placeholder="Enter recount">
+          <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-clay-muted">units</span>
+        </div>
+        <p class="text-[11px] text-clay-muted">Must be at least <span id="reconMinRequiredCount" class="font-black text-clay-dark">120</span> units to fully unfreeze dispatches.</p>
+      </div>
+
+      <div id="reconCancelSection" class="hidden space-y-2">
+        <label class="block text-xs font-black uppercase tracking-wider text-clay-muted">Conflicting Transfer Consignments to Cancel</label>
+        <div id="reconConsignmentsList" class="space-y-2 max-h-40 overflow-y-auto custom-scrollbar p-1">
+          <!-- Dynamic checkboxes of active consignments -->
+        </div>
+      </div>
+
+      <div id="reconQuarantineSection" class="hidden space-y-1.5">
+        <label class="block text-xs font-black uppercase tracking-wider text-clay-muted">Adjusted Quarantined Units</label>
+        <div class="relative">
+          <input type="number" id="reconQuarantineInput" min="0" step="1" class="w-full bg-white border border-clay-salmon/30 rounded-xl py-2.5 px-4 text-lg font-black text-clay-dark focus:outline-none focus:ring-2 focus:ring-clay-terracotta" value="0">
+          <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-clay-muted">units</span>
+        </div>
+      </div>
+
+      <!-- Supervisor Authentication & Justification -->
+      <div class="space-y-3 pt-1">
+        <div>
+          <label class="block text-xs font-bold text-clay-muted mb-1">Supervisor Clinical Justification & Audit Notes</label>
+          <input type="text" id="reconNotesInput" placeholder="e.g. Recount performed with pharmacist; verified 130 intact ampoules in secondary cabinet" class="w-full bg-white border border-clay-salmon/25 rounded-xl py-2 px-3 text-xs text-clay-dark focus:outline-none focus:ring-2 focus:ring-clay-salmon font-medium">
+        </div>
+        <div class="flex items-center justify-between text-xs text-clay-muted bg-clay-inner rounded-xl p-2.5 border border-clay-salmon/20">
+          <span>Authorizing MOIC: <strong class="text-clay-dark">Dr. S. K. Saxena (MOIC, UP-MED-0941)</strong></span>
+          <span class="font-mono text-[10px] font-bold text-emerald-700">Role: MOIC Verified</span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end space-x-3 pt-3 border-t border-clay-salmon/20">
+        <button type="button" onclick="closeResolveReconciliationModal()" class="px-5 py-2.5 bg-clay-inner hover:bg-clay-bg text-clay-dark rounded-full text-xs font-bold transition cursor-pointer">
+          Cancel
+        </button>
+        <button type="button" id="btnSubmitRecon" onclick="submitResolveReconciliation()" class="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-full text-xs font-black shadow-clay-btn transition flex items-center space-x-1.5 cursor-pointer">
+          <i data-lucide="unlock" class="w-4 h-4"></i>
+          <span>Authorize & Unfreeze Batch</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- 5. STOCK MOVEMENT REGISTER (HANDOVER & DISCREPANCY LEDGER) MODAL -->
+  <!-- ============================================================== -->
+  <div id="stockMovementRegisterModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-[2.5rem] max-w-4xl w-full p-6 sm:p-8 space-y-5 shadow-2xl border border-clay-salmon/25 max-h-[94vh] overflow-y-auto custom-scrollbar flex flex-col">
+      
+      <!-- Modal Header -->
+      <div class="flex flex-wrap items-center justify-between pb-4 border-b border-clay-salmon/20 gap-3">
+        <div class="flex items-center space-x-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-clay-dark text-white flex items-center justify-center shadow-sm flex-shrink-0">
+            <i data-lucide="clipboard-list" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <h3 class="text-base sm:text-lg font-black text-clay-dark">Stock Movement & Handover Register</h3>
+              <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-300">
+                Audit Trail
+              </span>
+            </div>
+            <p id="registerComplianceNotice" class="text-[11px] text-clay-muted font-bold mt-0.5">
+              Operational Working Register • Pre-validation e-Aushadhi / Form 16 Working Format
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="window.print()" class="px-3.5 py-2 rounded-xl bg-clay-inner hover:bg-clay-bg text-clay-dark text-xs font-black border border-clay-salmon/30 shadow-sm transition flex items-center space-x-1.5 cursor-pointer" title="Print Register">
+            <i data-lucide="printer" class="w-4 h-4 text-clay-terracotta"></i>
+            <span>Print Register</span>
+          </button>
+          <button onclick="closeStockMovementRegister()" class="w-8 h-8 rounded-full bg-clay-inner hover:bg-clay-salmon/20 flex items-center justify-center text-clay-muted hover:text-clay-dark transition cursor-pointer">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Facility & Medicine Context Bar -->
+      <div class="bg-clay-inner rounded-2xl p-4 border border-clay-salmon/20 text-xs space-y-2">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <span class="text-clay-muted uppercase text-[10px] font-bold block">Facility & Medicine</span>
+            <span class="text-sm font-black text-clay-dark" id="registerFacilityName">PHC Kakori</span>
+            <span class="text-clay-muted mx-1.5">&bull;</span>
+            <span class="text-sm font-black text-clay-terracotta" id="registerMedicineName">Amoxicillin 500mg</span>
+          </div>
+          <div class="text-right">
+            <span class="text-clay-muted uppercase text-[10px] font-bold block">Batch Number</span>
+            <span class="font-mono text-sm font-black text-clay-dark" id="registerBatchNumber">BAT-DEFAULT</span>
+          </div>
+        </div>
+
+        <!-- Metric Balance Pills -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 pt-2 text-center font-mono">
+          <div class="bg-white rounded-xl p-2 border border-clay-salmon/15">
+            <span class="text-[9px] uppercase font-bold text-slate-500 block">Opening On-Hand</span>
+            <span id="registerOpeningOnHand" class="text-sm font-black text-slate-700">120</span>
+          </div>
+          <div class="bg-white rounded-xl p-2 border border-clay-salmon/15">
+            <span class="text-[9px] uppercase font-bold text-emerald-700 block">Opening Available</span>
+            <span id="registerOpeningAvailable" class="text-sm font-black text-emerald-800">120</span>
+          </div>
+          <div class="bg-white rounded-xl p-2 border border-clay-salmon/15">
+            <span class="text-[9px] uppercase font-bold text-slate-500 block">Closing On-Hand</span>
+            <span id="registerClosingOnHand" class="text-sm font-black text-slate-800">75</span>
+          </div>
+          <div class="bg-white rounded-xl p-2 border border-clay-salmon/15">
+            <span class="text-[9px] uppercase font-bold text-emerald-700 block">Closing Available</span>
+            <span id="registerClosingAvailable" class="text-sm font-black text-emerald-800">75</span>
+          </div>
+          <div class="bg-white rounded-xl p-2 border border-clay-salmon/15">
+            <span class="text-[9px] uppercase font-bold text-amber-700 block">Closing Reserved</span>
+            <span id="registerClosingReserved" class="text-sm font-black text-amber-800">0</span>
+          </div>
+          <div class="bg-white rounded-xl p-2 border border-clay-salmon/15">
+            <span class="text-[9px] uppercase font-bold text-red-700 block">Closing Quarantined</span>
+            <span id="registerClosingQuarantined" class="text-sm font-black text-red-800">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Movement Ledger Table -->
+      <div class="flex-1 overflow-x-auto border border-clay-salmon/20 rounded-2xl">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-clay-inner font-extrabold text-clay-dark border-b border-clay-salmon/20">
+            <tr>
+              <th class="p-2.5">#</th>
+              <th class="p-2.5">Time</th>
+              <th class="p-2.5">Movement Type</th>
+              <th class="p-2.5 text-right">Δ Physical</th>
+              <th class="p-2.5 text-right">Δ Available</th>
+              <th class="p-2.5 text-center">Resulting Balances</th>
+              <th class="p-2.5">Operator</th>
+              <th class="p-2.5">Reason / Ref</th>
+              <th class="p-2.5">Audit Hash</th>
+            </tr>
+          </thead>
+          <tbody id="registerMovementsTbody" class="divide-y divide-clay-salmon/15 bg-white font-medium">
+            <!-- Dynamic rows -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Footer Handover Signature -->
+      <div class="flex flex-wrap items-center justify-between text-xs text-clay-muted pt-2 border-t border-clay-salmon/20 gap-2">
+        <div class="flex items-center space-x-2">
+          <span>Generated: <strong id="registerGeneratedAt" class="font-mono text-clay-dark font-bold">2026-09-08 04:00 UTC</strong></span>
+        </div>
+        <div class="flex items-center space-x-4">
+          <span>Storekeeper Sign: _____________________</span>
+          <span>MOIC Sign: _____________________</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <script src="/static/app.js"></script>
   <script>lucide.createIcons();</script>
 </body>

@@ -16,7 +16,8 @@ from app.models import (
     VoiceIntakeRequest, VoiceIntakeResponse, ApprovalRequest,
     StockActionRequest, StockActionResult, DispatchConsignmentRequest,
     ReceiveConsignmentRequest, CancelConsignmentRequest, ClinicDeskResponse,
-    DailyActionItem
+    DailyActionItem, ResolveReconciliationRequest, ResolveReconciliationResult,
+    StockMovementRegister
 )
 from app.storage import StorageManager, StorageError
 from app.domain import InventoryDomainService
@@ -263,6 +264,30 @@ async def execute_clinic_stock_action(facility_id: str, req: StockActionRequest)
     result = domain_service.execute_stock_action(req)
     recompute_recommendations()
     return result
+
+@app.post("/api/clinic/{facility_id}/resolve-reconciliation")
+async def resolve_clinic_reconciliation(facility_id: str, req: ResolveReconciliationRequest):
+    """
+    MOIC / Supervisor Reconciliation Resolution:
+    - Resolves over-commitment exception when physical count is below active reservations.
+    - Options: SUPERVISOR_RECOUNT, CANCEL_RESERVATIONS, ADJUST_QUARANTINE.
+    - Unfreezes batch once on_hand >= reserved + quarantined.
+    """
+    if req.facility_id != facility_id:
+        raise HTTPException(status_code=400, detail="Mismatched facility ID between URL and request payload.")
+    result = domain_service.resolve_reconciliation_exception(req)
+    recompute_recommendations()
+    return result
+
+@app.get("/api/clinic/{facility_id}/stock-register")
+async def get_clinic_stock_register(facility_id: str, medicine_id: str, batch_number: Optional[str] = None):
+    """
+    Per-medicine, per-batch operational stock movement register.
+    Answers: 'Yesterday we had 120 units. Why are only 75 available today?'
+    Outputs printable/exportable handover register with complete chronological deltas.
+    Compliance note: Operational Working Register • Pre-validation e-Aushadhi / Form 16 Working Format.
+    """
+    return domain_service.get_stock_movement_register(facility_id, medicine_id, batch_number)
 
 @app.post("/api/transfer/dispatch")
 async def dispatch_consignment(req: DispatchConsignmentRequest):

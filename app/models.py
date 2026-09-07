@@ -38,6 +38,10 @@ class InventoryItem(BaseModel):
     reserved: int = Field(default=0, description="Usable units committed to approved outgoing transfers")
     quarantined: int = Field(default=0, description="Damaged, expired, or non-dispensable units held on site")
     available: int = Field(default=0, description="Usable stock: on_hand - reserved - quarantined")
+    raw_available: int = Field(default=0, description="Exact on_hand - reserved - quarantined (can be negative if over-committed)")
+    reconciliation_deficit: int = Field(default=0, description="Deficit amount if reserved + quarantined > on_hand")
+    freeze_reason: Optional[str] = Field(default=None, description="Detailed explanation if batch is frozen")
+    is_reconciliation_required: bool = Field(default=False, description="True if physical count is below commitments")
     current_stock: int = Field(default=0, description="Mirror of on_hand for backward compatibility")
     pack_size: int = Field(default=10, description="Standard packaging multiple")
     unit: str = Field(default="units", description="Dosage/dispensing unit")
@@ -52,7 +56,16 @@ class InventoryItem(BaseModel):
             self.current_stock = self.on_hand
         elif self.on_hand == 0 and self.current_stock > 0:
             self.on_hand = self.current_stock
-        self.available = max(0, self.on_hand - self.reserved - self.quarantined)
+        raw = self.on_hand - self.reserved - self.quarantined
+        self.raw_available = raw
+        if raw < 0:
+            self.reconciliation_deficit = abs(raw)
+            self.is_reconciliation_required = True
+            self.is_frozen = True
+        else:
+            self.reconciliation_deficit = 0
+            self.is_reconciliation_required = False
+        self.available = max(0, raw)
 
 class EnvironmentalReading(BaseModel):
     aqi: int = Field(default=385, description="Air Quality Index")
@@ -157,6 +170,9 @@ class StockActionResult(BaseModel):
     new_reserved: int
     new_quarantined: int
     new_available: int
+    raw_available: int = 0
+    reconciliation_deficit: int = 0
+    freeze_reason: Optional[str] = None
     version: int
     reconciliation_exception: bool = False
     message: str
@@ -188,6 +204,75 @@ class CancelConsignmentRequest(BaseModel):
     operator_role: str = "MOIC"
     reason: str
     idempotency_key: Optional[str] = None
+
+class ResolveReconciliationRequest(BaseModel):
+    facility_id: str
+    medicine_id: str
+    batch_number: str
+    resolution_type: str  # "SUPERVISOR_RECOUNT", "CANCEL_RESERVATIONS", "ADJUST_QUARANTINE"
+    verified_physical_count: Optional[int] = None
+    cancelled_consignment_ids: Optional[List[str]] = None
+    quarantine_adjustment: Optional[int] = None
+    supervisor_name: str = "Dr. S. K. Saxena (MOIC)"
+    supervisor_role: str = "MOIC"
+    resolution_notes: str
+    idempotency_key: Optional[str] = None
+
+class ResolveReconciliationResult(BaseModel):
+    success: bool
+    facility_id: str
+    medicine_id: str
+    batch_number: str
+    previous_deficit: int
+    new_on_hand: int
+    new_reserved: int
+    new_quarantined: int
+    new_available: int
+    raw_available: int
+    is_frozen: bool
+    resolution_type: str
+    message: str
+    audit_hash: Optional[str] = None
+    timestamp: str
+
+class StockMovementEntry(BaseModel):
+    index: int
+    timestamp: str
+    event_type: str
+    movement_type: str
+    delta_physical: int
+    delta_available: int
+    resulting_on_hand: int
+    resulting_available: int
+    resulting_reserved: int
+    resulting_quarantined: int
+    operator_name: str
+    operator_role: str
+    reason: str
+    linked_consignment_id: Optional[str] = None
+    audit_hash: str
+
+class StockMovementRegister(BaseModel):
+    facility_id: str
+    facility_name: str
+    medicine_id: str
+    medicine_name: str
+    batch_number: str
+    pack_size: int
+    opening_on_hand: int
+    opening_available: int
+    closing_on_hand: int
+    closing_available: int
+    closing_reserved: int
+    closing_quarantined: int
+    reconciliation_deficit: int = 0
+    is_frozen: bool = False
+    freeze_reason: Optional[str] = None
+    movements: List[StockMovementEntry]
+    generated_at: str
+    register_title: str = "Facility Stock Movement Register (Daily Handover & Discrepancy Ledger)"
+    compliance_notice: str = "Operational Working Register • Pre-validation e-Aushadhi / Form 16 Working Format"
+
 
 class DailyActionItem(BaseModel):
     id: str

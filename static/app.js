@@ -2037,6 +2037,8 @@ function renderClinicActionItems(items) {
       onclickStr = `openReceiptModal('${item.target_consignment_id}')`;
     } else if (item.action_type === 'OUTBOUND_DISPATCH_PENDING') {
       onclickStr = `openDispatchModal('${item.target_consignment_id}')`;
+    } else if (item.action_type === 'RECONCILIATION_REQUIRED') {
+      onclickStr = `openResolveReconciliationModal('${item.target_medicine_id || ''}', '${item.target_batch || ''}')`;
     } else {
       onclickStr = `openStockActionModal('${item.target_medicine_id || ''}', '${item.target_batch || ''}')`;
     }
@@ -2102,7 +2104,8 @@ function renderClinicInventory(inventory) {
     const quarantined = item.quarantined || 0;
     const available = item.available != null ? item.available : Math.max(0, onHand - reserved - quarantined);
     const inTransit = item.in_transit || 0;
-    const isFrozen = item.is_frozen || false;
+    const isFrozen = item.is_frozen || item.is_reconciliation_required || false;
+    const deficit = item.reconciliation_deficit || 0;
 
     const row = document.createElement('div');
     row.className = `p-4 rounded-2xl bg-white border ${isFrozen ? 'border-red-400 ring-2 ring-red-200' : 'border-clay-salmon/20'} shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 transition hover:border-clay-salmon/40`;
@@ -2112,7 +2115,8 @@ function renderClinicInventory(inventory) {
         <div class="flex items-center space-x-2">
           <h4 class="text-sm font-black text-clay-dark">${escapeHtml(item.medicine_name)}</h4>
           <span class="text-[10px] font-bold text-clay-muted bg-clay-inner px-2 py-0.5 rounded-md border border-clay-salmon/20">${item.category || 'EDL'}</span>
-          ${isFrozen ? '<span class="text-[10px] font-black uppercase tracking-wider bg-red-600 text-white px-2 py-0.5 rounded-md animate-pulse">DISPATCHES FROZEN</span>' : ''}
+          ${isFrozen ? '<span class="text-[10px] font-black uppercase tracking-wider bg-red-600 text-white px-2 py-0.5 rounded-md animate-pulse">DEFICIT FROZEN</span>' : ''}
+          ${deficit > 0 ? `<span class="text-[10px] font-extrabold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md font-mono">Deficit: -${deficit}</span>` : ''}
         </div>
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-clay-muted font-mono">
           <span>Batch: <strong class="text-clay-dark">${item.batch_number || 'BAT-DEFAULT'}</strong></span>
@@ -2151,6 +2155,18 @@ function renderClinicInventory(inventory) {
             <span class="text-sm font-black text-cyan-800 font-mono">+${inTransit}</span>
           </div>
         ` : ''}
+
+        ${isFrozen ? `
+          <button onclick="openResolveReconciliationModal('${item.medicine_id}', '${item.batch_number}')" class="px-3 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow-sm transition flex items-center space-x-1 cursor-pointer" title="Resolve Over-Commitment Exception">
+            <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i>
+            <span>Resolve</span>
+          </button>
+        ` : ''}
+
+        <button onclick="openStockMovementRegister('${item.medicine_id}', '${item.batch_number}')" class="px-3 py-2 rounded-xl bg-white hover:bg-clay-inner text-clay-dark text-xs font-black border border-clay-salmon/25 shadow-sm transition flex items-center space-x-1 cursor-pointer" title="View Stock Movement Register & Handover Ledger">
+          <i data-lucide="clipboard-list" class="w-3.5 h-3.5 text-clay-terracotta"></i>
+          <span>Register</span>
+        </button>
 
         <button onclick="openStockActionModal('${item.medicine_id}', '${item.batch_number}')" class="px-3.5 py-2 rounded-xl bg-clay-inner hover:bg-clay-bg text-clay-dark text-xs font-black border border-clay-salmon/30 shadow-sm transition flex items-center space-x-1 hover:scale-105 cursor-pointer" title="Record Physical Count or Stock Adjustment">
           <i data-lucide="edit" class="w-3.5 h-3.5 text-clay-terracotta"></i>
@@ -2781,4 +2797,283 @@ function openClinicDeskForVoiceDraft(facilityId, medicineId, reportedQty) {
     }
   }, 250);
 }
+
+// ==============================================================================
+// RECONCILIATION EXCEPTION & OVER-COMMITMENT RESOLUTION
+// ==============================================================================
+let currentReconMedicineId = null;
+let currentReconBatchNumber = null;
+let selectedReconResolutionType = "SUPERVISOR_RECOUNT";
+
+function openResolveReconciliationModal(medicineId, batchNumber) {
+  if (!activeClinicDeskData) return;
+  const item = (activeClinicDeskData.inventory || []).find(i => 
+    i.medicine_id === medicineId && (!batchNumber || i.batch_number === batchNumber)
+  );
+  if (!item) {
+    alert("Item not found for reconciliation resolution.");
+    return;
+  }
+
+  currentReconMedicineId = item.medicine_id;
+  currentReconBatchNumber = item.batch_number || "BAT-DEFAULT";
+
+  const onHand = item.on_hand != null ? item.on_hand : (item.current_stock || 0);
+  const reserved = item.reserved || 0;
+  const quarantined = item.quarantined || 0;
+  const rawAvail = onHand - reserved - quarantined;
+  const deficit = rawAvail < 0 ? Math.abs(rawAvail) : (item.reconciliation_deficit || 0);
+
+  const medNameEl = document.getElementById('reconModalMedName');
+  const defBadgeEl = document.getElementById('reconModalDeficitBadge');
+  const onHandEl = document.getElementById('reconModalOnHand');
+  const resEl = document.getElementById('reconModalReserved');
+  const quarEl = document.getElementById('reconModalQuarantined');
+  const netEl = document.getElementById('reconModalNetBalance');
+  const freezeExpEl = document.getElementById('reconModalFreezeExplanation');
+  const minCountEl = document.getElementById('reconMinRequiredCount');
+  const verifiedCountInput = document.getElementById('reconVerifiedCountInput');
+  const quarInput = document.getElementById('reconQuarantineInput');
+  const notesInput = document.getElementById('reconNotesInput');
+
+  if (medNameEl) medNameEl.textContent = `${item.medicine_name} (${currentReconBatchNumber})`;
+  if (defBadgeEl) defBadgeEl.textContent = `Deficit: ${deficit} units`;
+  if (onHandEl) onHandEl.textContent = onHand;
+  if (resEl) resEl.textContent = reserved;
+  if (quarEl) quarEl.textContent = quarantined;
+  if (netEl) netEl.textContent = rawAvail;
+
+  const explanation = item.freeze_reason || `Physical shelf count (${onHand}) is below active commitments (${reserved} reserved + ${quarantined} quarantined). Deficit: ${deficit} units.`;
+  if (freezeExpEl) freezeExpEl.textContent = `${explanation} Stock issues and outbound dispatches remain frozen until resolved.`;
+
+  if (minCountEl) minCountEl.textContent = reserved + quarantined;
+  if (verifiedCountInput) verifiedCountInput.value = reserved + quarantined;
+  if (quarInput) quarInput.value = Math.max(0, quarantined - deficit);
+  if (notesInput) notesInput.value = '';
+
+  // Populate affected consignments if any
+  const consList = document.getElementById('reconConsignmentsList');
+  if (consList) {
+    consList.innerHTML = '';
+    const outbound = (activeClinicDeskData.outbound_consignments || []).filter(c => 
+      c.medicine_id === medicineId && c.status === 'APPROVED_RESERVED'
+    );
+    if (outbound.length === 0) {
+      consList.innerHTML = '<p class="text-xs text-clay-muted font-medium p-2">No active approved consignments reserved for this medicine.</p>';
+    } else {
+      outbound.forEach(c => {
+        const div = document.createElement('div');
+        div.className = "flex items-center space-x-2 bg-white p-2.5 rounded-xl border border-clay-salmon/20 text-xs";
+        div.innerHTML = `
+          <input type="checkbox" name="reconConsignment" value="${c.id}" id="recon_c_${c.id}" class="rounded text-red-600 focus:ring-red-500 cursor-pointer">
+          <label for="recon_c_${c.id}" class="flex-1 font-mono text-[11px] cursor-pointer">
+            <strong>${c.challan_id || c.id}</strong> &bull; ${c.units_requested} units &bull; Destination: ${escapeHtml(c.recipient_facility_name)}
+          </label>
+        `;
+        consList.appendChild(div);
+      });
+    }
+  }
+
+  setReconResolutionType("SUPERVISOR_RECOUNT");
+  const modal = document.getElementById('resolveReconciliationModal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeResolveReconciliationModal() {
+  const modal = document.getElementById('resolveReconciliationModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function setReconResolutionType(type) {
+  selectedReconResolutionType = type;
+  const btnRecount = document.getElementById('btnReconRecount');
+  const btnCancel = document.getElementById('btnReconCancel');
+  const btnQuar = document.getElementById('btnReconQuarantine');
+
+  const secRecount = document.getElementById('reconRecountSection');
+  const secCancel = document.getElementById('reconCancelSection');
+  const secQuar = document.getElementById('reconQuarantineSection');
+
+  // Reset classes
+  [btnRecount, btnCancel, btnQuar].forEach(b => {
+    if (b) {
+      b.className = "p-3 rounded-xl border border-clay-salmon/20 bg-white font-bold text-xs text-clay-dark text-left transition flex flex-col justify-between hover:bg-clay-inner cursor-pointer";
+    }
+  });
+
+  if (secRecount) secRecount.classList.add('hidden');
+  if (secCancel) secCancel.classList.add('hidden');
+  if (secQuar) secQuar.classList.add('hidden');
+
+  if (type === 'SUPERVISOR_RECOUNT') {
+    if (btnRecount) btnRecount.className = "p-3 rounded-xl border-2 border-clay-terracotta bg-clay-salmon/10 font-bold text-xs text-clay-dark text-left transition flex flex-col justify-between cursor-pointer";
+    if (secRecount) secRecount.classList.remove('hidden');
+  } else if (type === 'CANCEL_RESERVATIONS') {
+    if (btnCancel) btnCancel.className = "p-3 rounded-xl border-2 border-amber-600 bg-amber-50 font-bold text-xs text-clay-dark text-left transition flex flex-col justify-between cursor-pointer";
+    if (secCancel) secCancel.classList.remove('hidden');
+  } else if (type === 'ADJUST_QUARANTINE') {
+    if (btnQuar) btnQuar.className = "p-3 rounded-xl border-2 border-slate-700 bg-slate-100 font-bold text-xs text-clay-dark text-left transition flex flex-col justify-between cursor-pointer";
+    if (secQuar) secQuar.classList.remove('hidden');
+  }
+}
+
+async function submitResolveReconciliation() {
+  const notes = (document.getElementById('reconNotesInput').value || '').trim();
+  if (!notes) {
+    alert("Please provide supervisor audit justification notes before unfreezing.");
+    return;
+  }
+
+  const payload = {
+    facility_id: currentClinicFacilityId,
+    medicine_id: currentReconMedicineId,
+    batch_number: currentReconBatchNumber,
+    resolution_type: selectedReconResolutionType,
+    supervisor_name: "Dr. S. K. Saxena (MOIC)",
+    supervisor_role: "MOIC",
+    resolution_notes: notes
+  };
+
+  if (selectedReconResolutionType === 'SUPERVISOR_RECOUNT') {
+    const verified = parseInt(document.getElementById('reconVerifiedCountInput').value);
+    if (isNaN(verified) || verified < 0) {
+      alert("Please enter a valid verified physical count.");
+      return;
+    }
+    payload.verified_physical_count = verified;
+  } else if (selectedReconResolutionType === 'CANCEL_RESERVATIONS') {
+    const checked = Array.from(document.querySelectorAll('input[name="reconConsignment"]:checked')).map(cb => cb.value);
+    if (checked.length === 0) {
+      alert("Please select at least one consignment to cancel.");
+      return;
+    }
+    payload.cancelled_consignment_ids = checked;
+  } else if (selectedReconResolutionType === 'ADJUST_QUARANTINE') {
+    const quar = parseInt(document.getElementById('reconQuarantineInput').value);
+    if (isNaN(quar) || quar < 0) {
+      alert("Please enter a valid quarantine adjustment.");
+      return;
+    }
+    payload.quarantine_adjustment = quar;
+  }
+
+  const btn = document.getElementById('btnSubmitRecon');
+  let origText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = 'Resolving...';
+  }
+
+  try {
+    const res = await fetch(`/api/clinic/${currentClinicFacilityId}/resolve-reconciliation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      closeResolveReconciliationModal();
+      await loadClinicDesk(currentClinicFacilityId);
+      await fetchRisks();
+      await fetchRecommendations();
+      await fetchAuditLog();
+      alert(`✅ Reconciliation Update: ${data.message}`);
+    } else {
+      alert("Reconciliation Resolution Failed: " + (data.detail || "Server error"));
+    }
+  } catch (err) {
+    console.error("submitResolveReconciliation error:", err);
+    alert("Network error while resolving reconciliation exception.");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origText;
+    }
+  }
+}
+
+// ==============================================================================
+// STOCK MOVEMENT REGISTER (HANDOVER & DISCREPANCY LEDGER)
+// ==============================================================================
+async function openStockMovementRegister(medicineId, batchNumber) {
+  try {
+    let url = `/api/clinic/${currentClinicFacilityId}/stock-register?medicine_id=${encodeURIComponent(medicineId)}`;
+    if (batchNumber) url += `&batch_number=${encodeURIComponent(batchNumber)}`;
+
+    const res = await fetch(url);
+    if (!res.ok) {
+      const err = await res.json();
+      alert("Failed to load stock register: " + (err.detail || res.statusText));
+      return;
+    }
+    const reg = await res.json();
+
+    document.getElementById('registerFacilityName').textContent = reg.facility_name || reg.facility_id;
+    document.getElementById('registerMedicineName').textContent = reg.medicine_name || reg.medicine_id;
+    document.getElementById('registerBatchNumber').textContent = reg.batch_number;
+    document.getElementById('registerOpeningOnHand').textContent = reg.opening_on_hand;
+    document.getElementById('registerOpeningAvailable').textContent = reg.opening_available;
+    document.getElementById('registerClosingOnHand').textContent = reg.closing_on_hand;
+    document.getElementById('registerClosingAvailable').textContent = reg.closing_available;
+    document.getElementById('registerClosingReserved').textContent = reg.closing_reserved;
+    document.getElementById('registerClosingQuarantined').textContent = reg.closing_quarantined;
+    document.getElementById('registerGeneratedAt').textContent = reg.generated_at;
+
+    const tbody = document.getElementById('registerMovementsTbody');
+    tbody.innerHTML = '';
+
+    if (!reg.movements || reg.movements.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="9" class="p-6 text-center text-clay-muted font-medium">
+            No movements recorded yet for this batch. Balance opened at ${reg.opening_on_hand} units.
+          </td>
+        </tr>
+      `;
+    } else {
+      reg.movements.forEach(m => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50/80 transition font-mono text-[11px]";
+
+        let deltaPClass = m.delta_physical > 0 ? 'text-emerald-700 font-bold' : (m.delta_physical < 0 ? 'text-red-700 font-bold' : 'text-slate-400');
+        let deltaAClass = m.delta_available > 0 ? 'text-emerald-700 font-bold' : (m.delta_available < 0 ? 'text-red-700 font-bold' : 'text-slate-400');
+        let deltaPText = m.delta_physical > 0 ? `+${m.delta_physical}` : `${m.delta_physical}`;
+        let deltaAText = m.delta_available > 0 ? `+${m.delta_available}` : `${m.delta_available}`;
+
+        tr.innerHTML = `
+          <td class="p-2.5 font-bold text-slate-500">${m.index}</td>
+          <td class="p-2.5 whitespace-nowrap text-slate-600">${m.timestamp.substring(11, 19) || m.timestamp}</td>
+          <td class="p-2.5 font-sans font-extrabold text-clay-dark">${escapeHtml(m.movement_type)}</td>
+          <td class="p-2.5 text-right ${deltaPClass}">${deltaPText}</td>
+          <td class="p-2.5 text-right ${deltaAClass}">${deltaAText}</td>
+          <td class="p-2.5 text-center whitespace-nowrap">
+            <span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 font-bold">${m.resulting_on_hand} OH</span>
+            <span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">${m.resulting_available} Avail</span>
+            ${m.resulting_reserved > 0 ? `<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold">${m.resulting_reserved} Res</span>` : ''}
+            ${m.resulting_quarantined > 0 ? `<span class="px-1.5 py-0.5 rounded bg-red-100 text-red-800 font-bold">${m.resulting_quarantined} Quar</span>` : ''}
+          </td>
+          <td class="p-2.5 font-sans whitespace-nowrap"><strong>${escapeHtml(m.operator_name)}</strong> <span class="text-clay-muted text-[10px]">(${escapeHtml(m.operator_role)})</span></td>
+          <td class="p-2.5 font-sans text-clay-muted max-w-xs truncate" title="${escapeHtml(m.reason || '')}">${escapeHtml(m.reason || '—')}</td>
+          <td class="p-2.5 text-clay-muted text-[10px] truncate max-w-[90px]" title="${m.audit_hash}">${m.audit_hash.substring(0, 8)}...</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    const modal = document.getElementById('stockMovementRegisterModal');
+    if (modal) modal.classList.remove('hidden');
+    if (window.lucide) lucide.createIcons();
+  } catch (err) {
+    console.error("openStockMovementRegister error:", err);
+    alert("Network error while loading stock register.");
+  }
+}
+
+function closeStockMovementRegister() {
+  const modal = document.getElementById('stockMovementRegisterModal');
+  if (modal) modal.classList.add('hidden');
+}
+
 

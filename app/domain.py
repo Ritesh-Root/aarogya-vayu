@@ -10,7 +10,9 @@ from app.models import (
     StockActionRequest, StockActionResult,
     TransferConsignment, DispatchConsignmentRequest,
     ReceiveConsignmentRequest, CancelConsignmentRequest,
-    DailyActionItem, ApprovalRequest, TransferRecommendation
+    DailyActionItem, ApprovalRequest, TransferRecommendation,
+    ResolveReconciliationRequest, ResolveReconciliationResult,
+    StockMovementRegister, StockMovementEntry
 )
 from app.storage import StorageManager, StorageError
 from app.audit_ledger import AuditLedger
@@ -77,156 +79,199 @@ class InventoryDomainService:
         for item in fac_items:
             m_id = item["medicine_id"]
             item["in_transit"] = in_transit_map.get(m_id, 0)
-            item["available"] = max(0, item.get("on_hand", 0) - item.get("reserved", 0) - item.get("quarantined", 0))
+            raw = item.get("on_hand", 0) - item.get("reserved", 0) - item.get("quarantined", 0)
+            item["raw_available"] = raw
+            item["available"] = max(0, raw)
+            if raw < 0:
+                item["reconciliation_deficit"] = abs(raw)
+                item["is_reconciliation_required"] = True
+                item["is_frozen"] = True
+                if not item.get("freeze_reason"):
+                    item["freeze_reason"] = f"Physical count is below commitments ({item.get('reserved', 0)} reserved + {item.get('quarantined', 0)} quarantined). Deficit: {abs(raw)} units."
+            else:
+                item["reconciliation_deficit"] = 0
+                item["is_reconciliation_required"] = False
             item["current_stock"] = item.get("on_hand", 0)
         return fac_items
 
     def execute_stock_action(self, req: StockActionRequest) -> StockActionResult:
-        inventory, consignments, idempotency_cache, _ = self.storage.load_all()
+        def _txn(inventory, consignments, idempotency_cache, audit_log):
+            cached = self._check_idempotency(req.idempotency_key, req.model_dump(), idempotency_cache)
+            if cached:
+                return StockActionResult(**cached), inventory, consignments, idempotency_cache, None
 
-        cached = self._check_idempotency(req.idempotency_key, req.model_dump(), idempotency_cache)
-        if cached:
-            return StockActionResult(**cached)
-
-        item = self._find_item(inventory, req.facility_id, req.medicine_id, req.batch_number)
-        if not item:
-            # Fallback search without batch if single batch exists
-            item = self._find_item(inventory, req.facility_id, req.medicine_id)
+            item = self._find_item(inventory, req.facility_id, req.medicine_id, req.batch_number)
             if not item:
-                raise HTTPException(status_code=404, detail=f"Stock item not found for {req.facility_id} / {req.medicine_id}")
+                # Fallback search without batch if single batch exists
+                item = self._find_item(inventory, req.facility_id, req.medicine_id)
+                if not item:
+                    raise HTTPException(status_code=404, detail=f"Stock item not found for {req.facility_id} / {req.medicine_id}")
 
-        # Optimistic locking check
-        if req.expected_version is not None and item.get("version", 1) != req.expected_version:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Stale inventory update: Expected version {req.expected_version}, but current version is {item.get('version', 1)}. Refresh and retry."
+            # Optimistic locking check
+            if req.expected_version is not None and item.get("version", 1) != req.expected_version:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Stale inventory update: Expected version {req.expected_version}, but current version is {item.get('version', 1)}. Refresh and retry."
+                )
+
+            prev_on_hand = item.get("on_hand", item.get("current_stock", 0))
+            prev_reserved = item.get("reserved", 0)
+            prev_quarantined = item.get("quarantined", 0)
+            reconciliation_exception = False
+            audit_event_type = "STOCK_ACTION_EXECUTED"
+
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            if req.action_type == "PHYSICAL_COUNT":
+                counted_units = req.quantity
+                if counted_units < 0:
+                    raise HTTPException(status_code=400, detail="Counted units cannot be negative.")
+
+                # Check if count is below existing commitments
+                if counted_units < (prev_reserved + prev_quarantined):
+                    reconciliation_exception = True
+                    audit_event_type = "STOCK_RECONCILIATION_EXCEPTION"
+                    deficit = (prev_reserved + prev_quarantined) - counted_units
+                    # Freeze dispatches and issues for this batch
+                    item["is_frozen"] = True
+                    item["is_reconciliation_required"] = True
+                    item["reconciliation_deficit"] = deficit
+                    item["on_hand"] = counted_units
+                    # Commitment Preservation: Keep active commitments intact without clamping or downward mutation
+                    item["reserved"] = prev_reserved
+                    item["quarantined"] = prev_quarantined
+                    item["raw_available"] = counted_units - prev_reserved - prev_quarantined
+                    item["available"] = 0
+                    freeze_reason = (
+                        f"Physical shelf count ({counted_units}) is below active commitments "
+                        f"({prev_reserved} reserved + {prev_quarantined} quarantined). Deficit: {deficit} units."
+                    )
+                    item["freeze_reason"] = freeze_reason
+                    msg = (
+                        f"CRITICAL RECONCILIATION EXCEPTION: {freeze_reason} "
+                        f"Batch is frozen pending MOIC investigation."
+                    )
+                else:
+                    item["on_hand"] = counted_units
+                    item["is_frozen"] = False
+                    item["is_reconciliation_required"] = False
+                    item["reconciliation_deficit"] = 0
+                    item["freeze_reason"] = None
+                    item["raw_available"] = counted_units - item["reserved"] - item["quarantined"]
+                    item["available"] = max(0, item["raw_available"])
+                    msg = f"Physical stock count verified at {counted_units} units."
+
+                item["last_verified_at"] = now_str
+                item["verified_by"] = req.operator_name
+
+            elif req.action_type == "STOCK_RECEIVED":
+                if req.quantity <= 0:
+                    raise HTTPException(status_code=400, detail="Received quantity must be positive.")
+                item["on_hand"] += req.quantity
+                raw = item["on_hand"] - item.get("reserved", 0) - item.get("quarantined", 0)
+                item["raw_available"] = raw
+                item["available"] = max(0, raw)
+                if raw >= 0 and item.get("is_reconciliation_required"):
+                    item["is_frozen"] = False
+                    item["is_reconciliation_required"] = False
+                    item["reconciliation_deficit"] = 0
+                    item["freeze_reason"] = None
+                msg = f"Received and stocked {req.quantity} units."
+
+            elif req.action_type == "STOCK_ISSUED":
+                if item.get("is_frozen", False) or item.get("is_reconciliation_required", False):
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Batch {item.get('batch_number', 'DEFAULT')} is FROZEN due to reconciliation exception ({item.get('freeze_reason') or 'unresolved deficit'}). Stock issuance is blocked pending MOIC resolution."
+                    )
+                if req.quantity <= 0:
+                    raise HTTPException(status_code=400, detail="Issued quantity must be positive.")
+                current_avail = max(0, item["on_hand"] - item["reserved"] - item["quarantined"])
+                if req.quantity > current_avail:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Cannot issue {req.quantity} units: Only {current_avail} available (On Hand: {item['on_hand']}, Reserved: {item['reserved']}, Quarantined: {item['quarantined']})."
+                    )
+                item["on_hand"] -= req.quantity
+                raw = item["on_hand"] - item["reserved"] - item["quarantined"]
+                item["raw_available"] = raw
+                item["available"] = max(0, raw)
+                msg = f"Dispensed/issued {req.quantity} units for OPD/IPD."
+
+            elif req.action_type == "QUARANTINE_DAMAGED":
+                if req.quantity <= 0:
+                    raise HTTPException(status_code=400, detail="Quarantine quantity must be positive.")
+                current_avail = max(0, item["on_hand"] - item["reserved"] - item["quarantined"])
+                if req.quantity > current_avail:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Cannot quarantine {req.quantity} units: Exceeds available stock of {current_avail}."
+                    )
+                item["quarantined"] += req.quantity
+                raw = item["on_hand"] - item["reserved"] - item["quarantined"]
+                item["raw_available"] = raw
+                item["available"] = max(0, raw)
+                msg = f"Segregated {req.quantity} units into quarantine (damaged/expired/held)."
+
+            else:
+                raise HTTPException(status_code=400, detail=f"Unknown stock action: {req.action_type}")
+
+            # Invariant checks: strictly enforced unless frozen under reconciliation exception
+            if not item.get("is_reconciliation_required", False):
+                assert item["reserved"] + item["quarantined"] <= item["on_hand"], "Invariant violation: reserved + quarantined > on_hand"
+            item["current_stock"] = item["on_hand"]
+            item["version"] = item.get("version", 1) + 1
+            item["last_updated"] = now_str
+
+            # Mint audit entry
+            audit_entry = self.audit_ledger.record_entry(
+                event_type=audit_event_type,
+                details={
+                    "action_type": req.action_type,
+                    "facility_id": req.facility_id,
+                    "medicine_id": req.medicine_id,
+                    "batch_number": item.get("batch_number"),
+                    "previous_on_hand": prev_on_hand,
+                    "new_on_hand": item["on_hand"],
+                    "reserved": item["reserved"],
+                    "quarantined": item["quarantined"],
+                    "available": item["available"],
+                    "raw_available": item.get("raw_available", item["available"]),
+                    "reconciliation_deficit": item.get("reconciliation_deficit", 0),
+                    "freeze_reason": item.get("freeze_reason"),
+                    "reason": req.reason,
+                    "reconciliation_exception": reconciliation_exception,
+                    "operator_role": req.operator_role,
+                    "idempotency_key": req.idempotency_key
+                },
+                approved_by=f"{req.operator_name} ({req.operator_role})"
             )
 
-        prev_on_hand = item.get("on_hand", item.get("current_stock", 0))
-        prev_reserved = item.get("reserved", 0)
-        prev_quarantined = item.get("quarantined", 0)
-        reconciliation_exception = False
-        audit_event_type = "STOCK_ACTION_EXECUTED"
+            result = StockActionResult(
+                success=True,
+                action_type=req.action_type,
+                facility_id=req.facility_id,
+                medicine_id=req.medicine_id,
+                batch_number=item.get("batch_number", "DEFAULT"),
+                previous_on_hand=prev_on_hand,
+                new_on_hand=item["on_hand"],
+                new_reserved=item["reserved"],
+                new_quarantined=item["quarantined"],
+                new_available=item["available"],
+                raw_available=item.get("raw_available", item["available"]),
+                reconciliation_deficit=item.get("reconciliation_deficit", 0),
+                freeze_reason=item.get("freeze_reason"),
+                version=item["version"],
+                reconciliation_exception=reconciliation_exception,
+                message=msg,
+                audit_hash=audit_entry.get("current_hash"),
+                timestamp=audit_entry["timestamp"]
+            )
 
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self._record_idempotency(req.idempotency_key, req.model_dump(), result.model_dump(), idempotency_cache)
+            return result, inventory, consignments, idempotency_cache, audit_entry
 
-        if req.action_type == "PHYSICAL_COUNT":
-            counted_units = req.quantity
-            if counted_units < 0:
-                raise HTTPException(status_code=400, detail="Counted units cannot be negative.")
-
-            # Check if count is below existing commitments
-            if counted_units < (prev_reserved + prev_quarantined):
-                reconciliation_exception = True
-                audit_event_type = "STOCK_RECONCILIATION_EXCEPTION"
-                # Freeze dispatches for this batch to prevent ghost transfers
-                item["is_frozen"] = True
-                item["on_hand"] = counted_units
-                # Proportionally assign remaining to quarantine and reserved
-                if counted_units < prev_quarantined:
-                    item["quarantined"] = counted_units
-                    item["reserved"] = 0
-                else:
-                    item["quarantined"] = prev_quarantined
-                    item["reserved"] = counted_units - prev_quarantined
-                item["available"] = 0
-                msg = (
-                    f"CRITICAL RECONCILIATION EXCEPTION: Physical count ({counted_units}) is below active commitments "
-                    f"(reserved={prev_reserved}, quarantined={prev_quarantined}). Batch is frozen pending MOIC investigation."
-                )
-            else:
-                item["on_hand"] = counted_units
-                item["is_frozen"] = False
-                item["available"] = max(0, item["on_hand"] - item["reserved"] - item["quarantined"])
-                msg = f"Physical stock count verified at {counted_units} units."
-
-            item["last_verified_at"] = now_str
-            item["verified_by"] = req.operator_name
-
-        elif req.action_type == "STOCK_RECEIVED":
-            if req.quantity <= 0:
-                raise HTTPException(status_code=400, detail="Received quantity must be positive.")
-            item["on_hand"] += req.quantity
-            item["available"] = max(0, item["on_hand"] - item["reserved"] - item["quarantined"])
-            msg = f"Received and stocked {req.quantity} units."
-
-        elif req.action_type == "STOCK_ISSUED":
-            if req.quantity <= 0:
-                raise HTTPException(status_code=400, detail="Issued quantity must be positive.")
-            current_avail = max(0, item["on_hand"] - item["reserved"] - item["quarantined"])
-            if req.quantity > current_avail:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Cannot issue {req.quantity} units: Only {current_avail} available (On Hand: {item['on_hand']}, Reserved: {item['reserved']}, Quarantined: {item['quarantined']})."
-                )
-            item["on_hand"] -= req.quantity
-            item["available"] = max(0, item["on_hand"] - item["reserved"] - item["quarantined"])
-            msg = f"Dispensed/issued {req.quantity} units for OPD/IPD."
-
-        elif req.action_type == "QUARANTINE_DAMAGED":
-            if req.quantity <= 0:
-                raise HTTPException(status_code=400, detail="Quarantine quantity must be positive.")
-            current_avail = max(0, item["on_hand"] - item["reserved"] - item["quarantined"])
-            if req.quantity > current_avail:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Cannot quarantine {req.quantity} units: Exceeds available stock of {current_avail}."
-                )
-            item["quarantined"] += req.quantity
-            item["available"] = max(0, item["on_hand"] - item["reserved"] - item["quarantined"])
-            msg = f"Segregated {req.quantity} units into quarantine (damaged/expired/held)."
-
-        else:
-            raise HTTPException(status_code=400, detail=f"Unknown stock action: {req.action_type}")
-
-        # Invariant checks
-        assert item["reserved"] + item["quarantined"] <= item["on_hand"], "Invariant violation: reserved + quarantined > on_hand"
-        item["current_stock"] = item["on_hand"]
-        item["version"] = item.get("version", 1) + 1
-        item["last_updated"] = now_str
-
-        # Mint audit entry
-        audit_entry = self.audit_ledger.record_entry(
-            event_type=audit_event_type,
-            details={
-                "action_type": req.action_type,
-                "facility_id": req.facility_id,
-                "medicine_id": req.medicine_id,
-                "batch_number": item.get("batch_number"),
-                "previous_on_hand": prev_on_hand,
-                "new_on_hand": item["on_hand"],
-                "reserved": item["reserved"],
-                "quarantined": item["quarantined"],
-                "available": item["available"],
-                "reason": req.reason,
-                "reconciliation_exception": reconciliation_exception,
-                "operator_role": req.operator_role,
-                "idempotency_key": req.idempotency_key
-            },
-            approved_by=f"{req.operator_name} ({req.operator_role})"
-        )
-
-        result = StockActionResult(
-            success=True,
-            action_type=req.action_type,
-            facility_id=req.facility_id,
-            medicine_id=req.medicine_id,
-            batch_number=item.get("batch_number", "DEFAULT"),
-            previous_on_hand=prev_on_hand,
-            new_on_hand=item["on_hand"],
-            new_reserved=item["reserved"],
-            new_quarantined=item["quarantined"],
-            new_available=item["available"],
-            version=item["version"],
-            reconciliation_exception=reconciliation_exception,
-            message=msg,
-            audit_hash=audit_entry.get("current_hash"),
-            timestamp=audit_entry["timestamp"]
-        )
-
-        self._record_idempotency(req.idempotency_key, req.model_dump(), result.model_dump(), idempotency_cache)
-        self.storage.commit_transaction(inventory, consignments, idempotency_cache, audit_entry)
-        return result
+        return self.storage.execute_in_transaction(_txn)
 
     def approve_transfer_to_consignment(self, req: ApprovalRequest, rec: TransferRecommendation) -> TransferConsignment:
         inventory, consignments, idempotency_cache, _ = self.storage.load_all()
@@ -247,10 +292,10 @@ class InventoryDomainService:
         if not donor_item:
             raise HTTPException(status_code=404, detail=f"Donor inventory record not found for {rec.donor_facility_id}")
 
-        if donor_item.get("is_frozen", False):
+        if donor_item.get("is_frozen", False) or donor_item.get("is_reconciliation_required", False):
             raise HTTPException(
                 status_code=409,
-                detail=f"Donor batch {donor_item.get('batch_number')} is FROZEN due to an active reconciliation exception. Dispatch disallowed."
+                detail=f"Donor batch {donor_item.get('batch_number')} is FROZEN ({donor_item.get('freeze_reason') or 'active reconciliation exception'}). Transfer reservation disallowed."
             )
 
         donor_avail = max(0, donor_item["on_hand"] - donor_item.get("reserved", 0) - donor_item.get("quarantined", 0))
@@ -414,10 +459,10 @@ class InventoryDomainService:
         if not donor_item:
             raise HTTPException(status_code=404, detail="Donor inventory batch record not found.")
 
-        if donor_item.get("is_frozen", False):
+        if donor_item.get("is_frozen", False) or donor_item.get("is_reconciliation_required", False):
             raise HTTPException(
                 status_code=409,
-                detail=f"Batch {donor_item.get('batch_number')} is currently frozen due to an unresolved reconciliation exception. Dispatch blocked."
+                detail=f"Batch {donor_item.get('batch_number')} is currently FROZEN ({donor_item.get('freeze_reason') or 'unresolved reconciliation exception'}). Dispatch blocked."
             )
 
         units = c_data["units_requested"]
@@ -626,13 +671,13 @@ class InventoryDomainService:
 
         # 4. Reconciliation Exceptions (Frozen batches)
         for item in inventory:
-            if item["facility_id"] == facility_id and item.get("is_frozen", False):
+            if item["facility_id"] == facility_id and (item.get("is_frozen", False) or item.get("is_reconciliation_required", False)):
                 actions.append(DailyActionItem(
                     id=f"ACT-RECON-{item['medicine_id']}-{item.get('batch_number')}",
                     urgency="CRITICAL",
                     action_type="RECONCILIATION_REQUIRED",
                     title=f"Batch Frozen: {item['medicine_name']} ({item.get('batch_number')})",
-                    description="Physical count was below existing commitments. Dispatches are blocked pending MOIC investigation.",
+                    description=item.get("freeze_reason") or "Physical count was below active commitments. Dispatches and issues are blocked pending MOIC investigation.",
                     target_medicine_id=item["medicine_id"],
                     target_batch=item.get("batch_number"),
                     cta_label="Resolve Reconciliation"
@@ -658,3 +703,320 @@ class InventoryDomainService:
         urgency_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
         actions.sort(key=lambda a: urgency_order.get(a.urgency, 9))
         return actions
+
+    def resolve_reconciliation_exception(self, req: ResolveReconciliationRequest) -> ResolveReconciliationResult:
+        """
+        Resolves reconciliation exceptions on frozen batches:
+        - Must be authorized by MOIC / Supervisor role.
+        - Supports SUPERVISOR_RECOUNT, CANCEL_RESERVATIONS, or ADJUST_QUARANTINE.
+        - Invariant verification: if on_hand >= reserved + quarantined, unfreezes batch.
+        - Mints SHA-256 tamper-evident audit ledger record.
+        """
+        authorized_roles = ["MOIC", "SUPERVISOR", "DISTRICT_OFFICER", "CMO"]
+        if req.supervisor_role.upper() not in authorized_roles:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Unauthorized: Role '{req.supervisor_role}' cannot resolve reconciliation exceptions. Requires MOIC or Supervisor authorization."
+            )
+
+        inventory, consignments, idempotency_cache, _ = self.storage.load_all()
+
+        cached = self._check_idempotency(req.idempotency_key, req.model_dump(), idempotency_cache)
+        if cached:
+            return ResolveReconciliationResult(**cached)
+
+        item = self._find_item(inventory, req.facility_id, req.medicine_id, req.batch_number)
+        if not item:
+            item = self._find_item(inventory, req.facility_id, req.medicine_id)
+        if not item:
+            raise HTTPException(status_code=404, detail=f"Stock item not found for facility {req.facility_id} and medicine {req.medicine_id}")
+
+        previous_deficit = item.get("reconciliation_deficit", 0)
+        prev_on_hand = item.get("on_hand", 0)
+        prev_reserved = item.get("reserved", 0)
+        prev_quarantined = item.get("quarantined", 0)
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        cancelled_consignments_logged = []
+
+        if req.resolution_type == "SUPERVISOR_RECOUNT":
+            if req.verified_physical_count is None or req.verified_physical_count < 0:
+                raise HTTPException(status_code=400, detail="Verified physical count is required for SUPERVISOR_RECOUNT and must be non-negative.")
+            item["on_hand"] = req.verified_physical_count
+            item["last_verified_at"] = now_str
+            item["verified_by"] = f"{req.supervisor_name} ({req.supervisor_role})"
+
+        elif req.resolution_type == "CANCEL_RESERVATIONS":
+            if not req.cancelled_consignment_ids:
+                raise HTTPException(status_code=400, detail="cancelled_consignment_ids list is required for CANCEL_RESERVATIONS.")
+            released_total = 0
+            for cid in req.cancelled_consignment_ids:
+                c_data = consignments.get(cid)
+                if c_data and c_data.get("donor_facility_id") == req.facility_id and c_data.get("status") == "APPROVED_RESERVED":
+                    units = c_data.get("units_requested", 0)
+                    released_total += units
+                    item["reserved"] = max(0, item.get("reserved", 0) - units)
+                    c_data["status"] = "CANCELLED"
+                    c_data["condition_notes"] = f"Cancelled by {req.supervisor_name} ({req.supervisor_role}) during reconciliation resolution: {req.resolution_notes}"
+                    cancel_audit = self.audit_ledger.record_entry(
+                        event_type="STOCK_TRANSFER_CANCELLED",
+                        details={
+                            "consignment_id": cid,
+                            "reason": f"MOIC Reconciliation Resolution: {req.resolution_notes}",
+                            "units_released": units,
+                            "donor_facility_id": req.facility_id,
+                            "resolution_type": req.resolution_type
+                        },
+                        approved_by=f"{req.supervisor_name} ({req.supervisor_role})"
+                    )
+                    c_data["cryptographic_hash"] = cancel_audit.get("current_hash")
+                    cancelled_consignments_logged.append(cid)
+
+        elif req.resolution_type == "ADJUST_QUARANTINE":
+            if req.quarantine_adjustment is None or req.quarantine_adjustment < 0:
+                raise HTTPException(status_code=400, detail="quarantine_adjustment is required for ADJUST_QUARANTINE and must be non-negative.")
+            item["quarantined"] = req.quarantine_adjustment
+
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown resolution type: {req.resolution_type}")
+
+        # Recalculate balances and invariant
+        raw = item["on_hand"] - item["reserved"] - item["quarantined"]
+        item["raw_available"] = raw
+        if raw >= 0:
+            item["available"] = raw
+            item["reconciliation_deficit"] = 0
+            item["is_reconciliation_required"] = False
+            item["is_frozen"] = False
+            item["freeze_reason"] = None
+            msg = f"Reconciliation resolved successfully via {req.resolution_type}. Deficit eliminated. Batch unfrozen with {raw} units usable."
+        else:
+            deficit = abs(raw)
+            item["available"] = 0
+            item["reconciliation_deficit"] = deficit
+            item["is_reconciliation_required"] = True
+            item["is_frozen"] = True
+            item["freeze_reason"] = f"Partial reconciliation via {req.resolution_type}. Active commitments ({item['reserved']} reserved + {item['quarantined']} quarantined) still exceed on-hand ({item['on_hand']}). Deficit: {deficit} units."
+            msg = f"Partial reconciliation applied. Deficit remains at {deficit} units. Batch remains frozen."
+
+        item["current_stock"] = item["on_hand"]
+        item["version"] = item.get("version", 1) + 1
+        item["last_updated"] = now_str
+
+        # Mint audit entry
+        audit_entry = self.audit_ledger.record_entry(
+            event_type="STOCK_RECONCILIATION_RESOLVED",
+            details={
+                "facility_id": req.facility_id,
+                "medicine_id": req.medicine_id,
+                "batch_number": item.get("batch_number"),
+                "resolution_type": req.resolution_type,
+                "previous_deficit": previous_deficit,
+                "previous_on_hand": prev_on_hand,
+                "new_on_hand": item["on_hand"],
+                "previous_reserved": prev_reserved,
+                "new_reserved": item["reserved"],
+                "previous_quarantined": prev_quarantined,
+                "new_quarantined": item["quarantined"],
+                "new_available": item["available"],
+                "raw_available": item["raw_available"],
+                "is_frozen": item["is_frozen"],
+                "cancelled_consignments": cancelled_consignments_logged,
+                "resolution_notes": req.resolution_notes,
+                "supervisor_name": req.supervisor_name,
+                "supervisor_role": req.supervisor_role,
+                "idempotency_key": req.idempotency_key
+            },
+            approved_by=f"{req.supervisor_name} ({req.supervisor_role})"
+        )
+
+        result = ResolveReconciliationResult(
+            success=True,
+            facility_id=req.facility_id,
+            medicine_id=req.medicine_id,
+            batch_number=item.get("batch_number", "DEFAULT"),
+            previous_deficit=previous_deficit,
+            new_on_hand=item["on_hand"],
+            new_reserved=item["reserved"],
+            new_quarantined=item["quarantined"],
+            new_available=item["available"],
+            raw_available=item["raw_available"],
+            is_frozen=item["is_frozen"],
+            resolution_type=req.resolution_type,
+            message=msg,
+            audit_hash=audit_entry.get("current_hash"),
+            timestamp=audit_entry["timestamp"]
+        )
+
+        self._record_idempotency(req.idempotency_key, req.model_dump(), result.model_dump(), idempotency_cache)
+        self.storage.commit_transaction(inventory, consignments, idempotency_cache, audit_entry)
+        return result
+
+    def get_stock_movement_register(self, facility_id: str, medicine_id: str, batch_number: Optional[str] = None) -> StockMovementRegister:
+        """
+        Extracts chronological stock movement history from the audit ledger for a specific facility, medicine, and batch.
+        Produces a complete handover & reconciliation ledger:
+        - Opening balances
+        - Every movement: receipts, issues, reservations, dispatches, quarantine, recounts, resolutions
+        - Resulting balances per event
+        - Closing balances and compliance statement
+        """
+        inventory, _, _, audit_log = self.storage.load_all()
+        item = self._find_item(inventory, facility_id, medicine_id, batch_number)
+        if not item:
+            item = self._find_item(inventory, facility_id, medicine_id)
+        if not item:
+            raise HTTPException(status_code=404, detail=f"No inventory record found for facility '{facility_id}' and medicine '{medicine_id}'.")
+
+        target_batch = batch_number or item.get("batch_number", "DEFAULT")
+        fac_info = self.facilities.get(facility_id, {})
+        med_info = self.medicines.get(medicine_id, {})
+
+        # Filter audit entries relevant to this facility, medicine, and batch
+        matched_entries = []
+        for entry in audit_log:
+            d = entry.get("details", {})
+            e_type = entry.get("event_type", "")
+            
+            fac_match = (
+                d.get("facility_id") == facility_id or
+                (e_type in ["STOCK_TRANSFER_RESERVED", "STOCK_TRANSFER_DISPATCHED", "STOCK_TRANSFER_CANCELLED"] and d.get("donor_facility_id") == facility_id) or
+                (e_type == "STOCK_TRANSFER_RECEIVED" and d.get("recipient_facility_id") == facility_id)
+            )
+            med_match = (d.get("medicine_id") == medicine_id)
+            batch_match = (not d.get("batch_number") or d.get("batch_number") == target_batch)
+
+            if fac_match and med_match and batch_match:
+                matched_entries.append(entry)
+
+        movements: List[StockMovementEntry] = []
+        movement_idx = 1
+
+        for entry in matched_entries:
+            d = entry.get("details", {})
+            e_type = entry.get("event_type", "")
+            action_type = d.get("action_type", e_type)
+            delta_p = 0
+            delta_a = 0
+            reason = d.get("reason") or d.get("resolution_notes") or d.get("discrepancy_notes") or d.get("officer_comments") or ""
+
+            if e_type in ["STOCK_ACTION_EXECUTED", "STOCK_RECONCILIATION_EXCEPTION"]:
+                if action_type == "PHYSICAL_COUNT":
+                    delta_p = d.get("new_on_hand", 0) - d.get("previous_on_hand", 0)
+                    delta_a = d.get("available", 0) - max(0, d.get("previous_on_hand", 0) - d.get("reserved", 0) - d.get("quarantined", 0))
+                elif action_type == "STOCK_RECEIVED":
+                    delta_p = d.get("new_on_hand", 0) - d.get("previous_on_hand", 0)
+                    delta_a = delta_p
+                elif action_type == "STOCK_ISSUED":
+                    delta_p = d.get("new_on_hand", 0) - d.get("previous_on_hand", 0)
+                    delta_a = delta_p
+                elif action_type == "QUARANTINE_DAMAGED":
+                    delta_p = 0
+                    delta_a = -(d.get("new_on_hand", 0) - d.get("available", 0))
+
+                resulting_on_hand = d.get("new_on_hand", 0)
+                resulting_available = d.get("available", 0)
+                resulting_reserved = d.get("reserved", 0)
+                resulting_quarantined = d.get("quarantined", 0)
+
+            elif e_type == "STOCK_TRANSFER_RESERVED":
+                units = d.get("units_reserved", 0)
+                delta_p = 0
+                delta_a = -units
+                resulting_on_hand = item.get("on_hand", 0)
+                resulting_available = d.get("donor_remaining_available", max(0, resulting_on_hand - units))
+                resulting_reserved = units
+                resulting_quarantined = 0
+
+            elif e_type == "STOCK_TRANSFER_DISPATCHED":
+                units = d.get("units_dispatched", 0)
+                delta_p = -units
+                delta_a = 0
+                resulting_on_hand = d.get("donor_remaining_on_hand", max(0, item.get("on_hand", 0)))
+                resulting_available = item.get("available", 0)
+                resulting_reserved = 0
+                resulting_quarantined = item.get("quarantined", 0)
+
+            elif e_type == "STOCK_TRANSFER_RECEIVED":
+                accepted = d.get("units_accepted", 0)
+                quar = d.get("units_quarantined", 0)
+                delta_p = accepted + quar
+                delta_a = accepted
+                resulting_on_hand = d.get("recipient_new_on_hand", delta_p)
+                resulting_available = d.get("recipient_new_available", accepted)
+                resulting_reserved = 0
+                resulting_quarantined = quar
+
+            elif e_type == "STOCK_TRANSFER_CANCELLED":
+                units = d.get("units_released", 0)
+                delta_p = 0
+                delta_a = units
+                resulting_on_hand = item.get("on_hand", 0)
+                resulting_available = item.get("available", 0)
+                resulting_reserved = item.get("reserved", 0)
+                resulting_quarantined = item.get("quarantined", 0)
+
+            elif e_type == "STOCK_RECONCILIATION_RESOLVED":
+                delta_p = d.get("new_on_hand", 0) - d.get("previous_on_hand", 0)
+                delta_a = d.get("new_available", 0) - max(0, d.get("previous_on_hand", 0) - d.get("previous_reserved", 0) - d.get("previous_quarantined", 0))
+                resulting_on_hand = d.get("new_on_hand", 0)
+                resulting_available = d.get("new_available", 0)
+                resulting_reserved = d.get("new_reserved", 0)
+                resulting_quarantined = d.get("new_quarantined", 0)
+
+            else:
+                resulting_on_hand = item.get("on_hand", 0)
+                resulting_available = item.get("available", 0)
+                resulting_reserved = item.get("reserved", 0)
+                resulting_quarantined = item.get("quarantined", 0)
+
+            movements.append(StockMovementEntry(
+                index=movement_idx,
+                timestamp=entry.get("timestamp", ""),
+                event_type=e_type,
+                movement_type=action_type,
+                delta_physical=delta_p,
+                delta_available=delta_a,
+                resulting_on_hand=resulting_on_hand,
+                resulting_available=resulting_available,
+                resulting_reserved=resulting_reserved,
+                resulting_quarantined=resulting_quarantined,
+                operator_name=entry.get("approved_by", "System Operator"),
+                operator_role=d.get("operator_role") or d.get("supervisor_role") or "PHARMACIST",
+                reason=reason,
+                linked_consignment_id=d.get("consignment_id") or d.get("challan_id"),
+                audit_hash=entry.get("current_hash", "")
+            ))
+            movement_idx += 1
+
+        if movements:
+            first_m = movements[0]
+            opening_oh = max(0, first_m.resulting_on_hand - first_m.delta_physical)
+            opening_avail = max(0, first_m.resulting_available - first_m.delta_available)
+        else:
+            opening_oh = item.get("on_hand", 0)
+            opening_avail = item.get("available", 0)
+
+        now_iso = datetime.now(timezone.utc).isoformat() + "Z"
+
+        return StockMovementRegister(
+            facility_id=facility_id,
+            facility_name=fac_info.get("name", f"Facility {facility_id}"),
+            medicine_id=medicine_id,
+            medicine_name=med_info.get("name", item.get("medicine_name", medicine_id)),
+            batch_number=target_batch,
+            pack_size=item.get("pack_size", 10),
+            opening_on_hand=opening_oh,
+            opening_available=opening_avail,
+            closing_on_hand=item.get("on_hand", 0),
+            closing_available=item.get("available", 0),
+            closing_reserved=item.get("reserved", 0),
+            closing_quarantined=item.get("quarantined", 0),
+            reconciliation_deficit=item.get("reconciliation_deficit", 0),
+            is_frozen=item.get("is_frozen", False),
+            freeze_reason=item.get("freeze_reason"),
+            movements=movements,
+            generated_at=now_iso,
+            register_title="Facility Stock Movement Register (Daily Handover & Discrepancy Ledger)",
+            compliance_notice="Operational Working Register • Pre-validation e-Aushadhi / Form 16 Working Format"
+        )

@@ -24,7 +24,7 @@ class StorageManager:
         self.tmp_dir.mkdir(parents=True, exist_ok=True)
 
         self.backend = os.environ.get("STORAGE_BACKEND", "demo").strip().lower()
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
         # Check firestore configuration upfront if specified
         self.firestore_client = None
@@ -81,13 +81,16 @@ class StorageManager:
                 if "quarantined" not in item:
                     item["quarantined"] = 0
                 item["available"] = max(0, item["on_hand"] - item["reserved"] - item["quarantined"])
-                item["current_stock"] = item["on_hand"]
+                raw = item["on_hand"] - item["reserved"] - item["quarantined"]
+                item["raw_available"] = item.get("raw_available", raw)
+                item["reconciliation_deficit"] = item.get("reconciliation_deficit", max(0, -raw))
+                item["is_reconciliation_required"] = item.get("is_reconciliation_required", raw < 0)
                 if "version" not in item:
                     item["version"] = 1
                 if "pack_size" not in item:
                     item["pack_size"] = 10
                 if "is_frozen" not in item:
-                    item["is_frozen"] = False
+                    item["is_frozen"] = item["is_reconciliation_required"]
 
             # 2. Consignments
             consignments = self._read_json_file(self.consignments_path, fallback_path=self.tmp_dir / "consignments.json", default={})
@@ -113,6 +116,7 @@ class StorageManager:
         """
         if self.backend == "firestore":
             try:
+                # Firestore transactional write
                 batch = self.firestore_client.batch()
                 # Update inventory
                 for item in inventory:
@@ -162,6 +166,55 @@ class StorageManager:
 
             except Exception as e:
                 raise StorageError(f"Atomic commit failed on local storage: {e}")
+
+    def execute_in_transaction(self, mutation_fn):
+        """
+        Executes a transactional mutation function with guaranteed atomicity and concurrency protection:
+        - Demo mode: Acquires process-level threading lock, loads state, calls mutation_fn(inventory, consignments, idempotency, audit_log),
+          persists results inside the lock.
+        - Firestore mode: Uses Google Cloud Firestore's @firestore.transactional to ensure reads occur within the transaction
+          and optimistic concurrency conflicts trigger automatic retries or rollbacks.
+        """
+        if self.backend == "firestore":
+            try:
+                from google.cloud import firestore
+                transaction = self.firestore_client.transaction()
+
+                @firestore.transactional
+                def _txn(txn):
+                    # Reads inside transaction
+                    inv_docs = [d.to_dict() for d in self.firestore_client.collection("inventory").stream(transaction=txn)]
+                    cons_docs = {d.id: d.to_dict() for d in self.firestore_client.collection("consignments").stream(transaction=txn)}
+                    idem_docs = {d.id: d.to_dict() for d in self.firestore_client.collection("idempotency").stream(transaction=txn)}
+                    audit_docs = [d.to_dict() for d in self.firestore_client.collection("audit_ledger").order_by("index").stream(transaction=txn)]
+
+                    result, new_inv, new_cons, new_idem, new_audit = mutation_fn(inv_docs, cons_docs, idem_docs, audit_docs)
+
+                    for item in new_inv:
+                        doc_id = f"{item['facility_id']}_{item['medicine_id']}_{item.get('batch_number', 'DEFAULT')}"
+                        doc_ref = self.firestore_client.collection("inventory").document(doc_id)
+                        txn.set(doc_ref, item)
+                    for c_id, c_data in new_cons.items():
+                        c_ref = self.firestore_client.collection("consignments").document(c_id)
+                        txn.set(c_ref, c_data)
+                    for key, val in new_idem.items():
+                        i_ref = self.firestore_client.collection("idempotency").document(key)
+                        txn.set(i_ref, val)
+                    if new_audit:
+                        a_ref = self.firestore_client.collection("audit_ledger").document(str(new_audit.get("index", "0")))
+                        txn.set(a_ref, new_audit)
+                    return result
+
+                return _txn(transaction)
+            except Exception as e:
+                raise StorageError(f"Firestore transaction execution failed: {e}")
+
+        # Demo Mode (Thread-Safe Transactional Execution)
+        with self._lock:
+            inv, cons, idem, audit = self.load_all()
+            result, new_inv, new_cons, new_idem, new_audit = mutation_fn(inv, cons, idem, audit)
+            self.commit_transaction(new_inv, new_cons, new_idem, new_audit)
+            return result
 
     def _read_json_file(self, primary_path: Path, fallback_path: Path, default: Any) -> Any:
         for p in [fallback_path, primary_path]:
