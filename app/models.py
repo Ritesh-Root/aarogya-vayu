@@ -23,18 +23,36 @@ class Medicine(BaseModel):
     base_consumption_chc: float
     min_buffer_days: int
     critical_threshold_days: int
+    pack_size: int = 10
 
 class InventoryItem(BaseModel):
     facility_id: str
     facility_name: str
     medicine_id: str
     medicine_name: str
-    current_stock: int
-    daily_consumption_base: float
     batch_number: str
     expiry_date: str
     days_to_expiry: int
+    daily_consumption_base: float
+    on_hand: int = Field(description="All physical units physically present at the facility")
+    reserved: int = Field(default=0, description="Usable units committed to approved outgoing transfers")
+    quarantined: int = Field(default=0, description="Damaged, expired, or non-dispensable units held on site")
+    available: int = Field(default=0, description="Usable stock: on_hand - reserved - quarantined")
+    current_stock: int = Field(default=0, description="Mirror of on_hand for backward compatibility")
+    pack_size: int = Field(default=10, description="Standard packaging multiple")
+    unit: str = Field(default="units", description="Dosage/dispensing unit")
+    version: int = Field(default=1, description="Optimistic locking version")
+    is_frozen: bool = Field(default=False, description="Frozen against dispatches if reconciliation exception occurs")
     last_updated: str
+    last_verified_at: Optional[str] = None
+    verified_by: Optional[str] = None
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.current_stock == 0 and self.on_hand > 0:
+            self.current_stock = self.on_hand
+        elif self.on_hand == 0 and self.current_stock > 0:
+            self.on_hand = self.current_stock
+        self.available = max(0, self.on_hand - self.reserved - self.quarantined)
 
 class EnvironmentalReading(BaseModel):
     aqi: int = Field(default=385, description="Air Quality Index")
@@ -83,6 +101,114 @@ class TransferRecommendation(BaseModel):
     authorized_by: Optional[str] = None
     approved_at: Optional[str] = None
 
+class TransferConsignment(BaseModel):
+    id: str
+    recommendation_id: Optional[str] = None
+    challan_id: str
+    donor_facility_id: str
+    donor_facility_name: str
+    recipient_facility_id: str
+    recipient_facility_name: str
+    medicine_id: str
+    medicine_name: str
+    batch_number: str
+    expiry_date: str
+    days_to_expiry: int
+    pack_size: int = 10
+    distance_km: float
+    units_requested: int
+    units_dispatched: int = 0
+    units_accepted: int = 0
+    units_quarantined: int = 0
+    units_missing: int = 0
+    status: str = "APPROVED_RESERVED"  # "APPROVED_RESERVED", "DISPATCHED", "RECEIVED", "CANCELLED"
+    authorized_by: str
+    approved_at: str
+    dispatched_by: Optional[str] = None
+    dispatched_at: Optional[str] = None
+    received_by: Optional[str] = None
+    received_at: Optional[str] = None
+    discrepancy_reason: Optional[str] = None
+    condition_notes: Optional[str] = None
+    vehicle_number: Optional[str] = None
+    idempotency_key: Optional[str] = None
+    cryptographic_hash: Optional[str] = None
+
+class StockActionRequest(BaseModel):
+    facility_id: str
+    medicine_id: str
+    batch_number: str
+    action_type: str  # "PHYSICAL_COUNT", "STOCK_RECEIVED", "STOCK_ISSUED", "QUARANTINE_DAMAGED"
+    quantity: int  # count target or delta
+    reason: str
+    operator_name: str = "Staff Pharmacist"
+    operator_role: str = "PHARMACIST"
+    expected_version: Optional[int] = None
+    idempotency_key: Optional[str] = None
+
+class StockActionResult(BaseModel):
+    success: bool
+    action_type: str
+    facility_id: str
+    medicine_id: str
+    batch_number: str
+    previous_on_hand: int
+    new_on_hand: int
+    new_reserved: int
+    new_quarantined: int
+    new_available: int
+    version: int
+    reconciliation_exception: bool = False
+    message: str
+    audit_hash: Optional[str] = None
+    timestamp: str
+
+class DispatchConsignmentRequest(BaseModel):
+    consignment_id: str
+    operator_name: str = "Staff Pharmacist"
+    operator_role: str = "PHARMACIST"
+    vehicle_number: Optional[str] = "UP-32-MED-4412"
+    courier_notes: Optional[str] = None
+    idempotency_key: Optional[str] = None
+
+class ReceiveConsignmentRequest(BaseModel):
+    consignment_id: str
+    operator_name: str = "Staff Pharmacist"
+    operator_role: str = "PHARMACIST"
+    accepted_units: int
+    quarantined_units: int = 0
+    missing_units: int = 0
+    condition_intact: bool = True
+    discrepancy_notes: Optional[str] = None
+    idempotency_key: Optional[str] = None
+
+class CancelConsignmentRequest(BaseModel):
+    consignment_id: str
+    operator_name: str = "Dr. Authorized MOIC"
+    operator_role: str = "MOIC"
+    reason: str
+    idempotency_key: Optional[str] = None
+
+class DailyActionItem(BaseModel):
+    id: str
+    urgency: str  # "CRITICAL", "HIGH", "MEDIUM", "LOW"
+    action_type: str  # "IMPENDING_STOCKOUT", "INBOUND_TRANSFER_PENDING", "OUTBOUND_DISPATCH_PENDING", "RECONCILIATION_REQUIRED", "EXPIRY_WARNING", "UNVERIFIED_STOCK"
+    title: str
+    description: str
+    target_medicine_id: Optional[str] = None
+    target_consignment_id: Optional[str] = None
+    target_batch: Optional[str] = None
+    cta_label: str
+
+class ClinicDeskResponse(BaseModel):
+    facility: Facility
+    operator_role_mode: str = "DEMO_ROLE_SIMULATION"
+    action_items: List[DailyActionItem]
+    inventory: List[Dict[str, Any]]
+    inbound_consignments: List[Dict[str, Any]]
+    outbound_consignments: List[Dict[str, Any]]
+    active_reconciliation_exceptions: List[Dict[str, Any]]
+
 class VoiceIntakeRequest(BaseModel):
     facility_id: Optional[str] = None
     transcript_text: str
@@ -104,10 +230,11 @@ class VoiceIntakeResponse(BaseModel):
     confidence_score: float
     detected_language: str
     quality_checks_passed: bool
-    requires_confirmation: bool = False
+    requires_confirmation: bool = True
+    is_draft: bool = True
     anomaly_flag: Optional[str] = None
     raw_transcript: str
-    action_taken: str
+    action_taken: str = "DRAFT_CREATED_AWAITING_CONFIRMATION"
 
 class ApprovalRequest(BaseModel):
     recommendation_id: str

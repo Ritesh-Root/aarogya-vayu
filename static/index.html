@@ -212,8 +212,11 @@
 
       <!-- Center Nav Icons -->
       <nav class="flex flex-col items-center space-y-4">
-        <button id="nav-dashboard" onclick="switchTab('dashboard')" class="w-12 h-12 rounded-2xl bg-white text-clay-terracotta shadow-md flex items-center justify-center transition hover:scale-105" title="Dashboard">
+        <button id="nav-dashboard" onclick="switchTab('dashboard')" class="w-12 h-12 rounded-2xl bg-white text-clay-terracotta shadow-md flex items-center justify-center transition hover:scale-105" title="District Command Center">
           <i data-lucide="home" class="w-5 h-5"></i>
+        </button>
+        <button id="nav-clinic" onclick="switchTab('clinic')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="Clinic Daily Desk (Frontline Workspace)">
+          <i data-lucide="clipboard-check" class="w-5 h-5"></i>
         </button>
         <button id="nav-agents" onclick="switchTab('agents')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="ADK Multi-Agent Terminal">
           <i data-lucide="bot" class="w-5 h-5"></i>
@@ -270,12 +273,23 @@
           <button id="scenarioNormal" onclick="switchScenario('normal')" class="px-4 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition">
             🌿 Baseline
           </button>
+        <!-- Main View Mode Switcher: District Command vs Clinic Daily Desk -->
+        <div class="flex items-center bg-clay-inner p-1.5 rounded-full border border-clay-salmon/20 shadow-inner">
+          <button id="btnViewDistrict" onclick="switchMainView('district')" class="px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-clay-terracotta text-white shadow-clay-btn transition flex items-center space-x-1.5">
+            <span>🏛️ District Command</span>
+          </button>
+          <button id="btnViewClinic" onclick="switchMainView('clinic')" class="px-3.5 py-2 rounded-full font-black text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition flex items-center space-x-1.5">
+            <span>🏥 Clinic Daily Desk</span>
+          </button>
         </div>
 
       </header>
 
-      <!-- Main Master Grid: Left Canvas (Hero + Cards + Map) & Right Panel (CMO + Actions) -->
-      <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 flex-1">
+      <!-- DISTRICT COMMAND CENTER VIEW CONTAINER -->
+      <div id="districtViewContainer" class="flex flex-col gap-6 flex-1">
+
+        <!-- Main Master Grid: Left Canvas (Hero + Cards + Map) & Right Panel (CMO + Actions) -->
+        <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 flex-1">
 
         <!-- ============================================================== -->
         <!-- LEFT 8 COLS: Hero Banner, Surge Cards, Map & Voice/Agents -->
@@ -770,9 +784,141 @@
 
         </div>
 
+        </div>
       </div>
 
-    </main>
+      <!-- ============================================================== -->
+      <!-- CLINIC DAILY DESK (Frontline Pharmacist & Storekeeper Workspace) -->
+      <!-- ============================================================== -->
+      <div id="clinicDeskViewContainer" class="hidden flex-col gap-6 flex-1">
+
+        <!-- Top Clinic Workspace Header Card -->
+        <div class="bg-clay-inner rounded-[2.25rem] p-5 sm:p-6 border border-clay-salmon/20 shadow-clay-card flex flex-wrap items-center justify-between gap-4">
+          <div class="flex items-center space-x-4">
+            <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-clay-terracotta to-clay-salmon text-white flex items-center justify-center shadow-clay-btn flex-shrink-0">
+              <i data-lucide="building-2" class="w-7 h-7"></i>
+            </div>
+            <div>
+              <div class="flex items-center space-x-2">
+                <span class="text-xs uppercase font-extrabold tracking-wider text-clay-terracotta">Frontline Facility Workspace</span>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300">
+                  Demo Role Simulation
+                </span>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 mt-1">
+                <select id="clinicFacilitySelect" onchange="onClinicFacilityChange(this.value)" class="bg-white border border-clay-salmon/40 rounded-xl px-3 py-1.5 text-base sm:text-lg font-black text-clay-dark focus:outline-none focus:ring-2 focus:ring-clay-terracotta shadow-sm cursor-pointer">
+                  <!-- Populated dynamically -->
+                </select>
+                <span id="clinicFacilityBadge" class="text-xs font-extrabold text-clay-muted bg-white/80 px-2.5 py-1 rounded-lg border border-clay-salmon/20"></span>
+              </div>
+              <p class="text-xs text-clay-muted mt-1 font-medium">
+                Active Session: <strong class="text-clay-dark font-bold">Ramesh Verma</strong> (Staff Pharmacist / Storekeeper, UP Reg #88412) &bull; Form 16 e-Aushadhi Register
+              </p>
+            </div>
+          </div>
+
+          <div class="flex items-center space-x-3">
+            <button onclick="loadClinicDesk(currentClinicFacilityId)" class="px-4 py-2.5 rounded-xl bg-white border border-clay-salmon/25 text-clay-dark text-xs font-extrabold shadow-sm hover:bg-clay-inner transition flex items-center space-x-2" title="Refresh Clinic Ledger">
+              <i data-lucide="refresh-cw" class="w-4 h-4 text-clay-terracotta"></i>
+              <span>Refresh Desk</span>
+            </button>
+            <button onclick="openStockActionModal()" class="px-5 py-2.5 rounded-xl bg-clay-terracotta hover:bg-clay-terracottaDark text-white text-xs sm:text-sm font-black shadow-clay-btn transition flex items-center space-x-2">
+              <i data-lucide="plus-circle" class="w-4 h-4"></i>
+              <span>Record Stock Action</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Today's Action Priorities (Ordered by Urgency) -->
+        <div class="bg-clay-inner rounded-[2.25rem] p-5 sm:p-6 border border-clay-salmon/20 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center space-x-2.5">
+              <div class="w-8 h-8 rounded-xl bg-red-100 text-red-600 flex items-center justify-center">
+                <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+              </div>
+              <h3 class="text-base font-extrabold text-clay-dark">Today's Action Priorities</h3>
+              <span id="clinicActionCountBadge" class="px-2.5 py-0.5 rounded-full text-xs font-black bg-red-100 text-red-700">0 Actions</span>
+            </div>
+            <span class="text-xs text-clay-muted font-bold">Ranked by Clinical Urgency & Transfer Deadlines</span>
+          </div>
+
+          <div id="clinicActionItemsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            <!-- Dynamic Action Cards -->
+          </div>
+        </div>
+
+        <!-- Master Grid: Left 8 cols (Inventory Table) & Right 4 cols (Inbound & Outbound Queues) -->
+        <div class="grid grid-cols-1 xl:grid-cols-12 gap-6 flex-1">
+          
+          <!-- Left 8 cols: Searchable Medicine Stock Desk -->
+          <div class="xl:col-span-8 flex flex-col space-y-4">
+            <div class="bg-clay-inner rounded-[2.25rem] p-5 sm:p-6 border border-clay-salmon/20 shadow-sm flex-1 flex flex-col">
+              <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 class="text-base font-extrabold text-clay-dark flex items-center space-x-2">
+                    <i data-lucide="boxes" class="w-5 h-5 text-clay-terracotta"></i>
+                    <span>Facility Store Ledger & Segregated Balances</span>
+                  </h3>
+                  <p class="text-xs text-clay-muted mt-0.5">Physical count, available buffer, and active consignments</p>
+                </div>
+
+                <div class="relative w-full sm:w-64">
+                  <i data-lucide="search" class="w-4 h-4 text-clay-muted absolute left-3 top-1/2 -translate-y-1/2"></i>
+                  <input type="text" id="clinicMedSearch" oninput="filterClinicInventory(this.value)" placeholder="Filter medicine or batch..." class="w-full bg-white border border-clay-salmon/25 rounded-xl py-2 pl-9 pr-3 text-xs font-medium text-clay-dark focus:outline-none focus:ring-2 focus:ring-clay-salmon">
+                </div>
+              </div>
+
+              <!-- Inventory Cards / Table -->
+              <div id="clinicInventoryList" class="space-y-3 flex-1 overflow-y-auto max-h-[560px] custom-scrollbar pr-1">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Right 4 cols: Transfer Queues (Inbound & Outbound) -->
+          <div class="xl:col-span-4 flex flex-col space-y-6">
+
+            <!-- Inbound Consignments (Awaiting Receipt) -->
+            <div class="bg-clay-inner rounded-[2.25rem] p-5 border border-clay-salmon/20 shadow-sm flex flex-col">
+              <div class="flex items-center justify-between mb-2.5">
+                <div class="flex items-center space-x-2">
+                  <div class="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                    <i data-lucide="arrow-down-left" class="w-4 h-4"></i>
+                  </div>
+                  <h3 class="text-sm font-extrabold text-clay-dark">Inbound Consignments</h3>
+                </div>
+                <span id="clinicInboundCountBadge" class="px-2 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800">0 Incoming</span>
+              </div>
+              <p class="text-xs text-clay-muted mb-3 font-medium">Dispatched by donors. Physically inspect, count, and log receipt on arrival.</p>
+              
+              <div id="clinicInboundList" class="space-y-3 overflow-y-auto max-h-[260px] custom-scrollbar pr-1">
+                <!-- Inbound consignments -->
+              </div>
+            </div>
+
+            <!-- Outbound Consignments (Awaiting Dispatch) -->
+            <div class="bg-clay-inner rounded-[2.25rem] p-5 border border-clay-salmon/20 shadow-sm flex flex-col">
+              <div class="flex items-center justify-between mb-2.5">
+                <div class="flex items-center space-x-2">
+                  <div class="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                    <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+                  </div>
+                  <h3 class="text-sm font-extrabold text-clay-dark">Outbound Consignments</h3>
+                </div>
+                <span id="clinicOutboundCountBadge" class="px-2 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-800">0 Outgoing</span>
+              </div>
+              <p class="text-xs text-clay-muted mb-3 font-medium">Stock is reserved on shelves. Hand over packages to courier and confirm dispatch.</p>
+              
+              <div id="clinicOutboundList" class="space-y-3 overflow-y-auto max-h-[260px] custom-scrollbar pr-1">
+                <!-- Outbound consignments -->
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
 
   </div>
 
@@ -1124,6 +1270,258 @@
         <button id="facDetailSolveBtn" onclick="runTransferFor(currentInspectFacilityId)" class="px-6 py-2.5 bg-clay-terracotta hover:bg-clay-terracottaDark text-white rounded-full text-sm font-black shadow-clay-btn transition flex items-center space-x-2 cursor-pointer">
           <i data-lucide="zap" class="w-4 h-4 fill-current"></i>
           <span>Trigger Lateral AI Rebalance</span>
+        </button>
+      </div>
+    </div>
+  <!-- ============================================================== -->
+  <!-- 1. STRUCTURED STOCK ACTION MODAL -->
+  <!-- ============================================================== -->
+  <div id="stockActionModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-clay-card rounded-[2.5rem] max-w-xl w-full p-6 sm:p-8 space-y-5 shadow-2xl border border-white max-h-[92vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-center justify-between pb-3 border-b border-clay-salmon/20">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-clay-terracotta text-white flex items-center justify-center">
+            <i data-lucide="edit-3" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-black text-clay-dark">Verified Stock Action</h3>
+            <p id="stockActionSubTitle" class="text-xs text-clay-muted">Form 16 Daily Store Mutation</p>
+          </div>
+        </div>
+        <button onclick="closeStockActionModal()" class="w-8 h-8 rounded-full bg-clay-inner hover:bg-clay-salmon/20 flex items-center justify-center text-clay-muted hover:text-clay-dark transition">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Medicine & Batch Context -->
+      <div class="bg-clay-inner rounded-2xl p-3.5 border border-clay-salmon/20 text-xs space-y-1">
+        <div class="flex justify-between font-extrabold text-clay-dark">
+          <span id="modalMedName">Medicine</span>
+          <span id="modalPackSize" class="text-clay-terracotta">Pack Size: 10</span>
+        </div>
+        <div class="flex justify-between text-clay-muted font-mono">
+          <span>Batch: <strong id="modalBatchNum" class="text-clay-dark">BAT-DEFAULT</strong></span>
+          <span>Expires: <strong id="modalExpiryDate" class="text-clay-dark">2027-12-31</strong></span>
+        </div>
+      </div>
+
+      <!-- Action Type Selection -->
+      <div>
+        <label class="block text-xs font-black uppercase tracking-wider text-clay-muted mb-2">Select Operation Type</label>
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" onclick="setStockActionType('PHYSICAL_COUNT')" id="btnActCount" class="p-3 rounded-xl border-2 border-clay-terracotta bg-clay-salmon/10 font-bold text-xs text-clay-dark text-left transition flex flex-col justify-between">
+            <span class="font-extrabold text-clay-terracotta">Physical Count</span>
+            <span class="text-[10px] text-clay-muted mt-1">"I counted X units on shelf"</span>
+          </button>
+          <button type="button" onclick="setStockActionType('STOCK_RECEIVED')" id="btnActReceive" class="p-3 rounded-xl border border-clay-salmon/20 bg-white font-bold text-xs text-clay-dark text-left transition flex flex-col justify-between hover:bg-clay-inner">
+            <span class="font-extrabold text-emerald-700">Stock Received</span>
+            <span class="text-[10px] text-clay-muted mt-1">"Received +X delivery"</span>
+          </button>
+          <button type="button" onclick="setStockActionType('STOCK_ISSUED')" id="btnActIssue" class="p-3 rounded-xl border border-clay-salmon/20 bg-white font-bold text-xs text-clay-dark text-left transition flex flex-col justify-between hover:bg-clay-inner">
+            <span class="font-extrabold text-amber-700">Stock Issued</span>
+            <span class="text-[10px] text-clay-muted mt-1">"Dispensed -X to patients"</span>
+          </button>
+          <button type="button" onclick="setStockActionType('QUARANTINE_DAMAGED')" id="btnActQuarantine" class="p-3 rounded-xl border border-clay-salmon/20 bg-white font-bold text-xs text-clay-dark text-left transition flex flex-col justify-between hover:bg-clay-inner">
+            <span class="font-extrabold text-red-700">Quarantine Damaged</span>
+            <span class="text-[10px] text-clay-muted mt-1">"X units unusable/damaged"</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quantity Input -->
+      <div>
+        <label id="stockActionQtyLabel" class="block text-xs font-black uppercase tracking-wider text-clay-muted mb-1.5">Counted Units on Shelf</label>
+        <div class="relative">
+          <input type="number" id="stockActionQtyInput" oninput="updateStockActionPreview()" min="0" step="1" class="w-full bg-white border border-clay-salmon/30 rounded-xl py-2.5 px-4 text-lg font-black text-clay-dark focus:outline-none focus:ring-2 focus:ring-clay-terracotta">
+          <span id="stockActionUnitSuffix" class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-clay-muted">units</span>
+        </div>
+      </div>
+
+      <!-- Live Before / After Preview Card -->
+      <div class="bg-clay-inner rounded-2xl p-3.5 border border-clay-salmon/25 text-xs space-y-2">
+        <div class="font-extrabold text-clay-dark flex items-center justify-between">
+          <span>Simulation Preview</span>
+          <span class="text-[10px] uppercase tracking-wider text-clay-muted font-mono">Real-Time Invariants</span>
+        </div>
+        <div class="grid grid-cols-4 gap-2 text-center pt-1">
+          <div class="bg-white rounded-xl p-2 border border-clay-salmon/15">
+            <span class="text-[10px] font-bold text-clay-muted block">On Hand</span>
+            <span id="prevOnHand" class="font-mono text-xs text-slate-500">100</span>
+            <span class="text-[10px] font-bold block text-clay-dark mt-0.5">→ <strong id="newOnHand" class="text-clay-terracotta font-black">100</strong></span>
+          </div>
+          <div class="bg-white rounded-xl p-2 border border-clay-salmon/15">
+            <span class="text-[10px] font-bold text-clay-muted block">Available</span>
+            <span id="prevAvailable" class="font-mono text-xs text-slate-500">80</span>
+            <span class="text-[10px] font-bold block text-clay-dark mt-0.5">→ <strong id="newAvailable" class="text-emerald-700 font-black">80</strong></span>
+          </div>
+          <div class="bg-white rounded-xl p-2 border border-clay-salmon/15">
+            <span class="text-[10px] font-bold text-clay-muted block">Reserved</span>
+            <span id="prevReserved" class="font-mono text-xs text-slate-500">20</span>
+            <span class="text-[10px] font-bold block text-clay-dark mt-0.5">→ <strong id="newReserved" class="text-amber-700 font-black">20</strong></span>
+          </div>
+          <div class="bg-white rounded-xl p-2 border border-clay-salmon/15">
+            <span class="text-[10px] font-bold text-clay-muted block">Quarantined</span>
+            <span id="prevQuarantined" class="font-mono text-xs text-slate-500">0</span>
+            <span class="text-[10px] font-bold block text-clay-dark mt-0.5">→ <strong id="newQuarantined" class="text-red-700 font-black">0</strong></span>
+          </div>
+        </div>
+        <div id="reconciliationWarningNotice" class="hidden p-2.5 rounded-xl bg-red-100 border border-red-300 text-red-900 text-xs font-bold">
+          ⚠️ Count is below active commitments! Committing will trigger a Reconciliation Exception and freeze dispatches.
+        </div>
+      </div>
+
+      <!-- Reason & Operator Stamp -->
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-clay-muted mb-1">Reason for Adjustment</label>
+          <input type="text" id="stockActionReasonInput" placeholder="e.g., Morning shelf count verification, ward dispensing" class="w-full bg-white border border-clay-salmon/25 rounded-xl py-2 px-3 text-xs text-clay-dark focus:outline-none focus:ring-2 focus:ring-clay-salmon font-medium">
+        </div>
+        <div class="flex items-center justify-between text-xs text-clay-muted pt-1">
+          <span>Signed by: <strong class="text-clay-dark">Ramesh Verma (Pharmacist)</strong></span>
+          <span class="font-mono text-[10px]">SHA-256 Chained</span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end space-x-3 pt-3 border-t border-clay-salmon/20">
+        <button type="button" onclick="closeStockActionModal()" class="px-5 py-2.5 bg-clay-inner hover:bg-clay-bg text-clay-dark rounded-full text-xs font-bold transition">
+          Cancel
+        </button>
+        <button type="button" id="btnSubmitStockAction" onclick="submitStockAction()" class="px-6 py-2.5 bg-clay-terracotta hover:bg-clay-terracottaDark text-white rounded-full text-xs font-black shadow-clay-btn transition flex items-center space-x-1.5">
+          <i data-lucide="shield-check" class="w-4 h-4"></i>
+          <span>Commit to Audit Ledger</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- 2. INBOUND RECEIPT INSPECTION MODAL -->
+  <!-- ============================================================== -->
+  <div id="receiptInspectionModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-clay-card rounded-[2.5rem] max-w-xl w-full p-6 sm:p-8 space-y-5 shadow-2xl border border-white max-h-[92vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-center justify-between pb-3 border-b border-clay-salmon/20">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center">
+            <i data-lucide="package-check" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-black text-clay-dark">Inspect & Confirm Inbound Receipt</h3>
+            <p id="receiptModalChallan" class="text-xs text-clay-muted font-mono">CHALLAN-UP-20260908-001</p>
+          </div>
+        </div>
+        <button onclick="closeReceiptModal()" class="w-8 h-8 rounded-full bg-clay-inner hover:bg-clay-salmon/20 flex items-center justify-center text-clay-muted hover:text-clay-dark transition">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Consignment Metadata -->
+      <div class="bg-clay-inner rounded-2xl p-3.5 border border-clay-salmon/20 text-xs space-y-1">
+        <div class="flex justify-between font-extrabold text-clay-dark">
+          <span id="receiptMedName">Medicine</span>
+          <span class="text-emerald-700">Dispatched: <strong id="receiptDispatchedQty" class="font-black">90</strong> units</span>
+        </div>
+        <div class="flex justify-between text-clay-muted font-mono">
+          <span>Donor: <strong id="receiptDonorName" class="text-clay-dark">CHC Malihabad</strong></span>
+          <span>Batch: <strong id="receiptBatchNum" class="text-clay-dark">BAT-01</strong></span>
+        </div>
+      </div>
+
+      <!-- 3-Way Receipt Breakdown Inputs -->
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-black uppercase tracking-wider text-clay-muted">Physical Receipt Breakdown</label>
+          <span id="receiptEqualityIndicator" class="text-xs font-bold text-emerald-700 font-mono">Accepted + Quarantined + Missing == Dispatched</span>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3">
+          <div class="bg-white rounded-xl p-3 border border-clay-salmon/30">
+            <label class="block text-[10px] font-black uppercase text-emerald-700 mb-1">Accepted (Usable)</label>
+            <input type="number" id="receiptAcceptedInput" oninput="updateReceiptMath()" min="0" step="1" class="w-full bg-clay-inner/50 border border-emerald-300 rounded-lg p-2 text-base font-black text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+          <div class="bg-white rounded-xl p-3 border border-clay-salmon/30">
+            <label class="block text-[10px] font-black uppercase text-amber-700 mb-1">Quarantined (Damaged)</label>
+            <input type="number" id="receiptQuarantinedInput" oninput="updateReceiptMath()" min="0" step="1" value="0" class="w-full bg-clay-inner/50 border border-amber-300 rounded-lg p-2 text-base font-black text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-500">
+          </div>
+          <div class="bg-white rounded-xl p-3 border border-clay-salmon/30">
+            <label class="block text-[10px] font-black uppercase text-red-700 mb-1">Missing (Transit Loss)</label>
+            <input type="number" id="receiptMissingInput" oninput="updateReceiptMath()" min="0" step="1" value="0" class="w-full bg-clay-inner/50 border border-red-300 rounded-lg p-2 text-base font-black text-red-800 focus:outline-none focus:ring-2 focus:ring-red-500">
+          </div>
+        </div>
+
+        <div id="receiptMathAlert" class="hidden p-2.5 rounded-xl text-xs font-bold bg-red-100 text-red-800 border border-red-300">
+          Sum of units does not equal dispatched quantity. All units must be accounted for.
+        </div>
+      </div>
+
+      <!-- Discrepancy & Condition Notes -->
+      <div>
+        <label class="block text-xs font-bold text-clay-muted mb-1">Condition Notes & Discrepancy Reason</label>
+        <input type="text" id="receiptConditionNotes" placeholder="e.g. 5 ampoules crushed on arrival, cold-chain temperature OK" class="w-full bg-white border border-clay-salmon/25 rounded-xl py-2 px-3 text-xs text-clay-dark focus:outline-none focus:ring-2 focus:ring-clay-salmon font-medium">
+      </div>
+
+      <div class="flex items-center justify-end space-x-3 pt-3 border-t border-clay-salmon/20">
+        <button type="button" onclick="closeReceiptModal()" class="px-5 py-2.5 bg-clay-inner hover:bg-clay-bg text-clay-dark rounded-full text-xs font-bold transition">
+          Cancel
+        </button>
+        <button type="button" id="btnSubmitReceipt" onclick="submitReceiptInspection()" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-xs font-black shadow-clay-btn transition flex items-center space-x-1.5">
+          <i data-lucide="check-circle" class="w-4 h-4"></i>
+          <span>Sign & Accept Delivery</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- 3. OUTBOUND DISPATCH HANDOVER MODAL -->
+  <!-- ============================================================== -->
+  <div id="dispatchConsignmentModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-clay-card rounded-[2.5rem] max-w-xl w-full p-6 sm:p-8 space-y-5 shadow-2xl border border-white max-h-[92vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-center justify-between pb-3 border-b border-clay-salmon/20">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center">
+            <i data-lucide="truck" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-black text-clay-dark">Courier Handover & Dispatch</h3>
+            <p id="dispatchModalChallan" class="text-xs text-clay-muted font-mono">CHALLAN-UP-20260908-001</p>
+          </div>
+        </div>
+        <button onclick="closeDispatchModal()" class="w-8 h-8 rounded-full bg-clay-inner hover:bg-clay-salmon/20 flex items-center justify-center text-clay-muted hover:text-clay-dark transition">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Consignment Summary -->
+      <div class="bg-clay-inner rounded-2xl p-3.5 border border-clay-salmon/20 text-xs space-y-1">
+        <div class="flex justify-between font-extrabold text-clay-dark">
+          <span id="dispatchMedName">Medicine</span>
+          <span class="text-amber-700 font-black"><strong id="dispatchUnits">90</strong> units to pack</span>
+        </div>
+        <div class="flex justify-between text-clay-muted font-mono">
+          <span>Destination: <strong id="dispatchRecipientName" class="text-clay-dark">PHC Kakori</strong></span>
+          <span>Batch: <strong id="dispatchBatchNum" class="text-clay-dark">BAT-01</strong></span>
+        </div>
+      </div>
+
+      <!-- Vehicle & Courier Details -->
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-clay-muted mb-1">Transfer Vehicle / Courier Number</label>
+          <input type="text" id="dispatchVehicleInput" value="UP-32-MED-4412" class="w-full bg-white border border-clay-salmon/25 rounded-xl py-2 px-3 text-xs text-clay-dark focus:outline-none focus:ring-2 focus:ring-clay-salmon font-mono font-bold">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-clay-muted mb-1">Courier Handover Notes</label>
+          <input type="text" id="dispatchNotesInput" placeholder="e.g. Handed over in insulated carrier box, ice packs verified" class="w-full bg-white border border-clay-salmon/25 rounded-xl py-2 px-3 text-xs text-clay-dark focus:outline-none focus:ring-2 focus:ring-clay-salmon font-medium">
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end space-x-3 pt-3 border-t border-clay-salmon/20">
+        <button type="button" onclick="closeDispatchModal()" class="px-5 py-2.5 bg-clay-inner hover:bg-clay-bg text-clay-dark rounded-full text-xs font-bold transition">
+          Cancel
+        </button>
+        <button type="button" onclick="submitDispatchConsignment()" class="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-xs font-black shadow-clay-btn transition flex items-center space-x-1.5">
+          <i data-lucide="send" class="w-4 h-4"></i>
+          <span>Confirm Dispatch & Print Challan</span>
         </button>
       </div>
     </div>

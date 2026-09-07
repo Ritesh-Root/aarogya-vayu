@@ -108,19 +108,22 @@ class RedistributionOptimizer:
                     if not donor_inv:
                         continue
 
-                    # Donor must retain at least 14 days of surge-adjusted safety stock
-                    min_donor_stock = int(14.0 * donor.projected_daily_rate)
-                    available_to_give = donor.current_stock - min_donor_stock
+                    # Donor must retain at least 14 days of surge-adjusted safety stock (strictly ceiling rounded)
+                    min_donor_stock = math.ceil(14.0 * donor.projected_daily_rate)
 
-                    if available_to_give < 20:
+                    # Available stock considers reservations and quarantines
+                    donor_avail = donor_inv.get("available", donor_inv.get("on_hand", donor.current_stock))
+                    available_to_give = donor_avail - min_donor_stock
+
+                    if available_to_give <= 0:
                         continue
 
-                    # Calculate transfer amount
-                    transfer_qty = min(units_needed, available_to_give)
-                    # Round down to nearest 10 units for realistic packaging
-                    transfer_qty = max(10, (transfer_qty // 10) * 10)
+                    # Packaging formula: Q = p * floor(max(0, Q_eligible) / p)
+                    pack_size = donor_inv.get("pack_size", 10) or 10
+                    eligible = min(units_needed, available_to_give)
+                    transfer_qty = pack_size * (max(0, eligible) // pack_size)
 
-                    if transfer_qty <= 0 or (donor.current_stock - transfer_qty) < min_donor_stock:
+                    if transfer_qty <= 0 or (donor_avail - transfer_qty) < min_donor_stock:
                         continue
 
                     # Update projected coverages

@@ -9,6 +9,16 @@ let allLogs = [];
 let activeSearchQuery = '';
 let currentLang = 'en';
 
+// Clinic Daily Desk State
+let currentClinicFacilityId = "PHC-LKO-01";
+let activeClinicDeskData = null;
+let selectedStockActionType = "PHYSICAL_COUNT";
+let currentStockActionMedicineId = null;
+let currentStockActionBatchNumber = null;
+let currentReceiptConsignment = null;
+let currentDispatchConsignment = null;
+let clinicInventoryFilterQuery = '';
+
 // Advanced Atmospheric GIS & Courier Fleet Telemetry
 let facilityMarkersLayer = null;
 let courierMarkersLayer = null;
@@ -43,7 +53,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const view = urlParams.get('view') || urlParams.get('tab');
   if (view) {
     setTimeout(async () => {
-      if (view === 'cmo') {
+      if (view === 'clinic') {
+        switchMainView('clinic');
+      } else if (view === 'cmo') {
         openCmoModal();
         setTimeout(() => askCmoQuery(1), 200);
       } else if (view === 'ledger') {
@@ -106,6 +118,7 @@ async function loadInitialData() {
     await fetchRisks();
     await fetchRecommendations();
     await fetchAuditLog();
+    await loadClinicDesk(currentClinicFacilityId);
   } catch (err) {
     console.error("Initialization error:", err);
   }
@@ -335,6 +348,21 @@ async function fetchFacilities() {
         opt.textContent = `${fac.name} (${fac.district} - ${fac.type})`;
         select.appendChild(opt);
       });
+    }
+
+    const clinicSelect = document.getElementById('clinicFacilitySelect');
+    if (clinicSelect) {
+      clinicSelect.innerHTML = '';
+      facilities.forEach(fac => {
+        const opt = document.createElement('option');
+        opt.value = fac.id;
+        opt.textContent = `${fac.name} (${fac.type} - ${fac.district})`;
+        clinicSelect.appendChild(opt);
+      });
+      if (facilities.length > 0 && !currentClinicFacilityId) {
+        currentClinicFacilityId = facilities[0].id;
+      }
+      clinicSelect.value = currentClinicFacilityId;
     }
   } catch (err) {
     console.error("fetchFacilities error:", err);
@@ -874,19 +902,49 @@ async function approveTransfer(recId) {
 }
 
 function showChallanModal(recId, approvalData = null) {
-  const rec = activeRecs.find(r => r.id === recId);
-  if (!rec) return;
+  let rec = activeRecs ? activeRecs.find(r => r.id === recId) : null;
+  let consignment = null;
 
-  document.getElementById('modalChallanId').textContent = approvalData ? approvalData.dispatch_challan_id : `CHALLAN-UP-20260905-${rec.id}`;
-  document.getElementById('modalDate').textContent = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-  document.getElementById('modalDonor').textContent = rec.donor_facility_name;
-  document.getElementById('modalRecipient').textContent = rec.recipient_facility_name;
-  document.getElementById('modalMed').textContent = rec.medicine_name;
-  document.getElementById('modalUnits').textContent = `${rec.units_to_transfer} Units`;
-  document.getElementById('modalBatch').textContent = rec.batch_number;
-  document.getElementById('modalDist').textContent = `${rec.distance_km} km`;
-  document.getElementById('modalRationale').textContent = rec.rationale_en;
-  document.getElementById('modalHash').textContent = approvalData ? approvalData.cryptographic_hash : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+  if (activeClinicDeskData) {
+    if (activeClinicDeskData.inbound_consignments) {
+      consignment = activeClinicDeskData.inbound_consignments.find(c => c.id === recId || c.challan_id === recId);
+    }
+    if (!consignment && activeClinicDeskData.outbound_consignments) {
+      consignment = activeClinicDeskData.outbound_consignments.find(c => c.id === recId || c.challan_id === recId);
+    }
+  }
+
+  if (!rec && !consignment && approvalData && approvalData.consignment) {
+    consignment = approvalData.consignment;
+  }
+
+  if (!rec && !consignment) return;
+
+  if (consignment) {
+    document.getElementById('modalChallanId').textContent = consignment.challan_id || `CHALLAN-UP-20260908-${consignment.id.substring(0, 6)}`;
+    document.getElementById('modalDate').textContent = consignment.approved_at ? 
+      new Date(consignment.approved_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) :
+      new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    document.getElementById('modalDonor').textContent = consignment.donor_facility_name;
+    document.getElementById('modalRecipient').textContent = consignment.recipient_facility_name;
+    document.getElementById('modalMed').textContent = consignment.medicine_name;
+    document.getElementById('modalUnits').textContent = `${consignment.units_dispatched || consignment.allocated_quantity} Units`;
+    document.getElementById('modalBatch').textContent = consignment.batch_number;
+    document.getElementById('modalDist').textContent = `${consignment.distance_km || 18.2} km`;
+    document.getElementById('modalRationale').textContent = consignment.condition_notes || consignment.discrepancy_reason || "Emergency Climate-Resilience Transfer Order authorized by CMO.";
+    document.getElementById('modalHash').textContent = consignment.cryptographic_hash || (approvalData ? approvalData.cryptographic_hash : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+  } else {
+    document.getElementById('modalChallanId').textContent = approvalData ? approvalData.dispatch_challan_id : `CHALLAN-UP-20260905-${rec.id}`;
+    document.getElementById('modalDate').textContent = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    document.getElementById('modalDonor').textContent = rec.donor_facility_name;
+    document.getElementById('modalRecipient').textContent = rec.recipient_facility_name;
+    document.getElementById('modalMed').textContent = rec.medicine_name;
+    document.getElementById('modalUnits').textContent = `${rec.units_to_transfer} Units`;
+    document.getElementById('modalBatch').textContent = rec.batch_number;
+    document.getElementById('modalDist').textContent = `${rec.distance_km} km`;
+    document.getElementById('modalRationale').textContent = rec.rationale_en;
+    document.getElementById('modalHash').textContent = approvalData ? approvalData.cryptographic_hash : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+  }
 
   document.getElementById('challanModal').classList.remove('hidden');
 }
@@ -1019,7 +1077,10 @@ async function submitVoiceIntake() {
 
     const badge = document.getElementById('voiceResultBadge');
     if (badge) {
-      if (result.quality_checks_passed) {
+      if (result.is_draft) {
+        badge.textContent = "DRAFT CREATED (CONFIRMATION REQUIRED)";
+        badge.className = "text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full";
+      } else if (result.quality_checks_passed) {
         badge.textContent = "QA PASSED & LOGGED";
         badge.className = "text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full";
       } else {
@@ -1043,7 +1104,19 @@ async function submitVoiceIntake() {
     const formEl = document.getElementById('voiceFormStrength');
     if (formEl) formEl.textContent = `${result.dosage_form || 'Standard Form'} • ${result.strength || ''}`;
     const actionEl = document.getElementById('voiceActionText');
-    if (actionEl) actionEl.textContent = result.anomaly_flag || result.action_taken;
+    if (actionEl) {
+      actionEl.textContent = result.anomaly_flag || result.action_taken;
+      if (result.is_draft) {
+        actionEl.innerHTML += `
+          <div class="mt-2 pt-2 border-t border-emerald-200 flex items-center justify-between">
+            <span class="text-[11px] text-amber-900 font-bold">⚠️ Draft only. Master ledger unchanged.</span>
+            <button onclick="openClinicDeskForVoiceDraft('${result.facility_id}', '${result.medicine_id}', ${result.reported_stock})" class="px-3 py-1 bg-clay-terracotta hover:bg-clay-terracottaDark text-white font-black text-xs rounded-lg shadow-sm transition">
+              Review &amp; Commit in Clinic Desk &rarr;
+            </button>
+          </div>
+        `;
+      }
+    }
 
     // Refresh dashboard
     await loadInitialData();
@@ -1493,7 +1566,11 @@ async function runVisionVerification() {
 
     const data = await res.json();
     box.classList.remove('hidden');
-    document.getElementById('visionSummaryText').textContent = data.verification_summary;
+    let summary = data.verification_summary || "";
+    if (data.is_simulated) {
+      summary += " [Simulated Evidence Mode: Physical pharmacist count required prior to ledger commitment]";
+    }
+    document.getElementById('visionSummaryText').textContent = summary;
 
     btn.disabled = false;
     btn.innerHTML = `<span>Scan Verified &radic;</span>`;
@@ -1665,6 +1742,7 @@ function filterMedicine(medId) {
 function switchTab(tab) {
   const navItems = {
     'dashboard': document.getElementById('nav-dashboard'),
+    'clinic': document.getElementById('nav-clinic'),
     'agents': document.getElementById('nav-agents'),
     'cmo': document.getElementById('nav-cmo'),
     'vision': document.getElementById('nav-vision'),
@@ -1680,7 +1758,11 @@ function switchTab(tab) {
     }
   });
 
-  if (tab === 'cmo') {
+  if (tab === 'clinic') {
+    switchMainView('clinic');
+  } else if (tab === 'dashboard') {
+    switchMainView('district');
+  } else if (tab === 'cmo') {
     openCmoModal();
   } else if (tab === 'agents') {
     const term = document.getElementById('agentTerminalBody');
@@ -1779,7 +1861,7 @@ function setupEventListeners() {
   }
 
   // Backdrop click listener to dismiss any open modal
-  ['cmoModal', 'challanModal', 'ledgerModal', 'notificationsModal', 'infoModal', 'facilityDetailModal'].forEach(id => {
+  ['cmoModal', 'challanModal', 'ledgerModal', 'notificationsModal', 'infoModal', 'facilityDetailModal', 'stockActionModal', 'receiptInspectionModal', 'dispatchConsignmentModal'].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       el.addEventListener('click', (e) => {
@@ -1793,7 +1875,7 @@ function setupEventListeners() {
   // ESC key listener to dismiss any open modal
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      ['cmoModal', 'challanModal', 'ledgerModal', 'notificationsModal', 'infoModal', 'facilityDetailModal'].forEach(id => {
+      ['cmoModal', 'challanModal', 'ledgerModal', 'notificationsModal', 'infoModal', 'facilityDetailModal', 'stockActionModal', 'receiptInspectionModal', 'dispatchConsignmentModal'].forEach(id => {
         const el = document.getElementById(id);
         if (el && !el.classList.contains('hidden')) {
           el.classList.add('hidden');
@@ -1807,3 +1889,896 @@ function escapeHtml(str) {
   if (!str) return '';
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+// ==============================================================================
+// CLINIC DAILY DESK - FRONTLINE PHARMACIST WORKSPACE
+// ==============================================================================
+
+function switchMainView(view) {
+  const districtContainer = document.getElementById('districtViewContainer');
+  const clinicContainer = document.getElementById('clinicDeskViewContainer');
+  const btnDistrict = document.getElementById('btnViewDistrict');
+  const btnClinic = document.getElementById('btnViewClinic');
+  const navDashboard = document.getElementById('nav-dashboard');
+  const navClinic = document.getElementById('nav-clinic');
+
+  if (view === 'clinic') {
+    if (districtContainer) districtContainer.classList.add('hidden');
+    if (clinicContainer) {
+      clinicContainer.classList.remove('hidden');
+      clinicContainer.classList.add('flex');
+    }
+    if (btnDistrict) {
+      btnDistrict.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition flex items-center space-x-1.5 cursor-pointer';
+    }
+    if (btnClinic) {
+      btnClinic.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-clay-terracotta text-white shadow-clay-btn transition flex items-center space-x-1.5 cursor-pointer';
+    }
+    if (navDashboard) navDashboard.className = 'w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105';
+    if (navClinic) navClinic.className = 'w-12 h-12 rounded-2xl bg-white text-clay-terracotta shadow-md flex items-center justify-center transition hover:scale-105';
+
+    loadClinicDesk(currentClinicFacilityId);
+  } else {
+    if (clinicContainer) {
+      clinicContainer.classList.add('hidden');
+      clinicContainer.classList.remove('flex');
+    }
+    if (districtContainer) districtContainer.classList.remove('hidden');
+    if (btnDistrict) {
+      btnDistrict.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-clay-terracotta text-white shadow-clay-btn transition flex items-center space-x-1.5 cursor-pointer';
+    }
+    if (btnClinic) {
+      btnClinic.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition flex items-center space-x-1.5 cursor-pointer';
+    }
+    if (navDashboard) navDashboard.className = 'w-12 h-12 rounded-2xl bg-white text-clay-terracotta shadow-md flex items-center justify-center transition hover:scale-105';
+    if (navClinic) navClinic.className = 'w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105';
+
+    if (map) {
+      setTimeout(() => map.invalidateSize(), 150);
+    }
+  }
+}
+
+function onClinicFacilityChange(facilityId) {
+  currentClinicFacilityId = facilityId;
+  loadClinicDesk(facilityId);
+}
+
+async function loadClinicDesk(facilityId) {
+  if (!facilityId) facilityId = currentClinicFacilityId || "PHC-LKO-01";
+  currentClinicFacilityId = facilityId;
+
+  const select = document.getElementById('clinicFacilitySelect');
+  if (select && select.value !== facilityId) {
+    select.value = facilityId;
+  }
+
+  try {
+    const res = await fetch(`/api/clinic/${facilityId}/desk`);
+    if (!res.ok) {
+      console.error("Failed to load clinic desk:", res.statusText);
+      return;
+    }
+    const data = await res.json();
+    activeClinicDeskData = data;
+
+    // Facility Badge & Metadata
+    const badgeEl = document.getElementById('clinicFacilityBadge');
+    if (badgeEl && data.facility) {
+      badgeEl.textContent = `${data.facility.type} • ${data.facility.district} District • Pop: ${(data.facility.population_served || 20000).toLocaleString()}`;
+    }
+
+    // Render Action Priorities
+    renderClinicActionItems(data.action_items || []);
+
+    // Render Facility Store Ledger
+    renderClinicInventory(data.inventory || []);
+
+    // Render Inbound & Outbound Queues
+    renderClinicConsignments(data.inbound_consignments || [], data.outbound_consignments || []);
+
+    if (window.lucide) lucide.createIcons();
+  } catch (err) {
+    console.error("loadClinicDesk error:", err);
+  }
+}
+
+function renderClinicActionItems(items) {
+  const container = document.getElementById('clinicActionItemsList');
+  const countBadge = document.getElementById('clinicActionCountBadge');
+  if (!container) return;
+
+  if (countBadge) {
+    countBadge.textContent = `${items.length} Actions`;
+    if (items.length === 0) {
+      countBadge.className = "px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800";
+    } else {
+      countBadge.className = "px-2.5 py-0.5 rounded-full text-xs font-black bg-red-100 text-red-700";
+    }
+  }
+
+  if (items.length === 0) {
+    container.innerHTML = `
+      <div class="col-span-full bg-white rounded-2xl p-6 text-center border border-emerald-200 shadow-sm">
+        <span class="text-2xl block mb-1">🎉</span>
+        <h4 class="text-sm font-black text-emerald-800">All Daily Action Items Clear</h4>
+        <p class="text-xs text-clay-muted mt-1 font-medium">No impending stockouts, pending dispatches, or uninspected deliveries at this facility.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = '';
+  items.forEach(item => {
+    let urgencyColor = "bg-red-50 border-red-200 text-red-900";
+    let badgeColor = "bg-red-600 text-white";
+    let iconName = "alert-triangle";
+
+    if (item.urgency === 'CRITICAL') {
+      urgencyColor = "bg-red-50/90 border-red-200 text-red-900";
+      badgeColor = "bg-red-600 text-white";
+      iconName = "alert-triangle";
+    } else if (item.urgency === 'HIGH') {
+      urgencyColor = "bg-amber-50/90 border-amber-200 text-amber-900";
+      badgeColor = "bg-amber-600 text-white";
+      iconName = "alert-circle";
+    } else if (item.urgency === 'MEDIUM') {
+      urgencyColor = "bg-blue-50/90 border-blue-200 text-blue-900";
+      badgeColor = "bg-blue-600 text-white";
+      iconName = "info";
+    } else {
+      urgencyColor = "bg-slate-50/90 border-slate-200 text-slate-900";
+      badgeColor = "bg-slate-600 text-white";
+      iconName = "check-circle";
+    }
+
+    let onclickStr = '';
+    if (item.action_type === 'INBOUND_TRANSFER_PENDING') {
+      onclickStr = `openReceiptModal('${item.target_consignment_id}')`;
+    } else if (item.action_type === 'OUTBOUND_DISPATCH_PENDING') {
+      onclickStr = `openDispatchModal('${item.target_consignment_id}')`;
+    } else {
+      onclickStr = `openStockActionModal('${item.target_medicine_id || ''}', '${item.target_batch || ''}')`;
+    }
+
+    const card = document.createElement('div');
+    card.className = `p-4 rounded-2xl border ${urgencyColor} flex flex-col justify-between space-y-3 shadow-sm`;
+    card.innerHTML = `
+      <div>
+        <div class="flex items-center justify-between gap-2 mb-1.5">
+          <span class="inline-flex items-center space-x-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${badgeColor}">
+            <i data-lucide="${iconName}" class="w-3 h-3"></i>
+            <span>${item.urgency}</span>
+          </span>
+          <span class="text-[10px] font-mono font-bold text-clay-muted">${item.action_type}</span>
+        </div>
+        <h4 class="text-sm font-black text-clay-dark leading-snug">${escapeHtml(item.title)}</h4>
+        <p class="text-xs text-clay-muted mt-1 leading-relaxed font-medium">${escapeHtml(item.description)}</p>
+      </div>
+      <button onclick="${onclickStr}" class="w-full bg-white hover:bg-clay-bg border border-clay-salmon/30 text-clay-dark font-black text-xs py-2 px-3 rounded-xl transition shadow-sm flex items-center justify-center space-x-1.5 hover:scale-[1.01] cursor-pointer">
+        <span>${escapeHtml(item.cta_label)}</span>
+        <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-clay-terracotta"></i>
+      </button>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function filterClinicInventory(query) {
+  clinicInventoryFilterQuery = (query || '').toLowerCase().trim();
+  if (activeClinicDeskData) {
+    renderClinicInventory(activeClinicDeskData.inventory || []);
+  }
+}
+
+function renderClinicInventory(inventory) {
+  const container = document.getElementById('clinicInventoryList');
+  if (!container) return;
+
+  const q = clinicInventoryFilterQuery;
+  const filtered = inventory.filter(item => {
+    if (!q) return true;
+    return (
+      (item.medicine_name && item.medicine_name.toLowerCase().includes(q)) ||
+      (item.medicine_id && item.medicine_id.toLowerCase().includes(q)) ||
+      (item.batch_number && item.batch_number.toLowerCase().includes(q)) ||
+      (item.category && item.category.toLowerCase().includes(q))
+    );
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div class="p-8 text-center text-clay-muted text-xs font-bold bg-white rounded-2xl border border-clay-salmon/15">
+        No medicine batches match your search filter.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = '';
+  filtered.forEach(item => {
+    const onHand = item.on_hand != null ? item.on_hand : (item.current_stock || 0);
+    const reserved = item.reserved || 0;
+    const quarantined = item.quarantined || 0;
+    const available = item.available != null ? item.available : Math.max(0, onHand - reserved - quarantined);
+    const inTransit = item.in_transit || 0;
+    const isFrozen = item.is_frozen || false;
+
+    const row = document.createElement('div');
+    row.className = `p-4 rounded-2xl bg-white border ${isFrozen ? 'border-red-400 ring-2 ring-red-200' : 'border-clay-salmon/20'} shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 transition hover:border-clay-salmon/40`;
+
+    row.innerHTML = `
+      <div class="flex-1">
+        <div class="flex items-center space-x-2">
+          <h4 class="text-sm font-black text-clay-dark">${escapeHtml(item.medicine_name)}</h4>
+          <span class="text-[10px] font-bold text-clay-muted bg-clay-inner px-2 py-0.5 rounded-md border border-clay-salmon/20">${item.category || 'EDL'}</span>
+          ${isFrozen ? '<span class="text-[10px] font-black uppercase tracking-wider bg-red-600 text-white px-2 py-0.5 rounded-md animate-pulse">DISPATCHES FROZEN</span>' : ''}
+        </div>
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-clay-muted font-mono">
+          <span>Batch: <strong class="text-clay-dark">${item.batch_number || 'BAT-DEFAULT'}</strong></span>
+          <span>•</span>
+          <span>Pack: <strong class="text-clay-dark">${item.pack_size || 10} units</strong></span>
+          <span>•</span>
+          <span>Exp: <strong class="text-clay-dark">${item.expiry_date || '2027-12-31'}</strong></span>
+        </div>
+      </div>
+
+      <!-- Segregated Stock Pill Metrics -->
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-center min-w-[70px]" title="Available for immediate dispensing">
+          <span class="text-[9px] uppercase font-black text-emerald-700 block">Available</span>
+          <span class="text-sm font-black text-emerald-800 font-mono">${available}</span>
+        </div>
+
+        <div class="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-center min-w-[70px]" title="Physical on-hand stock in storage">
+          <span class="text-[9px] uppercase font-bold text-slate-500 block">On Hand</span>
+          <span class="text-sm font-black text-slate-700 font-mono">${onHand}</span>
+        </div>
+
+        <div class="px-3 py-1.5 rounded-xl ${reserved > 0 ? 'bg-amber-50 border border-amber-200 text-amber-800' : 'bg-slate-50/50 border border-slate-100 text-slate-400'} text-center min-w-[65px]" title="Reserved for approved transfers awaiting dispatch">
+          <span class="text-[9px] uppercase font-bold block">Reserved</span>
+          <span class="text-sm font-black font-mono">${reserved}</span>
+        </div>
+
+        <div class="px-3 py-1.5 rounded-xl ${quarantined > 0 ? 'bg-red-50 border border-red-200 text-red-800' : 'bg-slate-50/50 border border-slate-100 text-slate-400'} text-center min-w-[65px]" title="Quarantined damaged or expired units">
+          <span class="text-[9px] uppercase font-bold block">Quarantined</span>
+          <span class="text-sm font-black font-mono">${quarantined}</span>
+        </div>
+
+        ${inTransit > 0 ? `
+          <div class="px-3 py-1.5 rounded-xl bg-cyan-50 border border-cyan-200 text-center min-w-[65px]" title="In transit en route to this facility">
+            <span class="text-[9px] uppercase font-bold text-cyan-700 block">In Transit</span>
+            <span class="text-sm font-black text-cyan-800 font-mono">+${inTransit}</span>
+          </div>
+        ` : ''}
+
+        <button onclick="openStockActionModal('${item.medicine_id}', '${item.batch_number}')" class="px-3.5 py-2 rounded-xl bg-clay-inner hover:bg-clay-bg text-clay-dark text-xs font-black border border-clay-salmon/30 shadow-sm transition flex items-center space-x-1 hover:scale-105 cursor-pointer" title="Record Physical Count or Stock Adjustment">
+          <i data-lucide="edit" class="w-3.5 h-3.5 text-clay-terracotta"></i>
+          <span>Update</span>
+        </button>
+      </div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function renderClinicConsignments(inbound, outbound) {
+  // Inbound List
+  const inContainer = document.getElementById('clinicInboundList');
+  const inBadge = document.getElementById('clinicInboundCountBadge');
+  
+  const activeInbound = inbound.filter(c => c.status === 'DISPATCHED' || c.status === 'APPROVED');
+  if (inBadge) inBadge.textContent = `${activeInbound.length} Incoming`;
+
+  if (inContainer) {
+    if (activeInbound.length === 0) {
+      inContainer.innerHTML = `
+        <div class="p-5 text-center text-clay-muted text-xs font-medium bg-white rounded-2xl border border-clay-salmon/15">
+          No inbound deliveries currently en route to this facility.
+        </div>
+      `;
+    } else {
+      inContainer.innerHTML = '';
+      activeInbound.forEach(c => {
+        const isDispatched = c.status === 'DISPATCHED';
+        const card = document.createElement('div');
+        card.className = "p-3.5 rounded-2xl bg-white border border-clay-salmon/20 shadow-sm space-y-2.5";
+        card.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-mono font-bold text-clay-muted">${c.challan_id || c.id}</span>
+            <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${isDispatched ? 'bg-cyan-100 text-cyan-800' : 'bg-slate-100 text-slate-700'}">
+              ${isDispatched ? '🚚 In Transit' : '⏳ Donor Preparing'}
+            </span>
+          </div>
+          <div>
+            <h5 class="text-xs font-black text-clay-dark">${escapeHtml(c.medicine_name)} (${c.units_dispatched || c.allocated_quantity} Units)</h5>
+            <p class="text-[11px] text-clay-muted mt-0.5">From: <strong class="text-clay-dark font-semibold">${escapeHtml(c.donor_facility_name)}</strong></p>
+            <p class="text-[10px] font-mono text-clay-muted">Batch: ${c.batch_number} • Courier: ${c.vehicle_number || 'Standard Fleet'}</p>
+          </div>
+          ${isDispatched ? `
+            <button onclick="openReceiptModal('${c.id}')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs py-2 px-3 rounded-xl transition shadow-sm flex items-center justify-center space-x-1.5 cursor-pointer">
+              <i data-lucide="package-check" class="w-3.5 h-3.5"></i>
+              <span>Inspect & Confirm Receipt</span>
+            </button>
+          ` : `
+            <div class="text-[11px] text-clay-muted italic bg-clay-inner/60 p-2 rounded-lg text-center">
+              Awaiting physical courier dispatch from donor facility.
+            </div>
+          `}
+        `;
+        inContainer.appendChild(card);
+      });
+    }
+  }
+
+  // Outbound List
+  const outContainer = document.getElementById('clinicOutboundList');
+  const outBadge = document.getElementById('clinicOutboundCountBadge');
+  
+  const activeOutbound = outbound.filter(c => c.status === 'APPROVED' || c.status === 'DISPATCHED');
+  if (outBadge) outBadge.textContent = `${activeOutbound.length} Outgoing`;
+
+  if (outContainer) {
+    if (activeOutbound.length === 0) {
+      outContainer.innerHTML = `
+        <div class="p-5 text-center text-clay-muted text-xs font-medium bg-white rounded-2xl border border-clay-salmon/15">
+          No outbound consignments scheduled for this facility.
+        </div>
+      `;
+    } else {
+      outContainer.innerHTML = '';
+      activeOutbound.forEach(c => {
+        const isApproved = c.status === 'APPROVED';
+        const card = document.createElement('div');
+        card.className = "p-3.5 rounded-2xl bg-white border border-clay-salmon/20 shadow-sm space-y-2.5";
+        card.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-mono font-bold text-clay-muted">${c.challan_id || c.id}</span>
+            <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${isApproved ? 'bg-amber-100 text-amber-800' : 'bg-cyan-100 text-cyan-800'}">
+              ${isApproved ? '📦 Stock Reserved' : '🚚 Dispatched'}
+            </span>
+          </div>
+          <div>
+            <h5 class="text-xs font-black text-clay-dark">${escapeHtml(c.medicine_name)} (${c.allocated_quantity} Units)</h5>
+            <p class="text-[11px] text-clay-muted mt-0.5">To: <strong class="text-clay-dark font-semibold">${escapeHtml(c.recipient_facility_name)}</strong></p>
+            <p class="text-[10px] font-mono text-clay-muted">Batch: ${c.batch_number}</p>
+          </div>
+          ${isApproved ? `
+            <div class="flex items-center space-x-2">
+              <button onclick="openDispatchModal('${c.id}')" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs py-2 px-3 rounded-xl transition shadow-sm flex items-center justify-center space-x-1 cursor-pointer">
+                <i data-lucide="truck" class="w-3.5 h-3.5"></i>
+                <span>Courier Handover</span>
+              </button>
+              <button onclick="cancelConsignmentAction('${c.id}')" class="px-3 py-2 bg-clay-inner hover:bg-red-50 text-red-700 border border-clay-salmon/30 font-bold text-xs rounded-xl transition cursor-pointer" title="Cancel Consignment & Release Stock">
+                <span>Cancel</span>
+              </button>
+            </div>
+          ` : `
+            <div class="flex items-center justify-between bg-clay-inner/60 p-2 rounded-lg text-[11px]">
+              <span class="text-clay-muted">Courier: <strong class="text-clay-dark font-mono">${c.vehicle_number || 'En Route'}</strong></span>
+              <button onclick="showChallanModal('${c.id}')" class="text-clay-terracotta font-bold hover:underline cursor-pointer">View Challan</button>
+            </div>
+          `}
+        `;
+        outContainer.appendChild(card);
+      });
+    }
+  }
+}
+
+// ------------------------------------------------------------------------------
+// MODAL WORKFLOWS
+// ------------------------------------------------------------------------------
+
+function openStockActionModal(medicineId = null, batchNumber = null) {
+  if (!activeClinicDeskData || !activeClinicDeskData.inventory || activeClinicDeskData.inventory.length === 0) {
+    alert("No inventory records available for this facility.");
+    return;
+  }
+
+  let item = null;
+  if (medicineId) {
+    item = activeClinicDeskData.inventory.find(i => 
+      i.medicine_id === medicineId && (!batchNumber || i.batch_number === batchNumber)
+    );
+    if (!item) {
+      item = activeClinicDeskData.inventory.find(i => i.medicine_id === medicineId);
+    }
+  }
+  if (!item) {
+    item = activeClinicDeskData.inventory[0];
+  }
+
+  currentStockActionMedicineId = item.medicine_id;
+  currentStockActionBatchNumber = item.batch_number;
+
+  const medNameEl = document.getElementById('modalMedName');
+  if (medNameEl) medNameEl.textContent = `${item.medicine_name} (${item.category || 'Medicine'})`;
+
+  const packEl = document.getElementById('modalPackSize');
+  if (packEl) packEl.textContent = `Pack Size: ${item.pack_size || 10} units`;
+
+  const batchEl = document.getElementById('modalBatchNum');
+  if (batchEl) batchEl.textContent = item.batch_number || 'BAT-DEFAULT';
+
+  const expEl = document.getElementById('modalExpiryDate');
+  if (expEl) expEl.textContent = item.expiry_date || '2027-12-31';
+
+  setStockActionType('PHYSICAL_COUNT');
+
+  const qtyInput = document.getElementById('stockActionQtyInput');
+  if (qtyInput) qtyInput.value = item.on_hand != null ? item.on_hand : (item.current_stock || 0);
+
+  const reasonInput = document.getElementById('stockActionReasonInput');
+  if (reasonInput) reasonInput.value = '';
+
+  updateStockActionPreview();
+
+  const modal = document.getElementById('stockActionModal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeStockActionModal() {
+  const el = document.getElementById('stockActionModal');
+  if (el) el.classList.add('hidden');
+}
+
+function setStockActionType(type) {
+  selectedStockActionType = type;
+  const btnCount = document.getElementById('btnActCount');
+  const btnReceive = document.getElementById('btnActReceive');
+  const btnIssue = document.getElementById('btnActIssue');
+  const btnQuarantine = document.getElementById('btnActQuarantine');
+  const label = document.getElementById('stockActionQtyLabel');
+
+  const activeClass = 'p-3 rounded-xl border-2 border-clay-terracotta bg-clay-salmon/10 font-bold text-xs text-clay-dark text-left transition flex flex-col justify-between cursor-pointer';
+  const inactiveClass = 'p-3 rounded-xl border border-clay-salmon/20 bg-white font-bold text-xs text-clay-dark text-left transition flex flex-col justify-between hover:bg-clay-inner cursor-pointer';
+
+  if (btnCount) btnCount.className = (type === 'PHYSICAL_COUNT') ? activeClass : inactiveClass;
+  if (btnReceive) btnReceive.className = (type === 'STOCK_RECEIVED') ? activeClass : inactiveClass;
+  if (btnIssue) btnIssue.className = (type === 'STOCK_ISSUED') ? activeClass : inactiveClass;
+  if (btnQuarantine) btnQuarantine.className = (type === 'QUARANTINE_DAMAGED') ? activeClass : inactiveClass;
+
+  if (label) {
+    if (type === 'PHYSICAL_COUNT') label.textContent = 'Counted Units on Shelf';
+    else if (type === 'STOCK_RECEIVED') label.textContent = 'Units Received from Supplier / Depot';
+    else if (type === 'STOCK_ISSUED') label.textContent = 'Units Dispensed / Issued to Ward';
+    else if (type === 'QUARANTINE_DAMAGED') label.textContent = 'Units Damaged / Contaminated to Quarantine';
+  }
+
+  updateStockActionPreview();
+}
+
+function updateStockActionPreview() {
+  if (!activeClinicDeskData || !activeClinicDeskData.inventory) return;
+  const item = activeClinicDeskData.inventory.find(i => 
+    i.medicine_id === currentStockActionMedicineId && 
+    (!currentStockActionBatchNumber || i.batch_number === currentStockActionBatchNumber)
+  );
+  if (!item) return;
+
+  const prevOnHand = item.on_hand != null ? item.on_hand : (item.current_stock || 0);
+  const prevReserved = item.reserved || 0;
+  const prevQuarantined = item.quarantined || 0;
+  const prevAvail = Math.max(0, prevOnHand - prevReserved - prevQuarantined);
+
+  const inputVal = parseInt(document.getElementById('stockActionQtyInput').value);
+  const qty = isNaN(inputVal) ? 0 : Math.max(0, inputVal);
+
+  let newOnHand = prevOnHand;
+  let newReserved = prevReserved;
+  let newQuarantined = prevQuarantined;
+  let newAvail = prevAvail;
+  let reconWarning = false;
+
+  if (selectedStockActionType === 'PHYSICAL_COUNT') {
+    newOnHand = qty;
+    newReserved = prevReserved;
+    newQuarantined = prevQuarantined;
+    newAvail = Math.max(0, newOnHand - newReserved - newQuarantined);
+    if (newOnHand < prevReserved + prevQuarantined) {
+      reconWarning = true;
+    }
+  } else if (selectedStockActionType === 'STOCK_RECEIVED') {
+    newOnHand = prevOnHand + qty;
+    newReserved = prevReserved;
+    newQuarantined = prevQuarantined;
+    newAvail = Math.max(0, newOnHand - newReserved - newQuarantined);
+  } else if (selectedStockActionType === 'STOCK_ISSUED') {
+    newOnHand = Math.max(0, prevOnHand - qty);
+    newReserved = prevReserved;
+    newQuarantined = prevQuarantined;
+    newAvail = Math.max(0, newOnHand - newReserved - newQuarantined);
+  } else if (selectedStockActionType === 'QUARANTINE_DAMAGED') {
+    newOnHand = prevOnHand;
+    newQuarantined = prevQuarantined + qty;
+    newReserved = prevReserved;
+    newAvail = Math.max(0, newOnHand - newReserved - newQuarantined);
+  }
+
+  const elPrevOh = document.getElementById('prevOnHand');
+  const elNewOh = document.getElementById('newOnHand');
+  const elPrevAv = document.getElementById('prevAvailable');
+  const elNewAv = document.getElementById('newAvailable');
+  const elPrevRes = document.getElementById('prevReserved');
+  const elNewRes = document.getElementById('newReserved');
+  const elPrevQua = document.getElementById('prevQuarantined');
+  const elNewQua = document.getElementById('newQuarantined');
+
+  if (elPrevOh) elPrevOh.textContent = prevOnHand;
+  if (elNewOh) elNewOh.textContent = newOnHand;
+  if (elPrevAv) elPrevAv.textContent = prevAvail;
+  if (elNewAv) elNewAv.textContent = newAvail;
+  if (elPrevRes) elPrevRes.textContent = prevReserved;
+  if (elNewRes) elNewRes.textContent = newReserved;
+  if (elPrevQua) elPrevQua.textContent = prevQuarantined;
+  if (elNewQua) elNewQua.textContent = newQuarantined;
+
+  const warnEl = document.getElementById('reconciliationWarningNotice');
+  if (warnEl) {
+    if (reconWarning) {
+      warnEl.classList.remove('hidden');
+      warnEl.textContent = `⚠️ Warning: Physical count (${newOnHand}) is below active commitments (${prevReserved} reserved + ${prevQuarantined} quarantined). Committing will trigger a Reconciliation Exception and freeze dispatches until audited.`;
+    } else {
+      warnEl.classList.add('hidden');
+    }
+  }
+}
+
+async function submitStockAction() {
+  const btn = document.getElementById('btnSubmitStockAction');
+  if (!currentStockActionMedicineId) {
+    alert("Please select a medicine first.");
+    return;
+  }
+  const inputVal = parseInt(document.getElementById('stockActionQtyInput').value);
+  if (isNaN(inputVal) || inputVal < 0) {
+    alert("Please enter a valid non-negative quantity.");
+    return;
+  }
+  const reason = document.getElementById('stockActionReasonInput').value.trim() || 
+    (selectedStockActionType === 'PHYSICAL_COUNT' ? 'Morning shelf routine verification' :
+     selectedStockActionType === 'STOCK_RECEIVED' ? 'Receipt of central warehouse batch' :
+     selectedStockActionType === 'STOCK_ISSUED' ? 'Dispensed for acute respiratory ward' : 'Damaged / expired ampoules quarantined');
+
+  const origBtnText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="animate-spin mr-1">⏳</span> Committing...`;
+  }
+
+  try {
+    const payload = {
+      facility_id: currentClinicFacilityId,
+      medicine_id: currentStockActionMedicineId,
+      batch_number: currentStockActionBatchNumber,
+      action_type: selectedStockActionType,
+      quantity: inputVal,
+      reason: reason,
+      operator_name: "Ramesh Verma",
+      operator_role: "PHARMACIST"
+    };
+
+    const res = await fetch(`/api/clinic/${currentClinicFacilityId}/stock-action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      closeStockActionModal();
+      await loadClinicDesk(currentClinicFacilityId);
+      await fetchRisks();
+      await fetchRecommendations();
+      await fetchAuditLog();
+      
+      let msg = `✅ Action Recorded: ${data.message}`;
+      if (data.reconciliation_exception) {
+        msg += "\n⚠️ RECONCILIATION EXCEPTION: Dispatches for this batch have been FROZEN until supervisor audit.";
+      }
+      alert(msg);
+    } else {
+      alert("Stock Action Failed: " + (data.detail || "Server error"));
+    }
+  } catch (err) {
+    console.error("submitStockAction error:", err);
+    alert("Network error while submitting stock action.");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origBtnText;
+    }
+  }
+}
+
+function openReceiptModal(consignmentId) {
+  let c = null;
+  if (activeClinicDeskData && activeClinicDeskData.inbound_consignments) {
+    c = activeClinicDeskData.inbound_consignments.find(item => item.id === consignmentId);
+  }
+  if (!c && activeRecs) {
+    const rec = activeRecs.find(r => r.id === consignmentId);
+    if (rec) {
+      c = {
+        id: rec.id,
+        challan_id: `CHALLAN-UP-20260908-${rec.id.substring(0, 6)}`,
+        medicine_name: rec.medicine_name,
+        donor_facility_name: rec.donor_facility_name,
+        batch_number: rec.batch_number,
+        allocated_quantity: rec.units_to_transfer,
+        units_dispatched: rec.units_to_transfer
+      };
+    }
+  }
+  if (!c) {
+    alert("Consignment record not found: " + consignmentId);
+    return;
+  }
+
+  currentReceiptConsignment = c;
+  const dispatched = c.units_dispatched != null ? c.units_dispatched : (c.allocated_quantity || 0);
+
+  const challanEl = document.getElementById('receiptModalChallan');
+  const medEl = document.getElementById('receiptMedName');
+  const dispEl = document.getElementById('receiptDispatchedQty');
+  const donorEl = document.getElementById('receiptDonorName');
+  const batchEl = document.getElementById('receiptBatchNum');
+
+  if (challanEl) challanEl.textContent = c.challan_id || c.id;
+  if (medEl) medEl.textContent = c.medicine_name;
+  if (dispEl) dispEl.textContent = dispatched;
+  if (donorEl) donorEl.textContent = c.donor_facility_name;
+  if (batchEl) batchEl.textContent = c.batch_number;
+
+  const accInput = document.getElementById('receiptAcceptedInput');
+  const quaInput = document.getElementById('receiptQuarantinedInput');
+  const misInput = document.getElementById('receiptMissingInput');
+  const notesInput = document.getElementById('receiptConditionNotes');
+
+  if (accInput) accInput.value = dispatched;
+  if (quaInput) quaInput.value = 0;
+  if (misInput) misInput.value = 0;
+  if (notesInput) notesInput.value = '';
+
+  updateReceiptMath();
+
+  const modal = document.getElementById('receiptInspectionModal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeReceiptModal() {
+  const el = document.getElementById('receiptInspectionModal');
+  if (el) el.classList.add('hidden');
+}
+
+function updateReceiptMath() {
+  if (!currentReceiptConsignment) return;
+  const dispatched = currentReceiptConsignment.units_dispatched != null ? 
+    currentReceiptConsignment.units_dispatched : (currentReceiptConsignment.allocated_quantity || 0);
+
+  const acc = parseInt(document.getElementById('receiptAcceptedInput').value) || 0;
+  const qua = parseInt(document.getElementById('receiptQuarantinedInput').value) || 0;
+  const mis = parseInt(document.getElementById('receiptMissingInput').value) || 0;
+  const total = acc + qua + mis;
+
+  const alertEl = document.getElementById('receiptMathAlert');
+  const indEl = document.getElementById('receiptEqualityIndicator');
+  const btn = document.getElementById('btnSubmitReceipt');
+
+  if (total === dispatched) {
+    if (alertEl) alertEl.classList.add('hidden');
+    if (indEl) {
+      indEl.className = 'text-xs font-bold text-emerald-700 font-mono';
+      indEl.textContent = `✓ Balanced: ${acc} accepted + ${qua} quarantined + ${mis} missing == ${dispatched} dispatched`;
+    }
+    if (btn) btn.disabled = false;
+  } else {
+    if (alertEl) {
+      alertEl.classList.remove('hidden');
+      alertEl.textContent = `Physical sum (${total}) does not equal dispatched count (${dispatched}). Discrepancy: ${Math.abs(dispatched - total)} units ${total > dispatched ? 'excess' : 'shortage'}. All units must be accounted for.`;
+    }
+    if (indEl) {
+      indEl.className = 'text-xs font-bold text-red-700 font-mono';
+      indEl.textContent = `✗ Unbalanced: ${total} / ${dispatched} dispatched`;
+    }
+    if (btn) btn.disabled = true;
+  }
+}
+
+async function submitReceiptInspection() {
+  if (!currentReceiptConsignment) return;
+  const dispatched = currentReceiptConsignment.units_dispatched != null ? 
+    currentReceiptConsignment.units_dispatched : (currentReceiptConsignment.allocated_quantity || 0);
+
+  const acc = parseInt(document.getElementById('receiptAcceptedInput').value) || 0;
+  const qua = parseInt(document.getElementById('receiptQuarantinedInput').value) || 0;
+  const mis = parseInt(document.getElementById('receiptMissingInput').value) || 0;
+
+  if (acc + qua + mis !== dispatched) {
+    alert(`Cannot commit: All dispatched units must be accounted for.\nDispatched: ${dispatched}\nAccounted: ${acc + qua + mis}`);
+    return;
+  }
+
+  const btn = document.getElementById('btnSubmitReceipt');
+  const origText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="animate-spin mr-1">⏳</span> Receiving...`;
+  }
+
+  try {
+    const payload = {
+      consignment_id: currentReceiptConsignment.id,
+      operator_name: "Ramesh Verma",
+      operator_role: "PHARMACIST",
+      accepted_units: acc,
+      quarantined_units: qua,
+      missing_units: mis,
+      condition_intact: qua === 0 && mis === 0,
+      discrepancy_notes: document.getElementById('receiptConditionNotes').value.trim() || null
+    };
+
+    const res = await fetch('/api/transfer/receive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      closeReceiptModal();
+      await loadClinicDesk(currentClinicFacilityId);
+      await fetchRisks();
+      await fetchRecommendations();
+      await fetchAuditLog();
+      alert(`✅ Receipt Confirmed! Accepted ${acc} units credited to active shelf stock. Consignment status: ${data.status}`);
+    } else {
+      alert("Receipt Confirmation Failed: " + (data.detail || "Server error"));
+    }
+  } catch (err) {
+    console.error("submitReceiptInspection error:", err);
+    alert("Network error while confirming receipt.");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origText;
+    }
+  }
+}
+
+function openDispatchModal(consignmentId) {
+  let c = null;
+  if (activeClinicDeskData && activeClinicDeskData.outbound_consignments) {
+    c = activeClinicDeskData.outbound_consignments.find(item => item.id === consignmentId);
+  }
+  if (!c) {
+    alert("Consignment record not found: " + consignmentId);
+    return;
+  }
+
+  currentDispatchConsignment = c;
+  const challanEl = document.getElementById('dispatchModalChallan');
+  const medEl = document.getElementById('dispatchMedName');
+  const unitsEl = document.getElementById('dispatchUnits');
+  const recEl = document.getElementById('dispatchRecipientName');
+  const batchEl = document.getElementById('dispatchBatchNum');
+  const vehInput = document.getElementById('dispatchVehicleInput');
+  const notesInput = document.getElementById('dispatchNotesInput');
+
+  if (challanEl) challanEl.textContent = c.challan_id || c.id;
+  if (medEl) medEl.textContent = c.medicine_name;
+  if (unitsEl) unitsEl.textContent = c.allocated_quantity;
+  if (recEl) recEl.textContent = c.recipient_facility_name;
+  if (batchEl) batchEl.textContent = c.batch_number;
+  if (vehInput) vehInput.value = c.vehicle_number || "UP-32-MED-4412";
+  if (notesInput) notesInput.value = '';
+
+  const modal = document.getElementById('dispatchConsignmentModal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeDispatchModal() {
+  const el = document.getElementById('dispatchConsignmentModal');
+  if (el) el.classList.add('hidden');
+}
+
+async function submitDispatchConsignment() {
+  if (!currentDispatchConsignment) return;
+  const btn = document.querySelector('#dispatchConsignmentModal button[onclick="submitDispatchConsignment()"]');
+  const origText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="animate-spin mr-1">⏳</span> Dispatching...`;
+  }
+
+  try {
+    const payload = {
+      consignment_id: currentDispatchConsignment.id,
+      operator_name: "Ramesh Verma",
+      operator_role: "PHARMACIST",
+      vehicle_number: document.getElementById('dispatchVehicleInput').value.trim() || "UP-32-MED-4412",
+      courier_notes: document.getElementById('dispatchNotesInput').value.trim() || "Insulated cold-box handover verified"
+    };
+
+    const res = await fetch('/api/transfer/dispatch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      closeDispatchModal();
+      await loadClinicDesk(currentClinicFacilityId);
+      await fetchRisks();
+      await fetchRecommendations();
+      await fetchAuditLog();
+      alert(`✅ Outbound Consignment Dispatched! Physical on-hand stock deducted, courier ${payload.vehicle_number} en route.`);
+      showChallanModal(data.id, data);
+    } else {
+      alert("Dispatch Handover Failed: " + (data.detail || "Server error"));
+    }
+  } catch (err) {
+    console.error("submitDispatchConsignment error:", err);
+    alert("Network error while submitting dispatch.");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origText;
+    }
+  }
+}
+
+async function cancelConsignmentAction(consignmentId) {
+  if (!confirm("Are you sure you want to cancel this transfer order? The reserved stock will be immediately released back to available shelf inventory.")) {
+    return;
+  }
+
+  try {
+    const payload = {
+      consignment_id: consignmentId,
+      operator_name: "Dr. Authorized MOIC",
+      operator_role: "MOIC",
+      reason: "Cancelled by facility MOIC prior to physical dispatch"
+    };
+
+    const res = await fetch('/api/transfer/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      await loadClinicDesk(currentClinicFacilityId);
+      await fetchRisks();
+      await fetchRecommendations();
+      await fetchAuditLog();
+      alert("Transfer consignment cancelled. Reserved units have been restored to available stock.");
+    } else {
+      alert("Cancellation failed: " + (data.detail || "Server error"));
+    }
+  } catch (err) {
+    console.error("cancelConsignmentAction error:", err);
+    alert("Network error while cancelling consignment.");
+  }
+}
+
+function openClinicDeskForVoiceDraft(facilityId, medicineId, reportedQty) {
+  switchMainView('clinic');
+  if (facilityId) {
+    onClinicFacilityChange(facilityId);
+  }
+  setTimeout(() => {
+    openStockActionModal(medicineId);
+    if (reportedQty != null) {
+      const input = document.getElementById('stockActionQtyInput');
+      if (input) input.value = reportedQty;
+      const reason = document.getElementById('stockActionReasonInput');
+      if (reason) reason.value = "Confirmed frontline voice log report";
+      updateStockActionPreview();
+    }
+  }, 250);
+}
+
