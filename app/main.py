@@ -1,5 +1,6 @@
 import os
 import json
+import copy
 from dotenv import load_dotenv
 load_dotenv()
 from datetime import datetime, timezone
@@ -17,7 +18,7 @@ from app.models import (
     StockActionRequest, StockActionResult, DispatchConsignmentRequest,
     ReceiveConsignmentRequest, CancelConsignmentRequest, ClinicDeskResponse,
     DailyActionItem, ResolveReconciliationRequest, ResolveReconciliationResult,
-    StockMovementRegister
+    StockMovementRegister, UnmetDemandReport
 )
 from app.storage import StorageManager, StorageError
 from app.domain import InventoryDomainService
@@ -78,17 +79,20 @@ current_env = EnvironmentalReading(
     corridor="Lucknow-Unnao Indo-Gangetic Smog Corridor (Severe Inversion)"
 )
 
-# Active recommendations cache
+# Active recommendations and unmet demands cache
 active_recommendations: Dict[str, TransferRecommendation] = {}
+active_unmet_demands: List[UnmetDemandReport] = []
 
 # Backward compatibility reference to working inventory
 inventory_data, _, _, _ = storage.load_all()
 
 def recompute_recommendations():
-    global inventory_data
+    global inventory_data, active_unmet_demands
     inventory_data, _, _, _ = storage.load_all()
-    risks = surge_engine.assess_facility_risks(inventory_data, current_env)
-    recs = optimizer.optimize(risks, inventory_data)
+    working_inv = copy.deepcopy(inventory_data)
+    risks = surge_engine.assess_facility_risks(working_inv, current_env)
+    recs = optimizer.optimize(risks, working_inv)
+    active_unmet_demands = optimizer.get_unmet_demands()
     approved = {rid: r for rid, r in active_recommendations.items() if r.status == "APPROVED"}
     active_recommendations.clear()
     active_recommendations.update(approved)
@@ -170,6 +174,15 @@ async def get_risks():
 @app.get("/api/recommendations")
 async def get_recommendations():
     return [r.model_dump() for r in active_recommendations.values()]
+
+@app.get("/api/unmet-demands")
+async def get_unmet_demands():
+    """
+    Returns clinical shortages where peer-to-peer redistribution is mathematically
+    infeasible (no corridor donor retains >=14d safety reserve within 35km).
+    Escalated to District Replenishment Requisition Queue.
+    """
+    return [u.model_dump() for u in active_unmet_demands]
 
 @app.post("/api/voice-intake")
 async def process_voice_intake(request: VoiceIntakeRequest):

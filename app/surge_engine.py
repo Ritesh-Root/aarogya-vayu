@@ -58,41 +58,56 @@ class SurgeEngine:
     ) -> List[StockoutRiskAssessment]:
         """
         Projects forward demand and calculates stockout probability within 7 days.
+        Aggregates multiple batches per facility and medicine to evaluate true usable stock.
         """
         multipliers = self.calculate_surge_multipliers(env)
         assessments = []
 
+        # Group inventory items by (facility_id, medicine_id)
+        grouped: Dict[Tuple[str, str], List[dict]] = {}
         for item in inventory_items:
-            med_id = item["medicine_id"]
+            key = (item["facility_id"], item["medicine_id"])
+            grouped.setdefault(key, []).append(item)
+
+        for (fac_id, med_id), batch_items in grouped.items():
+            first_item = batch_items[0]
             med_meta = self.medicines.get(med_id, {})
             climate_cat = med_meta.get("climate_sensitive", "General")
             
             surge_mult = multipliers.get(climate_cat, 1.0)
-            base_rate = item["daily_consumption_base"]
+            base_rate = first_item.get("daily_consumption_base", 15.0)
             projected_rate = max(1.0, round(base_rate * surge_mult, 1))
 
-            current_stock = item["current_stock"]
-            days_of_cover = round(current_stock / projected_rate, 1)
+            total_on_hand = sum(item.get("on_hand", item.get("current_stock", 0)) for item in batch_items)
+            total_reserved = sum(item.get("reserved", 0) for item in batch_items)
+            total_quarantined = sum(item.get("quarantined", 0) for item in batch_items)
+            total_available = sum(
+                item.get("available", max(0, item.get("on_hand", item.get("current_stock", 0)) - item.get("reserved", 0) - item.get("quarantined", 0)))
+                for item in batch_items
+            )
+
+            # Usable stock for dispensing is total_available
+            days_of_cover = round(total_available / projected_rate, 1)
 
             # Cumulative stockout probability within 7 days using Poisson-approximated demand
             # Expected 7-day demand = 7 * projected_rate
-            # Variance modeled with uncertainty factor
             expected_7d_demand = 7 * projected_rate
-            if current_stock <= 0:
+            if total_available <= 0:
                 stockout_prob = 1.0
             else:
-                # Normal approximation for demand distribution over 7 days
                 std_dev = math.sqrt(expected_7d_demand * 1.5)
-                z_score = (current_stock - expected_7d_demand) / (std_dev if std_dev > 0 else 1.0)
-                # 1 - CDF(z)
-                # Using error function approximation:
+                z_score = (total_available - expected_7d_demand) / (std_dev if std_dev > 0 else 1.0)
                 cdf = 0.5 * (1.0 + math.erf(z_score / math.sqrt(2.0)))
                 stockout_prob = max(0.0, min(1.0, round(1.0 - cdf, 3)))
 
-            # Expiry risk: will the stock expire before current consumption can deplete it?
+            # Expiry risk: evaluate batches under FEFO
+            batches_with_stock = [b for b in batch_items if b.get("available", b.get("on_hand", 0)) > 0] or batch_items
+            min_days_to_expiry = min(b.get("days_to_expiry", 365) for b in batches_with_stock)
             days_to_deplete = days_of_cover
-            days_to_expiry = item.get("days_to_expiry", 365)
-            expiry_risk = days_to_expiry < days_to_deplete and days_to_expiry <= 90
+            expiry_risk = any(
+                b.get("days_to_expiry", 365) < days_to_deplete and b.get("days_to_expiry", 365) <= 90
+                for b in batches_with_stock
+            )
 
             # Classification
             if days_of_cover < 4.0 or stockout_prob >= 0.75:
@@ -105,17 +120,19 @@ class SurgeEngine:
                 status = "HEALTHY"
 
             assessments.append(StockoutRiskAssessment(
-                facility_id=item["facility_id"],
-                facility_name=item["facility_name"],
+                facility_id=fac_id,
+                facility_name=first_item["facility_name"],
                 medicine_id=med_id,
-                medicine_name=item["medicine_name"],
-                current_stock=current_stock,
+                medicine_name=first_item["medicine_name"],
+                current_stock=total_available,
                 projected_daily_rate=projected_rate,
                 days_of_coverage=days_of_cover,
                 stockout_probability_7d=stockout_prob,
                 status=status,
                 expiry_risk=expiry_risk,
-                days_to_expiry=days_to_expiry
+                days_to_expiry=min_days_to_expiry,
+                on_hand=total_on_hand,
+                available=total_available
             ))
 
         return assessments

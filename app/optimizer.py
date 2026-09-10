@@ -1,7 +1,11 @@
 import math
 import uuid
-from typing import List, Dict, Tuple
-from app.models import StockoutRiskAssessment, TransferRecommendation, Facility
+from datetime import datetime, timezone
+from typing import List, Dict, Tuple, Any
+from app.models import (
+    StockoutRiskAssessment, TransferRecommendation, Facility,
+    UnmetDemandReport, EDL_PRODUCT_SPEC
+)
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculates great-circle distance in kilometers between two lat/lng coordinates."""
@@ -13,10 +17,22 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
     return round(R * c, 1)
 
+def get_batch_available(b: dict) -> int:
+    if "available" in b:
+        return b["available"]
+    on_hand = b.get("on_hand", b.get("current_stock", 0))
+    reserved = b.get("reserved", 0)
+    quarantined = b.get("quarantined", 0)
+    return max(0, on_hand - reserved - quarantined)
+
 class RedistributionOptimizer:
     def __init__(self, facilities: Dict[str, dict], max_distance_km: float = 35.0):
         self.facilities = facilities
         self.max_distance_km = max_distance_km
+        self.unmet_demands: List[UnmetDemandReport] = []
+
+    def get_unmet_demands(self) -> List[UnmetDemandReport]:
+        return self.unmet_demands
 
     def validate_transfer_invariants(
         self,
@@ -60,8 +76,13 @@ class RedistributionOptimizer:
         3. Minimize transit distance within maximum service radius (<= 35 km).
         4. Guarantee donor facility retains >= 14 days of surge-adjusted safety stock.
         """
-        # Index inventory by (facility_id, medicine_id)
-        inv_map = {(item["facility_id"], item["medicine_id"]): item for item in raw_inventory}
+        self.unmet_demands.clear()
+
+        # Group inventory by (facility_id, medicine_id) to handle multi-batch holdings
+        facility_med_batches: Dict[Tuple[str, str], List[dict]] = {}
+        for item in raw_inventory:
+            key = (item["facility_id"], item["medicine_id"])
+            facility_med_batches.setdefault(key, []).append(item)
 
         # Group assessments by medicine
         med_assessments: Dict[str, List[StockoutRiskAssessment]] = {}
@@ -92,6 +113,48 @@ class RedistributionOptimizer:
                 target_coverage_days = 14.0
                 units_needed = max(10, int((target_coverage_days - recipient.days_of_coverage) * recipient.projected_daily_rate))
 
+                # Record candidate evaluation reasons for all other facilities in corridor
+                rejections: List[Dict[str, Any]] = []
+
+                # Evaluate all potential corridor facilities
+                for other_id, other_fac in self.facilities.items():
+                    if other_id == recipient.facility_id:
+                        continue
+
+                    dist = haversine_distance(other_fac["lat"], other_fac["lng"], rec_fac["lat"], rec_fac["lng"])
+                    cand_assessment = next((a for a in assessments if a.facility_id == other_id), None)
+                    cand_batches = facility_med_batches.get((other_id, med_id), [])
+                    cand_avail = sum(get_batch_available(b) for b in cand_batches)
+                    cand_rate = cand_assessment.projected_daily_rate if cand_assessment else 15.0
+                    cand_cov = cand_assessment.days_of_coverage if cand_assessment else round(cand_avail / cand_rate, 1)
+                    cand_min_reserve = math.ceil(14.0 * cand_rate)
+
+                    if dist > self.max_distance_km:
+                        rejection_reason = f"Distance radius breach: {dist} km exceeds maximum transport radius ({self.max_distance_km} km)"
+                    elif cand_cov < 16.0:
+                        rejection_reason = (
+                            f"Clinical safety reserve breach: Coverage {cand_cov}d < 16.0d donor threshold; "
+                            f"available stock ({cand_avail}) <= 14-day safety reserve ({cand_min_reserve} units)"
+                        )
+                    elif not any(b.get("days_to_expiry", 365) >= 30 for b in cand_batches):
+                        rejection_reason = "Pharmaceutical safety: All batches expire in < 30 days"
+                    elif (cand_avail - cand_min_reserve) < 10:
+                        rejection_reason = f"Insufficient surplus: Available to give ({cand_avail - cand_min_reserve}) < pack size (10)"
+                    else:
+                        rejection_reason = "Candidate eligible but matched to higher priority or exhausted"
+
+                    rejections.append({
+                        "donor_facility_id": other_id,
+                        "donor_facility_name": other_fac["name"],
+                        "distance_km": dist,
+                        "donor_current_coverage_days": cand_cov,
+                        "donor_min_reserve_units": cand_min_reserve,
+                        "rejection_reason": rejection_reason
+                    })
+
+                # Sort rejections by distance for readable reporting
+                rejections.sort(key=lambda r: r["distance_km"])
+
                 for donor in donors:
                     if donor.facility_id == recipient.facility_id:
                         continue
@@ -104,27 +167,38 @@ class RedistributionOptimizer:
                     if dist > self.max_distance_km:
                         continue
 
-                    donor_inv = inv_map.get((donor.facility_id, med_id))
-                    if not donor_inv:
+                    donor_batches = facility_med_batches.get((donor.facility_id, med_id), [])
+                    if not donor_batches:
                         continue
 
                     # Donor must retain at least 14 days of surge-adjusted safety stock (strictly ceiling rounded)
                     min_donor_stock = math.ceil(14.0 * donor.projected_daily_rate)
 
-                    # Available stock considers reservations and quarantines
-                    donor_avail = donor_inv.get("available", donor_inv.get("on_hand", donor.current_stock))
+                    # Available stock considers reservations and quarantines across batches, bounded by remaining stock
+                    donor_avail = min(sum(get_batch_available(b) for b in donor_batches), donor.current_stock)
                     available_to_give = donor_avail - min_donor_stock
 
                     if available_to_give <= 0:
                         continue
 
                     # Packaging formula: Q = p * floor(max(0, Q_eligible) / p)
-                    pack_size = donor_inv.get("pack_size", 10) or 10
+                    pack_size = donor_batches[0].get("pack_size", 10) or 10
                     eligible = min(units_needed, available_to_give)
                     transfer_qty = pack_size * (max(0, eligible) // pack_size)
 
                     if transfer_qty <= 0 or (donor_avail - transfer_qty) < min_donor_stock:
                         continue
+
+                    # Select FEFO candidate batch for physical consignment
+                    fefo_candidates = [
+                        b for b in donor_batches
+                        if b.get("days_to_expiry", 365) >= 30 and get_batch_available(b) > 0
+                    ]
+                    fefo_candidates.sort(key=lambda b: b.get("days_to_expiry", 365))
+                    selected_batch = next(
+                        (b for b in fefo_candidates if get_batch_available(b) >= transfer_qty),
+                        fefo_candidates[0] if fefo_candidates else donor_batches[0]
+                    )
 
                     # Update projected coverages
                     rec_initial_days = recipient.days_of_coverage
@@ -158,8 +232,8 @@ class RedistributionOptimizer:
                         medicine_id=med_id,
                         medicine_name=recipient.medicine_name,
                         units_to_transfer=transfer_qty,
-                        batch_number=donor_inv.get("batch_number", "BAT-GEN-01"),
-                        batch_expiry_days=donor.days_to_expiry,
+                        batch_number=selected_batch.get("batch_number", "BAT-GEN-01"),
+                        batch_expiry_days=selected_batch.get("days_to_expiry", donor.days_to_expiry),
                         distance_km=dist,
                         recipient_initial_coverage_days=rec_initial_days,
                         recipient_new_coverage_days=rec_new_days,
@@ -184,6 +258,39 @@ class RedistributionOptimizer:
                     units_needed -= transfer_qty
                     if units_needed <= 0:
                         break
+
+                # If after checking all donors, there is still an unmet clinical deficit:
+                if units_needed > 0:
+                    spec = EDL_PRODUCT_SPEC.get(med_id, {
+                        "dosage_form": "General",
+                        "strength": "Standard",
+                        "unit": "units",
+                        "pack_size": 10
+                    })
+                    now_iso = datetime.now(timezone.utc).isoformat() + "Z"
+                    unmet = UnmetDemandReport(
+                        facility_id=recipient.facility_id,
+                        facility_name=recipient.facility_name,
+                        medicine_id=med_id,
+                        medicine_name=recipient.medicine_name,
+                        dosage_form=spec["dosage_form"],
+                        strength=spec["strength"],
+                        unit=spec["unit"],
+                        pack_size=spec.get("pack_size", 10),
+                        current_available=recipient.current_stock,
+                        projected_daily_rate=recipient.projected_daily_rate,
+                        days_of_coverage=recipient.days_of_coverage,
+                        shortage_severity=recipient.status,
+                        unmet_units_needed=units_needed,
+                        infeasibility_reason=(
+                            f"MACRO_DEFICIT_NO_SAFE_PEER_DONOR: 0 of {len(self.facilities) - 1} peer facilities in corridor "
+                            f"can donate without breaching their own 14-day clinical safety reserve under acute surge."
+                        ),
+                        rejection_breakdown=rejections,
+                        escalation_channel="DISTRICT_REPLENISHMENT_REQUISITION",
+                        timestamp=now_iso
+                    )
+                    self.unmet_demands.append(unmet)
 
         # Sort recommendations: highest impact first (expiry waste saved + short distance)
         recommendations.sort(key=lambda r: (0 if r.expiry_waste_prevented else 1, r.distance_km))

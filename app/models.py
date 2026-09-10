@@ -88,6 +88,81 @@ class StockoutRiskAssessment(BaseModel):
     status: str  # "CRITICAL", "WARNING", "HEALTHY", "SURPLUS"
     expiry_risk: bool
     days_to_expiry: int
+    on_hand: Optional[int] = None
+    available: Optional[int] = None
+
+# EDL-UP-2026 Canonical Pharmaceutical Product Specifications
+EDL_PRODUCT_SPEC: Dict[str, Dict[str, Any]] = {
+    "MED-001": {
+        "dosage_form": "Respirator Solution",
+        "strength": "2.5mg",
+        "unit": "Respules (vials)",
+        "base_unit": "Respule",
+        "pack_size": 10
+    },
+    "MED-002": {
+        "dosage_form": "Oral Powder Sachets",
+        "strength": "20.5g WHO Formula",
+        "unit": "Sachets",
+        "base_unit": "Sachet",
+        "pack_size": 10
+    },
+    "MED-003": {
+        "dosage_form": "Injection",
+        "strength": "4mg/ml",
+        "unit": "Ampoules",
+        "base_unit": "Ampoule",
+        "pack_size": 10
+    },
+    "MED-004": {
+        "dosage_form": "Tablets",
+        "strength": "625mg (500mg/125mg)",
+        "unit": "Strips (10 tabs)",
+        "base_unit": "Strip",
+        "pack_size": 10
+    },
+    "MED-005": {
+        "dosage_form": "IV Infusion",
+        "strength": "1000mg/100ml",
+        "unit": "Bottles",
+        "base_unit": "Bottle",
+        "pack_size": 10
+    },
+    "MED-006": {
+        "dosage_form": "Tablets",
+        "strength": "10mg",
+        "unit": "Strips (10 tabs)",
+        "base_unit": "Strip",
+        "pack_size": 10
+    }
+}
+
+class CandidateRejectionDetail(BaseModel):
+    donor_facility_id: str
+    donor_facility_name: str
+    distance_km: float
+    donor_current_coverage_days: float
+    donor_min_reserve_units: int
+    rejection_reason: str
+
+class UnmetDemandReport(BaseModel):
+    facility_id: str
+    facility_name: str
+    medicine_id: str
+    medicine_name: str
+    dosage_form: str
+    strength: str
+    unit: str
+    pack_size: int = 10
+    current_available: int
+    projected_daily_rate: float
+    days_of_coverage: float
+    shortage_severity: str  # "CRITICAL", "WARNING"
+    unmet_units_needed: int
+    infeasibility_reason: str
+    rejection_breakdown: List[Dict[str, Any]]
+    escalation_channel: str = "DISTRICT_REPLENISHMENT_REQUISITION"
+    timestamp: Optional[str] = None
 
 class TransferRecommendation(BaseModel):
     id: str

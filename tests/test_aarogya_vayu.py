@@ -533,3 +533,125 @@ def test_clinic_desk_endpoint_contract():
     assert cons_res.status_code == 200
     assert isinstance(cons_res.json(), list)
 
+
+def test_batch_aggregation_in_risk_engine():
+    """
+    Verify that multiple batches for the same facility and medicine are aggregated
+    into a single risk assessment with correct usable available stock and FEFO expiry.
+    """
+    env = EnvironmentalReading(aqi=385, smog_episode=True)
+    mock_multi_batch_inventory = [
+        {
+            "facility_id": "PHC-LKO-01",
+            "facility_name": "PHC Kakori",
+            "medicine_id": "MED-001",
+            "medicine_name": "Salbutamol Respirator Solution (Respules 2.5mg)",
+            "batch_number": "BAT-859-26",
+            "on_hand": 15,
+            "reserved": 0,
+            "quarantined": 0,
+            "available": 15,
+            "days_to_expiry": 180,
+            "daily_consumption_base": 20
+        },
+        {
+            "facility_id": "PHC-LKO-01",
+            "facility_name": "PHC Kakori",
+            "medicine_id": "MED-001",
+            "medicine_name": "Salbutamol Respirator Solution (Respules 2.5mg)",
+            "batch_number": "BAT-928-26",
+            "on_hand": 256,
+            "reserved": 0,
+            "quarantined": 6,
+            "available": 250,
+            "days_to_expiry": 60,
+            "daily_consumption_base": 20
+        }
+    ]
+
+    risks = surge_engine.assess_facility_risks(mock_multi_batch_inventory, env)
+    kakori_salbutamol = [r for r in risks if r.facility_id == "PHC-LKO-01" and r.medicine_id == "MED-001"]
+
+    # Exactly ONE assessment must exist, never duplicate records
+    assert len(kakori_salbutamol) == 1, f"Expected 1 aggregated risk record, got {len(kakori_salbutamol)}"
+    risk = kakori_salbutamol[0]
+
+    # Aggregated metrics
+    assert risk.on_hand == 271, f"Expected on_hand 271, got {risk.on_hand}"
+    assert risk.available == 265, f"Expected available 265, got {risk.available}"
+    assert risk.current_stock == 265, f"Expected current_stock (usable) 265, got {risk.current_stock}"
+    # FEFO expiry: minimum days across batches with available stock
+    assert risk.days_to_expiry == 60, f"Expected FEFO expiry 60d, got {risk.days_to_expiry}"
+    # Projected rate under smog (base 20 * 1.62 = 32.4)
+    expected_rate = 32.4
+    assert risk.projected_daily_rate == expected_rate
+    expected_cov = round(265 / expected_rate, 1)  # 8.2 days
+    assert risk.days_of_coverage == expected_cov
+    assert risk.status == "HEALTHY"  # >= 8.0 days
+
+
+def test_heatwave_ors_systemic_deficit_and_unmet_demand_escalation():
+    """
+    Verify that under acute 44.5°C heatwave, when peer-to-peer ORS redistribution is
+    mathematically impossible without compromising donor safety reserves, Aarogya-Vāyu
+    generates an explicit UnmetDemandReport with full product identity and donor exclusion proof.
+    """
+    # 1. Update environmental conditions to 44.5°C heatwave
+    heatwave_res = client.post("/api/environmental", json={
+        "aqi": 180,
+        "pm25": 90.0,
+        "temperature_c": 44.5,
+        "humidity_pct": 35.0,
+        "heatwave_alert": True,
+        "smog_episode": False,
+        "corridor": "Lucknow-Unnao Acute Heatwave Corridor"
+    })
+    assert heatwave_res.status_code == 200
+
+    # 2. Query Unmet Demands endpoint
+    unmet_res = client.get("/api/unmet-demands")
+    assert unmet_res.status_code == 200
+    unmet_reports = unmet_res.json()
+    assert len(unmet_reports) > 0, "Expected unmet demand reports under district-wide heatwave"
+
+    # 3. Verify CHC Malihabad ORS deficit
+    malihabad_ors = next(
+        (u for u in unmet_reports if u["facility_id"] == "CHC-LKO-02" and u["medicine_id"] == "MED-002"),
+        None
+    )
+    assert malihabad_ors is not None, "CHC Malihabad ORS must be flagged as an unmet clinical demand"
+
+    # Verify complete pharmaceutical product identity
+    assert malihabad_ors["medicine_name"] == "Oral Rehydration Salts (ORS Sachets, WHO Formula)"
+    assert malihabad_ors["dosage_form"] == "Oral Powder Sachets"
+    assert malihabad_ors["strength"] == "20.5g WHO Formula"
+    assert malihabad_ors["unit"] == "Sachets"
+    assert malihabad_ors["pack_size"] == 10
+
+    # Verify clinical arithmetic
+    # CHC Malihabad base rate 100 * 2.1 heat multiplier = 210.0 / day
+    assert malihabad_ors["projected_daily_rate"] == 210.0
+    # On-hand / available is 1,207 units -> 5.7 days of coverage (stockout prob >= 0.75 within 7d -> CRITICAL)
+    assert malihabad_ors["days_of_coverage"] == 5.7
+    assert malihabad_ors["shortage_severity"] == "CRITICAL"
+    # Target 14.0d -> (14.0 - 5.7) * 210 = 1,743 units needed
+    assert malihabad_ors["unmet_units_needed"] > 1700
+
+    # Verify escalation and mathematical rejection breakdown
+    assert malihabad_ors["escalation_channel"] == "DISTRICT_REPLENISHMENT_REQUISITION"
+    assert "MACRO_DEFICIT_NO_SAFE_PEER_DONOR" in malihabad_ors["infeasibility_reason"]
+    assert len(malihabad_ors["rejection_breakdown"]) == 19  # All 19 peer facilities evaluated
+
+    # Check that nearby candidate facility CHC Nawabganj (31.6 km) was rejected for clinical reserve preservation
+    nawabganj = next((r for r in malihabad_ors["rejection_breakdown"] if r["donor_facility_id"] == "CHC-UNN-01"), None)
+    assert nawabganj is not None
+    assert nawabganj["distance_km"] <= 35.0
+    assert "Clinical safety reserve breach" in nawabganj["rejection_reason"]
+
+    # Check that CHC Safipur (41.3 km) was rejected due to transport distance radius limit
+    safipur = next((r for r in malihabad_ors["rejection_breakdown"] if r["donor_facility_id"] == "CHC-UNN-03"), None)
+    assert safipur is not None
+    assert safipur["distance_km"] > 35.0
+    assert "Distance radius breach" in safipur["rejection_reason"]
+
+
