@@ -1115,5 +1115,30 @@
     },
     "prev_hash": "726a7623f2e53a478a0ad02b29e4cda2a7be022fce0178ad22dee4be83276177",
     "current_hash": "cd130de6c06ea91059177f85c2c55b4f3758a176107b7f22003cb9d6e820b599"
+  },
+  {
+    "index": 76,
+    "timestamp": "2026-09-12T19:25:42.076169Z",
+    "event_type": "CMO_STRATEGIC_QUERY",
+    "approved_by": "DR_SAXENA_CMO",
+    "details": {
+      "question": "What if this smog inversion lasts for 5 more days? Which facilities will stock out first?",
+      "query_type": "WHAT_IF_SURGE_SIMULATION"
+    },
+    "prev_hash": "cd130de6c06ea91059177f85c2c55b4f3758a176107b7f22003cb9d6e820b599",
+    "current_hash": "b9f4b8fe587caeaa92c8b49a14a1eadeb68e2ec7e04996e0c5fd0d5fcf5103e5"
+  },
+  {
+    "index": 77,
+    "timestamp": "2026-09-12T19:27:17.190096Z",
+    "event_type": "CMO_STRATEGIC_QUERY",
+    "approved_by": "DR_SAXENA_CMO",
+    "details": {
+      "question": "What if this smog inversion lasts for 5 more days? Which facilities will stock out first?",
+      "query_type": "WHAT_IF_SURGE_SIMULATION",
+      "region": "bhubaneswar"
+    },
+    "prev_hash": "b9f4b8fe587caeaa92c8b49a14a1eadeb68e2ec7e04996e0c5fd0d5fcf5103e5",
+    "current_hash": "770c93938fdb0cff4b7720779db5e996a81ae969f2a0830ffa3cd32a1b592fdd"
   }
 ]

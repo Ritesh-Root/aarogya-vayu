@@ -1655,7 +1655,7 @@ async function submitCmoQuery() {
     const res = await fetch('/api/cmo/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question })
+      body: JSON.stringify({ question, region: currentRegion })
     });
 
     const data = await res.json();

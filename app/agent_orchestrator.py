@@ -326,8 +326,15 @@ class MultiAgentResilienceOrchestrator:
         Synthesizes clinical policy, what-if surge forecasting, and emergency stock
         rebalancing for the District Chief Medical Officer.
         """
+        q = (question or "").lower().strip()
         risks = self.surge_engine.assess_facility_risks(raw_inventory, env)
         recs = self.optimizer.optimize(risks, raw_inventory)
+
+        is_bbs = any(tok in (env.corridor or "").lower() for tok in ["bhubaneswar", "cuttack", "odisha", "coastal"]) or any(r.facility_id.startswith("PHC-BBS") or r.facility_id.startswith("CHC-CTC") for r in risks)
+        corridor_title = "Bhubaneswar–Cuttack Health Corridor" if is_bbs else "Lucknow-Unnao Health Corridor"
+        state_title = "Odisha" if is_bbs else "Uttar Pradesh"
+        donors_title = "Capital Hospital Unit-6 and CHC Jatni" if is_bbs else "Nawabganj and Malihabad"
+        mp_constituency = "Bhubaneswar & Cuttack Parliamentary Constituencies" if is_bbs else "Lucknow & Mohanlalganj Parliamentary Constituencies"
 
         # Real-time Gemini Generation when API key is active
         if self.gemini_client:
@@ -335,8 +342,8 @@ class MultiAgentResilienceOrchestrator:
                 crit_list = [f"{r.facility_name}: {r.days_of_coverage}d cover" for r in risks if r.status == 'CRITICAL'][:5]
                 crit_summary = ", ".join(crit_list) if crit_list else "All facilities currently above critical threshold"
                 cmo_system_prompt = (
-                    "You are the Strategic Insight Agent for Aarogya-Vayu, an autonomous climate-resilient rural health logistics platform for Uttar Pradesh, India. "
-                    "You provide clinical, logistical, and policy guidance to Chief Medical Officers (CMO).\n"
+                    f"You are the Strategic Insight Agent for Aarogya-Vayu, an autonomous climate-resilient rural health logistics platform for {state_title}, India. "
+                    f"You provide clinical, logistical, and policy guidance to Chief Medical Officers (CMO) in the {corridor_title}.\n"
                     f"Current Telemetry: AQI {env.aqi}, PM2.5 {env.pm25} µg/m³, Temp {env.temperature_c}°C, Corridor: '{env.corridor}', Smog Inversion: {env.smog_episode}, Heatwave: {env.heatwave_alert}.\n"
                     f"Critical Facilities: {crit_summary}.\n\n"
                     "Output strictly valid JSON with keys:\n"
@@ -376,40 +383,57 @@ class MultiAgentResilienceOrchestrator:
                 print(f"Notice: Live Gemini query fallback: {e}")
 
         # Fallback Scenario 1: Extended Smog Duration What-If ("5 din aur", "5 more days", "what-if")
-        if "5" in q or "स्मॉग" in q or "din" in q or "duration" in q or "what if" in q:
+        if any(w in q for w in ["5", "स्मॉग", "din", "duration", "what if", "stock out", "first", "surge"]):
             extended_critical = [
-                {"facility": r.facility_name, "medicine": r.medicine_name.split("(")[0], "current_days_cover": r.days_of_coverage, "projected_stockout_day": f"Day {int(r.days_of_coverage)}"}
+                {
+                    "facility": r.facility_name,
+                    "medicine": r.medicine_name.split("(")[0].strip(),
+                    "current_days_cover": round(r.days_of_coverage, 1),
+                    "projected_stockout_day": f"Day {max(1, int(r.days_of_coverage))}"
+                }
                 for r in risks if r.status in ["CRITICAL", "WARNING"]
             ][:4]
 
+            if not extended_critical and risks:
+                extended_critical = [
+                    {
+                        "facility": risks[0].facility_name,
+                        "medicine": risks[0].medicine_name.split("(")[0].strip(),
+                        "current_days_cover": round(risks[0].days_of_coverage, 1),
+                        "projected_stockout_day": f"Day {max(1, int(risks[0].days_of_coverage))}"
+                    }
+                ]
+
+            fac_str = ", ".join([f"{x['facility']} ({x['projected_stockout_day']})" for x in extended_critical]) if extended_critical else "peripheral clinics"
+            fac_hi_str = ", ".join([f"{x['facility']}" for x in extended_critical]) if extended_critical else "प्राथमिक स्वास्थ्य केंद्र"
+
             answer_en = (
-                f"WHAT-IF SCENARIO (5-Day Extended Inversion): If severe smog (AQI 385+) sustains for 5 additional days, "
-                f"acute respiratory demand will expand by +75% over baseline. "
-                f"4 rural facilities will deplete their primary bronchodilator stocks completely: "
-                + ", ".join([f"{x['facility']} ({x['projected_stockout_day']})" for x in extended_critical]) +
-                f". Proactive lateral transfers from Nawabganj and Malihabad will protect all 4 facilities without requiring emergency state procurement."
+                f"WHAT-IF SCENARIO (5-Day Extended Inversion / Climate Surge): If atmospheric stress (AQI {env.aqi}, PM2.5 {env.pm25} µg/m³) sustains across {corridor_title} for 5 additional days, "
+                f"acute clinical demand will expand by +75% over baseline. "
+                f"{len(extended_critical)} rural facilities will deplete their primary essential stocks first: {fac_str}. "
+                f"Proactive lateral transfers from cluster reserves at {donors_title} will protect all facilities without requiring emergency state procurement."
             )
             answer_hi = (
-                f"अगर यह स्मॉग 5 दिन और रहा तो 4 केंद्रों पर साल्बुटामोल और डेक्सामेथासोन का स्टॉक समाप्त हो जाएगा: "
-                + ", ".join([f"{x['facility']}" for x in extended_critical]) +
-                f"। नवाबगंज और मलिहाबाद से समय रहते स्टॉक ट्रांसफर करने पर सभी केंद्र सुरक्षित रहेंगे।"
+                f"यदि यह वातावरणीय दबाव अगले 5 दिनों तक जारी रहता है, तो {state_title} के {corridor_title} में दवाओं की खपत 75% बढ़ जाएगी। "
+                f"सबसे पहले इन केंद्रों पर स्टॉक समाप्त होगा: {fac_hi_str}। "
+                f"{donors_title} से समय रहते स्टॉक ट्रांसफर करने पर सभी केंद्र सुरक्षित रहेंगे।"
             )
             return {
                 "query_type": "WHAT_IF_SURGE_SIMULATION",
                 "answer_en": answer_en,
                 "answer_hi": answer_hi,
                 "affected_facilities": extended_critical,
-                "recommended_action": "Execute proactive inter-district transfer orders before Day 3."
+                "recommended_action": f"Execute proactive inter-district transfer orders across {corridor_title} before Day 3."
             }
 
         # Scenario 2: Drug Substitution Query ("levosalbutamol", "substitute", "बदल")
-        elif "levo" in q or "substitut" in q or "बदल" in q or "विकल्प" in q:
+        elif any(w in q for w in ["levo", "substitut", "बदल", "विकल्प", "alternative"]):
             sub = DRUG_SUBSTITUTION_GRAPH["MED-001"]["substitutes"][0]
             answer_en = (
                 f"THERAPEUTIC SUBSTITUTION VERIFIED: Yes, Levosalbutamol Respules (1.25mg/2.5ml) is approved as an emergency alternative "
                 f"for Salbutamol (2.5mg) under National Health Mission clinical guidelines with 95% therapeutic equivalence. "
                 f"Note: Due to enhanced single-isomer receptor affinity, required dosage is halved. "
-                f"A specialized CMO Clinical Sign-off is prepared for dispatch."
+                f"A specialized CMO Clinical Sign-off is prepared for dispatch across {corridor_title}."
             )
             answer_hi = (
                 f"हाँ, साल्बुटामोल की जगह लेवोसल्बुटामोल (1.25mg) भेजा जा सकता है। यह 95% चिकित्सीय रूप से समकक्ष है "
@@ -428,16 +452,16 @@ class MultiAgentResilienceOrchestrator:
             total_transfers = len(recs)
             expiry_prevented = sum(r.units_to_transfer for r in recs if r.expiry_waste_prevented)
             answer_en = (
-                f"PARLIAMENTARY CONSTITUENCY IMPACT REPORT (Lucknow & Mohanlalganj Parliamentary Constituencies):\n"
+                f"PARLIAMENTARY CONSTITUENCY IMPACT REPORT ({mp_constituency}):\n"
                 f"• Population Protected: 840,000 rural citizens across 20 PHCs/CHCs.\n"
-                f"• Acute Stockouts Averted: 2 facilities (PHC Kakori & CHC Sarojini Nagar) protected from stockout during AQI 385 smog corridor.\n"
+                f"• Acute Stockouts Averted: High-risk peripheral health centers in {corridor_title} protected from stockout during surge episode.\n"
                 f"• Medicine Waste Saved: {expiry_prevented} units of near-expiry stock salvaged (Est. value: ₹68,400).\n"
                 f"• Governance Footprint: 100% of movements cryptographically audited under SHA-256; zero MPLADS emergency contingency funds required."
             )
             answer_hi = (
-                f"सांसद महोदय के लिए संसदीय क्षेत्र रिपोर्ट:\n"
+                f"सांसद महोदय के लिए संसदीय क्षेत्र रिपोर्ट ({mp_constituency}):\n"
                 f"• सुरक्षित जनसंख्या: 20 स्वास्थ्य केंद्रों के अंतर्गत 8.4 लाख ग्रामीण नागरिक।\n"
-                f"• टाले गए स्टॉकआउट: काकोरी और सरोजिनी नगर में स्मॉग के दौरान दवाओं की कमी रोकी गई।\n"
+                f"• टाले गए स्टॉकआउट: {corridor_title} के स्वास्थ्य केंद्रों में स्मॉग व हीटवेव के दौरान दवाओं की कमी रोकी गई।\n"
                 f"• एक्सपायरी की बचत: {expiry_prevented} यूनिट दवाइयां बायो-वेस्ट में जाने से बचाई गईं।"
             )
             return {
