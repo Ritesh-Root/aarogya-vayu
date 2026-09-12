@@ -146,6 +146,11 @@ let currentInspectFacilityId = null;
 let isSpeaking = false;
 let currentTelemetry = null;
 
+// Regional News & Intelligence Bureau State
+let allNewsArticles = [];
+let activeNewsCategory = 'all';
+let activeNewsSearch = '';
+
 document.addEventListener('DOMContentLoaded', async () => {
   initMap();
   await loadInitialData();
@@ -257,6 +262,7 @@ async function switchRegion(regionId) {
   await fetchRisks();
   await fetchRecommendations();
   await fetchAuditLog();
+  await fetchNews(regionId);
   await loadClinicDesk(currentClinicFacilityId);
 }
 
@@ -284,6 +290,7 @@ async function loadInitialData() {
     await fetchRisks();
     await fetchRecommendations();
     await fetchAuditLog();
+    await fetchNews();
     await loadClinicDesk(currentClinicFacilityId);
   } catch (err) {
     console.error("Initialization error:", err);
@@ -1921,7 +1928,8 @@ function switchTab(tab) {
     'agents': document.getElementById('nav-agents'),
     'cmo': document.getElementById('nav-cmo'),
     'vision': document.getElementById('nav-vision'),
-    'ledger': document.getElementById('nav-ledger')
+    'ledger': document.getElementById('nav-ledger'),
+    'news': document.getElementById('nav-news')
   };
 
   Object.entries(navItems).forEach(([key, el]) => {
@@ -1949,6 +1957,8 @@ function switchTab(tab) {
     runVisionVerification();
   } else if (tab === 'ledger') {
     openLedgerModal();
+  } else if (tab === 'news') {
+    openNewsModal();
   } else {
     const canvas = document.getElementById('mainCanvas');
     if (canvas) {
@@ -3270,5 +3280,201 @@ function closeStockMovementRegister() {
   const modal = document.getElementById('stockMovementRegisterModal');
   if (modal) modal.classList.add('hidden');
 }
+
+// ==========================================
+// Regional Health & Climate News Bureau
+// ==========================================
+async function fetchNews(region = null) {
+  const reg = region || currentRegion;
+  try {
+    const res = await fetch(`/api/news?region=${reg}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    allNewsArticles = data.articles || [];
+
+    // Update live news ticker with top headline
+    const ticker = document.getElementById('liveNewsTicker');
+    if (ticker && allNewsArticles.length > 0) {
+      const top = allNewsArticles[0];
+      const prefix = top.severity === 'critical' ? '🔴' : (top.severity === 'warning' ? '🟡' : '🟢');
+      ticker.innerHTML = `${prefix} <span class="font-extrabold text-clay-terracotta">[${escapeHtml(top.source.split(' ')[0])}]:</span> <span>${escapeHtml(top.title)}</span> &bull; <span class="text-xs font-normal text-clay-muted">(${escapeHtml(top.published_at)})</span>`;
+    }
+
+    // Update region badge in news modal
+    const badge = document.getElementById('newsRegionBadge');
+    if (badge) {
+      badge.textContent = (reg === 'bhubaneswar' ? 'Bhubaneswar–Cuttack (OD)' : 'Lucknow–Unnao (UP)');
+    }
+
+    renderNewsList();
+  } catch (err) {
+    console.error("fetchNews error:", err);
+  }
+}
+
+function renderNewsList() {
+  const container = document.getElementById('newsArticlesList');
+  if (!container) return;
+
+  const q = (activeNewsSearch || '').toLowerCase().trim();
+  const cat = activeNewsCategory;
+
+  let filtered = allNewsArticles.filter(item => {
+    if (cat !== 'all' && item.category.toLowerCase() !== cat.toLowerCase()) return false;
+    if (q) {
+      const haystack = `${item.title} ${item.summary} ${item.source} ${item.district} ${(item.related_medicines || []).join(' ')}`.toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div class="text-center py-10 bg-clay-inner rounded-3xl border border-clay-salmon/20 p-6 space-y-2">
+        <p class="text-clay-dark font-extrabold text-base">No news dispatches found</p>
+        <p class="text-clay-muted text-xs">Try clearing the search filter or selecting 'All Dispatches'</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = '';
+
+  const catEmojiMap = {
+    'climate': '☀️ Climate & Heatwave',
+    'air_quality': '🌫️ Air Quality & Inversion',
+    'epidemic': '🦠 Epidemic Alert',
+    'supply_chain': '💊 Medical Supply Chain',
+    'clinical': '📋 Clinical Guideline'
+  };
+
+  const severityBadgeMap = {
+    'critical': '<span class="bg-red-100 text-red-700 border border-red-200 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">🚨 Critical Emergency</span>',
+    'warning': '<span class="bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">⚠️ Surveillance Alert</span>',
+    'info': '<span class="bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">ℹ️ Official Notice</span>'
+  };
+
+  filtered.forEach(art => {
+    const card = document.createElement('div');
+    card.className = 'bg-white rounded-3xl p-4 sm:p-5 border border-clay-salmon/20 shadow-sm hover:shadow-md transition space-y-3';
+
+    // Build medicine badges
+    const medBadges = (art.related_medicines || []).map(mid => {
+      const medName = mid === 'MED-001' ? 'Salbutamol' : (mid === 'MED-002' ? 'ORS' : (mid === 'MED-003' ? 'Dexamethasone' : (mid === 'MED-004' ? 'Amoxicillin' : 'Paracetamol')));
+      return `<button onclick="filterMedicine('${mid}'); closeNewsModal();" class="text-[11px] bg-clay-inner hover:bg-clay-bg text-clay-terracotta border border-clay-salmon/30 font-bold px-2.5 py-0.5 rounded-full transition cursor-pointer" title="Filter dashboard for ${medName}">${mid} &bull; ${medName}</button>`;
+    }).join(' ');
+
+    const catLabel = catEmojiMap[art.category] || '📰 General Health';
+    const sevBadge = severityBadgeMap[art.severity] || severityBadgeMap['info'];
+
+    card.innerHTML = `
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+        <div class="flex items-center space-x-2">
+          ${sevBadge}
+          <span class="text-xs font-bold text-clay-muted">${catLabel}</span>
+        </div>
+        <span class="text-xs font-semibold text-clay-muted flex items-center space-x-1">
+          <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+          <span>${escapeHtml(art.published_at)}</span>
+        </span>
+      </div>
+
+      <div>
+        <h4 class="text-sm sm:text-base font-extrabold text-clay-dark leading-snug hover:text-clay-terracotta transition cursor-pointer" onclick="simulateNewsImpact('${art.id}')">
+          ${escapeHtml(art.title)}
+        </h4>
+        <p class="text-xs text-clay-muted font-medium mt-1.5 leading-relaxed">
+          ${escapeHtml(art.summary)}
+        </p>
+      </div>
+
+      <!-- Clinical & Supply Chain Impact Box -->
+      <div class="bg-clay-inner rounded-2xl p-3 border border-clay-salmon/20 space-y-2">
+        <div class="flex flex-wrap items-center justify-between gap-1 text-xs">
+          <div class="flex items-center space-x-1 text-clay-terracotta font-extrabold">
+            <i data-lucide="activity" class="w-3.5 h-3.5"></i>
+            <span>Projected Impact:</span>
+          </div>
+          <span class="text-clay-dark font-black">${escapeHtml(art.clinical_impact)}</span>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-clay-salmon/15 text-xs">
+          <div class="flex items-center space-x-1.5">
+            <span class="text-[11px] font-bold text-clay-muted">Target EDL:</span>
+            <div class="flex flex-wrap gap-1">${medBadges}</div>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button onclick="simulateNewsImpact('${art.id}')" class="text-xs bg-clay-terracotta hover:bg-clay-terracottaDark text-white px-3.5 py-1.5 rounded-full font-black shadow-clay-btn transition flex items-center space-x-1 cursor-pointer">
+              <span>${escapeHtml(art.action_label || 'Analyze Impact')}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between text-[11px] text-clay-muted font-medium pt-0.5">
+        <span>Verified Source: <strong class="text-clay-dark font-bold">${escapeHtml(art.source)}</strong> &bull; District: <strong class="text-clay-dark">${escapeHtml(art.district)}</strong></span>
+      </div>
+    `;
+
+    container.appendChild(card);
+  });
+
+  if (window.lucide) lucide.createIcons();
+}
+
+function openNewsModal() {
+  const m = document.getElementById('newsModal');
+  if (m) m.classList.remove('hidden');
+  fetchNews();
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeNewsModal() {
+  const m = document.getElementById('newsModal');
+  if (m) m.classList.add('hidden');
+}
+
+function filterNewsCategory(cat) {
+  activeNewsCategory = cat;
+  const pills = ['all', 'climate', 'air_quality', 'epidemic', 'supply_chain', 'clinical'];
+  pills.forEach(p => {
+    const el = document.getElementById(`newsCat-${p}`);
+    if (!el) return;
+    if (p === cat) {
+      el.className = 'px-3 py-1.5 rounded-full text-xs font-black bg-clay-terracotta text-white shadow-sm transition cursor-pointer';
+    } else {
+      el.className = 'px-3 py-1.5 rounded-full text-xs font-bold bg-clay-inner text-clay-dark border border-clay-salmon/20 hover:bg-white transition cursor-pointer';
+    }
+  });
+  renderNewsList();
+}
+
+function onNewsSearchInput(val) {
+  activeNewsSearch = (val || '').trim().toLowerCase();
+  renderNewsList();
+}
+
+function simulateNewsImpact(articleId) {
+  const art = allNewsArticles.find(a => a.id === articleId);
+  if (!art) return;
+
+  closeNewsModal();
+
+  if (art.category === 'climate') {
+    switchScenario('heat');
+  } else if (art.category === 'air_quality') {
+    switchScenario('smog');
+  }
+
+  if (art.related_medicines && art.related_medicines.length > 0) {
+    filterMedicine(art.related_medicines[0]);
+  }
+
+  if (art.target_facility_id) {
+    setTimeout(() => {
+      openFacilityDetail(art.target_facility_id);
+    }, 350);
+  }
+}
+
 
 

@@ -28,6 +28,7 @@ from app.optimizer import RedistributionOptimizer
 from app.voice_service import VoiceIntakeService
 from app.audit_ledger import AuditLedger
 from app.agent_orchestrator import MultiAgentResilienceOrchestrator
+from app.news_service import news_service
 
 app = FastAPI(
     title="Aarogya-Vāyu API",
@@ -276,6 +277,16 @@ async def get_facilities(region: Optional[str] = None):
 @app.get("/api/medicines")
 async def get_medicines():
     return medicines_data
+
+@app.get("/api/news")
+async def get_news(region: Optional[str] = None, category: Optional[str] = None, search: Optional[str] = None):
+    reg = (region or active_region_id).lower()
+    articles = news_service.get_news(region=reg, category=category, search=search)
+    return {
+        "region": reg,
+        "total": len(articles),
+        "articles": [a.model_dump() for a in articles]
+    }
 
 @app.get("/api/system/capabilities")
 async def get_system_capabilities():

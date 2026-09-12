@@ -230,6 +230,9 @@
         <button id="nav-ledger" onclick="switchTab('ledger')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="Cryptographic Audit Ledger">
           <i data-lucide="shield-check" class="w-5 h-5"></i>
         </button>
+        <button id="nav-news" onclick="switchTab('news')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="Regional Health & Climate News Bureau">
+          <i data-lucide="newspaper" class="w-5 h-5"></i>
+        </button>
       </nav>
 
       <!-- Bottom Help / User Profile -->
@@ -300,6 +303,23 @@
         </div>
 
       </header>
+
+      <!-- Live Regional News & Climate Intelligence Ticker -->
+      <div class="flex items-center justify-between bg-white/95 backdrop-blur-md border border-clay-salmon/25 rounded-2xl px-4 py-2.5 shadow-sm hover:shadow-md transition">
+        <div class="flex items-center space-x-3 flex-1 min-w-0">
+          <span class="flex items-center space-x-1.5 bg-red-100 text-red-700 px-2.5 py-1 rounded-full text-xs font-black tracking-wide uppercase flex-shrink-0">
+            <span class="w-2 h-2 rounded-full bg-red-600 animate-ping"></span>
+            <span>🚨 Live News</span>
+          </span>
+          <div id="liveNewsTicker" onclick="openNewsModal()" class="text-xs sm:text-sm font-bold text-clay-dark truncate cursor-pointer hover:text-clay-terracotta transition" title="Click to open Regional Health & Climate News Bureau">
+            Loading latest regional health &amp; climate bulletins...
+          </div>
+        </div>
+        <button onclick="openNewsModal()" class="ml-3 text-xs font-black text-clay-terracotta hover:text-clay-terracottaDark bg-clay-inner px-3.5 py-1.5 rounded-full border border-clay-salmon/20 flex-shrink-0 flex items-center space-x-1 shadow-sm transition cursor-pointer">
+          <i data-lucide="newspaper" class="w-3.5 h-3.5 mr-1"></i>
+          <span>News Bureau &rarr;</span>
+        </button>
+      </div>
 
       <!-- DISTRICT COMMAND CENTER VIEW CONTAINER -->
       <div id="districtViewContainer" class="flex flex-col gap-6 flex-1">
@@ -1062,6 +1082,69 @@
           <span>Print Challan</span>
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Regional Health & Environmental News Bureau Modal -->
+  <div id="newsModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-[2.5rem] max-w-4xl w-full p-6 sm:p-7 space-y-4 shadow-2xl border border-clay-salmon/30 max-h-[90vh] flex flex-col">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3.5">
+        <div class="flex items-center space-x-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-clay-terracotta text-white flex items-center justify-center font-bold shadow-clay-btn">
+            <i data-lucide="newspaper" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <h3 class="text-lg sm:text-xl font-black text-clay-dark">Regional Health &amp; Climate Intelligence Bureau</h3>
+              <span id="newsRegionBadge" class="bg-clay-terracotta/10 text-clay-terracotta text-xs font-black px-2.5 py-0.5 rounded-full border border-clay-salmon/20">
+                Bhubaneswar–Cuttack (OD)
+              </span>
+            </div>
+            <p class="text-xs sm:text-sm text-clay-muted font-medium">
+              Multi-source IMD meteorological bulletins, State Pollution Control Board advisories &amp; Medical Corporation dispatches
+            </p>
+          </div>
+        </div>
+        <button onclick="closeNewsModal()" class="text-slate-400 hover:text-slate-600 text-3xl font-bold leading-none cursor-pointer">&times;</button>
+      </div>
+
+      <!-- Controls: Category Filter Chips & Search Bar -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <!-- Category Filter Pills -->
+        <div class="flex flex-wrap items-center gap-1.5" id="newsCategoryPills">
+          <button onclick="filterNewsCategory('all')" id="newsCat-all" class="px-3 py-1.5 rounded-full text-xs font-black bg-clay-terracotta text-white shadow-sm transition cursor-pointer">All Dispatches</button>
+          <button onclick="filterNewsCategory('climate')" id="newsCat-climate" class="px-3 py-1.5 rounded-full text-xs font-bold bg-clay-inner text-clay-dark border border-clay-salmon/20 hover:bg-white transition cursor-pointer">☀️ Heat &amp; Climate</button>
+          <button onclick="filterNewsCategory('air_quality')" id="newsCat-air_quality" class="px-3 py-1.5 rounded-full text-xs font-bold bg-clay-inner text-clay-dark border border-clay-salmon/20 hover:bg-white transition cursor-pointer">🌫️ Air Quality</button>
+          <button onclick="filterNewsCategory('epidemic')" id="newsCat-epidemic" class="px-3 py-1.5 rounded-full text-xs font-bold bg-clay-inner text-clay-dark border border-clay-salmon/20 hover:bg-white transition cursor-pointer">🦠 Epidemic Surges</button>
+          <button onclick="filterNewsCategory('supply_chain')" id="newsCat-supply_chain" class="px-3 py-1.5 rounded-full text-xs font-bold bg-clay-inner text-clay-dark border border-clay-salmon/20 hover:bg-white transition cursor-pointer">💊 Drug Logistics</button>
+          <button onclick="filterNewsCategory('clinical')" id="newsCat-clinical" class="px-3 py-1.5 rounded-full text-xs font-bold bg-clay-inner text-clay-dark border border-clay-salmon/20 hover:bg-white transition cursor-pointer">📋 Clinical Guidelines</button>
+        </div>
+
+        <!-- Live Search Filter -->
+        <div class="relative min-w-[220px]">
+          <i data-lucide="search" class="w-4 h-4 text-clay-muted absolute left-3 top-1/2 -translate-y-1/2"></i>
+          <input type="text" id="newsSearchInput" oninput="onNewsSearchInput(this.value)" placeholder="Search news or medicine..." class="w-full bg-clay-inner border border-clay-salmon/20 rounded-full py-1.5 pl-9 pr-3 text-xs text-clay-dark focus:outline-none focus:ring-2 focus:ring-clay-salmon font-medium">
+        </div>
+      </div>
+
+      <!-- News Articles Cards Stream -->
+      <div id="newsArticlesList" class="flex-1 overflow-y-auto custom-scrollbar space-y-3.5 pr-1">
+        <!-- Rendered dynamically by renderNewsList() -->
+      </div>
+      
+      <!-- Footer Note -->
+      <div class="border-t border-slate-100 pt-3 flex items-center justify-between text-xs text-clay-muted font-medium">
+        <span class="flex items-center space-x-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>Feeds synchronized with State Surveillance Unit &amp; CAAQMS automated streams</span>
+        </span>
+        <button onclick="closeNewsModal()" class="text-clay-terracotta hover:underline font-bold cursor-pointer">
+          Close Intelligence Feed
+        </button>
+      </div>
+
     </div>
   </div>
 

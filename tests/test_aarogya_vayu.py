@@ -714,4 +714,38 @@ def test_bhubaneswar_multi_region_capabilities_and_routing():
     assert switch_back.json()["active_region"] == "lucknow"
 
 
+def test_regional_news_feed():
+    """Verify regional health and environmental news bureau API dispatches, filtering, and search."""
+    # 1. Default / Bhubaneswar feed
+    res_bbs = client.get("/api/news?region=bhubaneswar")
+    assert res_bbs.status_code == 200
+    bbs_data = res_bbs.json()
+    assert bbs_data["region"] == "bhubaneswar"
+    assert bbs_data["total"] >= 5
+    assert any("Bhubaneswar" in a["title"] or "Odisha" in a["source"] or "OSMCL" in a["title"] for a in bbs_data["articles"])
+
+    # 2. Lucknow feed
+    res_lko = client.get("/api/news?region=lucknow")
+    assert res_lko.status_code == 200
+    lko_data = res_lko.json()
+    assert lko_data["region"] == "lucknow"
+    assert lko_data["total"] >= 4
+    assert any("Lucknow" in a["title"] or "UPPCB" in a["title"] or "UPMSCL" in a["title"] for a in lko_data["articles"])
+
+    # 3. Category filtering
+    res_cat = client.get("/api/news?region=bhubaneswar&category=climate")
+    assert res_cat.status_code == 200
+    cat_data = res_cat.json()
+    assert len(cat_data["articles"]) > 0
+    assert all(a["category"] == "climate" for a in cat_data["articles"])
+
+    # 4. Keyword search
+    res_search = client.get("/api/news?region=bhubaneswar&search=salbutamol")
+    assert res_search.status_code == 200
+    search_data = res_search.json()
+    assert len(search_data["articles"]) >= 1
+    assert "Salbutamol" in search_data["articles"][0]["title"] or "salbutamol" in search_data["articles"][0]["summary"].lower()
+
+
+
 
