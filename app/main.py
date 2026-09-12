@@ -29,6 +29,7 @@ from app.voice_service import VoiceIntakeService
 from app.audit_ledger import AuditLedger
 from app.agent_orchestrator import MultiAgentResilienceOrchestrator
 from app.news_service import news_service
+from app.telemetry_service import telemetry_service
 
 app = FastAPI(
     title="Aarogya-Vāyu API",
@@ -279,12 +280,18 @@ async def get_medicines():
     return medicines_data
 
 @app.get("/api/news")
-async def get_news(region: Optional[str] = None, category: Optional[str] = None, search: Optional[str] = None):
+async def get_news(
+    region: Optional[str] = None,
+    category: Optional[str] = None,
+    search: Optional[str] = None,
+    force_refresh: bool = False
+):
     reg = (region or active_region_id).lower()
-    articles = news_service.get_news(region=reg, category=category, search=search)
+    articles = news_service.get_news(region=reg, category=category, search=search, force_refresh=force_refresh)
     return {
         "region": reg,
         "total": len(articles),
+        "live_count": sum(1 for a in articles if a.is_live),
         "articles": [a.model_dump() for a in articles]
     }
 
@@ -313,13 +320,66 @@ async def get_system_capabilities():
     }
 
 @app.get("/api/environmental")
-async def get_environmental(region: Optional[str] = None):
+async def get_environmental(region: Optional[str] = None, live: bool = False):
     reg = (region or active_region_id).lower()
-    reg_env = current_env_by_region.get(reg, current_env)
+    if live:
+        reg_env = telemetry_service.fetch_live_reading(region=reg)
+        current_env_by_region[reg] = reg_env
+        if reg == active_region_id:
+            global current_env
+            current_env = reg_env
+        recompute_recommendations(reg)
+    else:
+        reg_env = current_env_by_region.get(reg, current_env)
+
     multipliers = surge_engine.calculate_surge_multipliers(reg_env)
     return {
         "region": reg,
+        "is_live": "Open-Meteo" in (reg_env.source or ""),
         "telemetry": reg_env.model_dump(),
+        "surge_multipliers": multipliers
+    }
+
+@app.get("/api/environmental/live")
+async def get_live_environmental(region: Optional[str] = None):
+    reg = (region or active_region_id).lower()
+    reading = telemetry_service.fetch_live_reading(region=reg)
+    multipliers = surge_engine.calculate_surge_multipliers(reading)
+    return {
+        "region": reg,
+        "is_live": True,
+        "telemetry": reading.model_dump(),
+        "surge_multipliers": multipliers
+    }
+
+@app.post("/api/environmental/live/activate")
+async def activate_live_environmental(region: Optional[str] = None):
+    global current_env
+    reg = (region or active_region_id).lower()
+    reading = telemetry_service.fetch_live_reading(region=reg)
+    current_env_by_region[reg] = reading
+    if reg == active_region_id:
+        current_env = reading
+    recompute_recommendations(reg)
+    audit_ledger.record_entry(
+        event_type="LIVE_CAAQMS_TELEMETRY_ACTIVATED",
+        details={
+            "region": reg,
+            "aqi": reading.aqi,
+            "pm25": reading.pm25,
+            "temperature_c": reading.temperature_c,
+            "humidity_pct": reading.humidity_pct,
+            "wind_speed_kmh": reading.wind_speed_kmh,
+            "source": reading.source
+        },
+        approved_by="OPEN_METEO_CAAQMS_GATEWAY"
+    )
+    multipliers = surge_engine.calculate_surge_multipliers(reading)
+    return {
+        "status": "activated",
+        "region": reg,
+        "is_live": True,
+        "telemetry": reading.model_dump(),
         "surge_multipliers": multipliers
     }
 

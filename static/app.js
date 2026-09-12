@@ -299,13 +299,13 @@ async function loadInitialData() {
 
 async function fetchEnvironmental() {
   try {
-    const res = await fetch('/api/environmental');
+    const res = await fetch(`/api/environmental?region=${encodeURIComponent(currentRegion)}`);
     const data = await res.json();
     const t = data.telemetry;
     currentTelemetry = t;
 
     const valAqi = document.getElementById('valAqi');
-    if (valAqi) valAqi.textContent = `${t.aqi} (${t.aqi > 300 ? 'Severe' : t.aqi > 200 ? 'Poor' : 'Moderate'})`;
+    if (valAqi) valAqi.textContent = `${t.aqi} (${t.aqi > 300 ? 'Severe' : t.aqi > 200 ? 'Poor' : (t.aqi > 100 ? 'Moderate' : 'Good')})`;
 
     const valPm25 = document.getElementById('valPm25');
     if (valPm25) valPm25.textContent = `${t.pm25} µg/m³`;
@@ -320,14 +320,26 @@ async function fetchEnvironmental() {
     const bannerDesc = document.getElementById('bannerDesc');
     const mults = data.surge_multipliers || {};
 
-    if (t.smog_episode) {
-      if (bannerTitle) bannerTitle.textContent = `${t.corridor || 'Bhubaneswar–Cuttack'} Smog Inversion Active`;
+    const btnLive = document.getElementById('scenarioLive');
+    if (btnLive) {
+      if (data.is_live || (t.source && t.source.includes('Open-Meteo'))) {
+        btnLive.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-emerald-600 text-white shadow-clay-btn transition flex items-center space-x-1.5 cursor-pointer';
+      } else {
+        btnLive.className = 'px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition flex items-center space-x-1.5 cursor-pointer';
+      }
+    }
+
+    if (data.is_live || (t.source && t.source.includes('Open-Meteo'))) {
+      if (bannerTitle) bannerTitle.innerHTML = `<span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-300 animate-ping"></span><span>${t.corridor || 'Regional Corridor'}</span> <span class="text-[10px] bg-emerald-500/40 text-emerald-100 border border-emerald-300/50 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">Live Sensor Feed</span></span>`;
+      if (bannerDesc) bannerDesc.textContent = `Live Telemetry (Open-Meteo & CAAQMS) • AQI ${t.aqi} • PM2.5: ${t.pm25} µg/m³ • Temp: ${t.temperature_c}°C • Humidity: ${t.humidity_pct || 75}% • Wind: ${t.wind_speed_kmh || 10} km/h`;
+    } else if (t.smog_episode) {
+      if (bannerTitle) bannerTitle.textContent = `${t.corridor || 'Regional Corridor'} Smog Inversion Active`;
       if (bannerDesc) bannerDesc.textContent = `AQI ${t.aqi} • PM2.5: ${t.pm25} µg/m³ • +${Math.round(((mults['AQI / Smog'] || 1.62) - 1) * 100)}% Acute Respiratory Demand • 42h Lag Onset`;
     } else if (t.heatwave_alert) {
-      if (bannerTitle) bannerTitle.textContent = `${t.corridor || 'Bhubaneswar–Cuttack'} Heatwave Alert Active`;
+      if (bannerTitle) bannerTitle.textContent = `${t.corridor || 'Regional Corridor'} Heatwave Alert Active`;
       if (bannerDesc) bannerDesc.textContent = `Temp: ${t.temperature_c}°C • +${Math.round(((mults['Heatwave / Drought'] || 1.85) - 1) * 100)}% Dehydration / ORS Demand`;
     } else {
-      if (bannerTitle) bannerTitle.textContent = `${t.corridor || 'Bhubaneswar–Cuttack'} Baseline Normal Operations`;
+      if (bannerTitle) bannerTitle.textContent = `${t.corridor || 'Regional Corridor'} Baseline Normal Operations`;
       if (bannerDesc) bannerDesc.textContent = `AQI ${t.aqi} • Temp: ${t.temperature_c}°C • Baseline Normal Consumption`;
     }
 
@@ -1356,9 +1368,29 @@ async function switchScenario(type) {
   const activeClass = 'px-4 py-2 rounded-full font-bold text-xs bg-clay-terracotta text-white shadow-clay-btn transition';
   const inactiveClass = 'px-4 py-2 rounded-full font-bold text-xs text-clay-muted hover:text-clay-dark hover:bg-white transition';
 
+  const btnLive = document.getElementById('scenarioLive');
   const btnSmog = document.getElementById('scenarioSmog');
   const btnHeat = document.getElementById('scenarioHeat');
   const btnNormal = document.getElementById('scenarioNormal');
+
+  if (type === 'live') {
+    if (btnLive) btnLive.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-emerald-600 text-white shadow-clay-btn transition flex items-center space-x-1.5 cursor-pointer';
+    if (btnSmog) btnSmog.className = inactiveClass;
+    if (btnHeat) btnHeat.className = inactiveClass;
+    if (btnNormal) btnNormal.className = inactiveClass;
+
+    try {
+      await fetch(`/api/environmental/live/activate?region=${encodeURIComponent(currentRegion)}`, {
+        method: 'POST'
+      });
+    } catch (e) {
+      console.warn("Live telemetry activation fallback:", e);
+    }
+    await loadInitialData();
+    return;
+  }
+
+  if (btnLive) btnLive.className = 'px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition flex items-center space-x-1.5 cursor-pointer';
 
   if (type === 'smog') {
     envData = {
@@ -1368,7 +1400,7 @@ async function switchScenario(type) {
       humidity_pct: 78.0,
       heatwave_alert: false,
       smog_episode: true,
-      corridor: "Lucknow-Unnao Indo-Gangetic Smog Corridor (Severe Inversion)"
+      corridor: currentRegion === 'bhubaneswar' ? "Bhubaneswar–Cuttack Inversion Corridor" : "Lucknow-Unnao Indo-Gangetic Smog Corridor (Severe Inversion)"
     };
     if (btnSmog) btnSmog.className = activeClass;
     if (btnHeat) btnHeat.className = inactiveClass;
@@ -1381,7 +1413,7 @@ async function switchScenario(type) {
       humidity_pct: 35.0,
       heatwave_alert: true,
       smog_episode: false,
-      corridor: "Central Awadh Heatwave Corridor (Severe Dehydration Risk)"
+      corridor: currentRegion === 'bhubaneswar' ? "Coastal Odisha Heatwave Corridor (Severe Dehydration Risk)" : "Central Awadh Heatwave Corridor (Severe Dehydration Risk)"
     };
     if (btnHeat) btnHeat.className = activeClass;
     if (btnSmog) btnSmog.className = inactiveClass;
@@ -1394,14 +1426,14 @@ async function switchScenario(type) {
       humidity_pct: 60.0,
       heatwave_alert: false,
       smog_episode: false,
-      corridor: "Baseline Seasonal Conditions"
+      corridor: currentRegion === 'bhubaneswar' ? "Bhubaneswar Coastal Baseline Operations" : "Baseline Seasonal Conditions"
     };
     if (btnNormal) btnNormal.className = activeClass;
     if (btnSmog) btnSmog.className = inactiveClass;
     if (btnHeat) btnHeat.className = inactiveClass;
   }
 
-  await fetch('/api/environmental', {
+  await fetch(`/api/environmental?region=${encodeURIComponent(currentRegion)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(envData)
@@ -3284,10 +3316,11 @@ function closeStockMovementRegister() {
 // ==========================================
 // Regional Health & Climate News Bureau
 // ==========================================
-async function fetchNews(region = null) {
+async function fetchNews(region = null, forceRefresh = false) {
   const reg = region || currentRegion;
   try {
-    const res = await fetch(`/api/news?region=${reg}`);
+    const url = `/api/news?region=${encodeURIComponent(reg)}${forceRefresh ? '&force_refresh=true' : ''}`;
+    const res = await fetch(url);
     if (!res.ok) return;
     const data = await res.json();
     allNewsArticles = data.articles || [];
@@ -3310,6 +3343,15 @@ async function fetchNews(region = null) {
   } catch (err) {
     console.error("fetchNews error:", err);
   }
+}
+
+async function refreshLiveNews() {
+  const btn = document.getElementById('btnRefreshNews');
+  if (btn) btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Fetching Live Wire...</span>`;
+  if (window.lucide) lucide.createIcons();
+  await fetchNews(currentRegion, true);
+  if (btn) btn.innerHTML = `<i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i><span>Refresh Live Wire</span>`;
+  if (window.lucide) lucide.createIcons();
 }
 
 function renderNewsList() {
@@ -3366,11 +3408,13 @@ function renderNewsList() {
 
     const catLabel = catEmojiMap[art.category] || '📰 General Health';
     const sevBadge = severityBadgeMap[art.severity] || severityBadgeMap['info'];
+    const liveWireBadge = art.is_live ? `<span class="bg-emerald-50 text-emerald-700 border border-emerald-300/60 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center space-x-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span><span>Live Wire</span></span>` : '';
 
     card.innerHTML = `
       <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
         <div class="flex items-center space-x-2">
           ${sevBadge}
+          ${liveWireBadge}
           <span class="text-xs font-bold text-clay-muted">${catLabel}</span>
         </div>
         <span class="text-xs font-semibold text-clay-muted flex items-center space-x-1">
@@ -3410,8 +3454,14 @@ function renderNewsList() {
         </div>
       </div>
 
-      <div class="flex items-center justify-between text-[11px] text-clay-muted font-medium pt-0.5">
+      <div class="flex flex-wrap items-center justify-between text-[11px] text-clay-muted font-medium pt-1 border-t border-slate-100 gap-2">
         <span>Verified Source: <strong class="text-clay-dark font-bold">${escapeHtml(art.source)}</strong> &bull; District: <strong class="text-clay-dark">${escapeHtml(art.district)}</strong></span>
+        ${art.url ? `
+          <a href="${escapeHtml(art.url)}" target="_blank" rel="noopener noreferrer" class="text-clay-terracotta hover:text-clay-terracottaDark hover:underline font-bold inline-flex items-center space-x-1 bg-clay-inner px-2.5 py-1 rounded-full border border-clay-salmon/25 shadow-sm transition cursor-pointer" title="Read original verified article">
+            <span>Read Original Dispatch</span>
+            <i data-lucide="external-link" class="w-3 h-3"></i>
+          </a>
+        ` : ''}
       </div>
     `;
 

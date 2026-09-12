@@ -744,7 +744,35 @@ def test_regional_news_feed():
     assert res_search.status_code == 200
     search_data = res_search.json()
     assert len(search_data["articles"]) >= 1
-    assert "Salbutamol" in search_data["articles"][0]["title"] or "salbutamol" in search_data["articles"][0]["summary"].lower()
+    assert any("salbutamol" in (a["title"] + a["summary"]).lower() for a in search_data["articles"])
+
+    # 5. Verify live news articles contain valid URLs and live_count
+    assert "live_count" in bbs_data
+    assert any(a.get("url") for a in bbs_data["articles"])
+
+
+def test_live_environmental_telemetry():
+    """Verify live meteorological & CAAQMS telemetry service from Open-Meteo."""
+    # 1. Query live endpoint for Bhubaneswar
+    res_bbs = client.get("/api/environmental/live?region=bhubaneswar")
+    assert res_bbs.status_code == 200
+    data_bbs = res_bbs.json()
+    assert data_bbs["is_live"] is True
+    assert "telemetry" in data_bbs
+    t = data_bbs["telemetry"]
+    assert 0 <= t["aqi"] <= 600
+    assert 0 <= t["pm25"] <= 500
+    assert -20 <= t["temperature_c"] <= 60
+    assert "surge_multipliers" in data_bbs
+
+    # 2. Activate live telemetry for Lucknow
+    act_res = client.post("/api/environmental/live/activate?region=lucknow")
+    assert act_res.status_code == 200
+    act_data = act_res.json()
+    assert act_data["status"] == "activated"
+    assert act_data["is_live"] is True
+    assert act_data["telemetry"]["aqi"] > 0
+
 
 
 

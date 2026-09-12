@@ -279,15 +279,19 @@
         </div>
 
         <!-- Atmospheric Scenario Switcher (Warm Pill Buttons) -->
-        <div class="flex items-center space-x-2 bg-clay-inner p-1.5 rounded-full border border-clay-salmon/20">
-          <span class="text-xs sm:text-sm text-clay-muted font-bold px-3">Surge Mode:</span>
-          <button id="scenarioSmog" onclick="switchScenario('smog')" class="px-4 py-2 rounded-full font-bold text-xs sm:text-sm bg-clay-terracotta text-white shadow-clay-btn transition">
-            🌫️ Smog (AQI 385)
+        <div class="flex items-center space-x-1.5 bg-clay-inner p-1.5 rounded-full border border-clay-salmon/20">
+          <span class="text-xs sm:text-sm text-clay-muted font-bold px-2.5">Surge Mode:</span>
+          <button id="scenarioLive" onclick="switchScenario('live')" class="px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-clay-btn transition flex items-center space-x-1.5 cursor-pointer" title="Fetch live satellite and CAAQMS sensor telemetry from Open-Meteo & Copernicus">
+            <span class="w-2 h-2 rounded-full bg-emerald-200 animate-pulse"></span>
+            <span>📡 Live Sensors</span>
           </button>
-          <button id="scenarioHeat" onclick="switchScenario('heat')" class="px-4 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition">
+          <button id="scenarioSmog" onclick="switchScenario('smog')" class="px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition cursor-pointer">
+            🌫️ Smog (385)
+          </button>
+          <button id="scenarioHeat" onclick="switchScenario('heat')" class="px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition cursor-pointer">
             ☀️ Heatwave (43°C)
           </button>
-          <button id="scenarioNormal" onclick="switchScenario('normal')" class="px-4 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition">
+          <button id="scenarioNormal" onclick="switchScenario('normal')" class="px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition cursor-pointer">
             🌿 Baseline
           </button>
         </div>
@@ -1107,7 +1111,13 @@
             </p>
           </div>
         </div>
-        <button onclick="closeNewsModal()" class="text-slate-400 hover:text-slate-600 text-3xl font-bold leading-none cursor-pointer">&times;</button>
+        <div class="flex items-center space-x-2">
+          <button onclick="refreshLiveNews()" id="btnRefreshNews" class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-clay-inner text-clay-terracotta border border-clay-salmon/30 hover:bg-clay-terracotta hover:text-white transition flex items-center space-x-1.5 shadow-sm cursor-pointer" title="Fetch latest real-time articles from Google News RSS & PIB">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span>Refresh Live Wire</span>
+          </button>
+          <button onclick="closeNewsModal()" class="text-slate-400 hover:text-slate-600 text-3xl font-bold leading-none cursor-pointer">&times;</button>
+        </div>
       </div>
 
       <!-- Controls: Category Filter Chips & Search Bar -->

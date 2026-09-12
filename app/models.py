@@ -70,11 +70,15 @@ class InventoryItem(BaseModel):
 class EnvironmentalReading(BaseModel):
     aqi: int = Field(default=385, description="Air Quality Index")
     pm25: float = Field(default=245.0, description="PM2.5 in ug/m3")
+    pm10: Optional[float] = Field(default=None, description="PM10 in ug/m3")
     temperature_c: float = Field(default=18.5, description="Ambient temperature in Celsius")
     humidity_pct: float = Field(default=75.0, description="Relative humidity %")
+    wind_speed_kmh: Optional[float] = Field(default=None, description="Wind speed in km/h")
     heatwave_alert: bool = Field(default=False)
     smog_episode: bool = Field(default=True)
     corridor: str = Field(default="Lucknow-Unnao Industrial & Agricultural Corridor")
+    source: Optional[str] = Field(default=None, description="Data source attribution (e.g. Open-Meteo, CAAQMS)")
+    recorded_at: Optional[str] = Field(default=None, description="Telemetry timestamp")
 
 class StockoutRiskAssessment(BaseModel):
     facility_id: str

@@ -966,5 +966,154 @@
     },
     "prev_hash": "7f9fe5c700dd15109f44a0ff05f1f4f86b30726def2e190761e38f0ed9574b9f",
     "current_hash": "b96550f1e4a879c3f05e3954bd3a30c01040ff25086a07701a638a1a78542d44"
+  },
+  {
+    "index": 65,
+    "timestamp": "2026-09-12T18:01:09.432265Z",
+    "event_type": "CORRIDOR_REGION_SWITCHED",
+    "approved_by": "COMMAND_CENTER_DISPATCHER",
+    "details": {
+      "active_region": "lucknow",
+      "corridor": "Lucknow-Unnao Indo-Gangetic Smog Corridor (Severe Inversion)"
+    },
+    "prev_hash": "b96550f1e4a879c3f05e3954bd3a30c01040ff25086a07701a638a1a78542d44",
+    "current_hash": "38821805a76e43080d73c15144fc7063e6db3ffb08a121b2590d667149428aab"
+  },
+  {
+    "index": 66,
+    "timestamp": "2026-09-12T18:01:10.620678Z",
+    "event_type": "CORRIDOR_REGION_SWITCHED",
+    "approved_by": "COMMAND_CENTER_DISPATCHER",
+    "details": {
+      "active_region": "bhubaneswar",
+      "corridor": "Bhubaneswar\u2013Cuttack Coastal & Industrial Corridor (Odisha)"
+    },
+    "prev_hash": "38821805a76e43080d73c15144fc7063e6db3ffb08a121b2590d667149428aab",
+    "current_hash": "1fb600b752aed127a32c3c57bb5c9a8fc9be0bb14ca6b8d04457d3b3a768bf2e"
+  },
+  {
+    "index": 67,
+    "timestamp": "2026-09-12T18:01:37.595818Z",
+    "event_type": "ENVIRONMENTAL_TELEMETRY_UPDATE",
+    "approved_by": "SATELLITE_FEED_AGENT",
+    "details": {
+      "region": "lucknow",
+      "aqi": 140,
+      "smog_episode": false,
+      "heatwave_alert": true,
+      "corridor": "Central Awadh Heatwave Corridor (Severe Dehydration Risk)"
+    },
+    "prev_hash": "1fb600b752aed127a32c3c57bb5c9a8fc9be0bb14ca6b8d04457d3b3a768bf2e",
+    "current_hash": "0eb773bb8e167dbf7ffcffdedc8db58999bbb30106ea44474030144c2ac04d2c"
+  },
+  {
+    "index": 68,
+    "timestamp": "2026-09-12T18:01:38.486456Z",
+    "event_type": "ENVIRONMENTAL_TELEMETRY_UPDATE",
+    "approved_by": "SATELLITE_FEED_AGENT",
+    "details": {
+      "region": "bhubaneswar",
+      "aqi": 75,
+      "smog_episode": false,
+      "heatwave_alert": false,
+      "corridor": "Baseline Seasonal Conditions"
+    },
+    "prev_hash": "0eb773bb8e167dbf7ffcffdedc8db58999bbb30106ea44474030144c2ac04d2c",
+    "current_hash": "39800956c5dc6af3018179879fc4de5a8743ceee273117b9aa1334043c07813f"
+  },
+  {
+    "index": 69,
+    "timestamp": "2026-09-12T18:01:38.974589Z",
+    "event_type": "ENVIRONMENTAL_TELEMETRY_UPDATE",
+    "approved_by": "SATELLITE_FEED_AGENT",
+    "details": {
+      "region": "lucknow",
+      "aqi": 140,
+      "smog_episode": false,
+      "heatwave_alert": true,
+      "corridor": "Central Awadh Heatwave Corridor (Severe Dehydration Risk)"
+    },
+    "prev_hash": "39800956c5dc6af3018179879fc4de5a8743ceee273117b9aa1334043c07813f",
+    "current_hash": "30c7d4678ab3cfdad0c6e2bfa5ccd4b55150440e8703959af7a42e4af8a19717"
+  },
+  {
+    "index": 70,
+    "timestamp": "2026-09-12T18:01:40.342090Z",
+    "event_type": "ENVIRONMENTAL_TELEMETRY_UPDATE",
+    "approved_by": "SATELLITE_FEED_AGENT",
+    "details": {
+      "region": "lucknow",
+      "aqi": 385,
+      "smog_episode": true,
+      "heatwave_alert": false,
+      "corridor": "Lucknow-Unnao Indo-Gangetic Smog Corridor (Severe Inversion)"
+    },
+    "prev_hash": "30c7d4678ab3cfdad0c6e2bfa5ccd4b55150440e8703959af7a42e4af8a19717",
+    "current_hash": "3c29690e0912ebf42cb01cf509d915d18b463b1a9fe2410a9673973b2c03087c"
+  },
+  {
+    "index": 71,
+    "timestamp": "2026-09-12T18:01:48.227985Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-BBS-01",
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "3c29690e0912ebf42cb01cf509d915d18b463b1a9fe2410a9673973b2c03087c",
+    "current_hash": "09eaf10f04f9594ddcb39997c02d03c602eaa232eae2b8952ee11767f91bffd2"
+  },
+  {
+    "index": 72,
+    "timestamp": "2026-09-12T18:01:49.746554Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-BBS-01",
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "09eaf10f04f9594ddcb39997c02d03c602eaa232eae2b8952ee11767f91bffd2",
+    "current_hash": "f66c1181d706d65af8b89e080135b0eee3e9a8515d541375e8ee7d6f6a6828b0"
+  },
+  {
+    "index": 73,
+    "timestamp": "2026-09-12T18:01:50.708500Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-BBS-01",
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "f66c1181d706d65af8b89e080135b0eee3e9a8515d541375e8ee7d6f6a6828b0",
+    "current_hash": "bd66699637839bbf91cfcec60e260efd650d17c51a531d0b25bc31d668350f14"
+  },
+  {
+    "index": 74,
+    "timestamp": "2026-09-12T18:01:57.772321Z",
+    "event_type": "SHELF_PHOTO_VISION_VERIFICATION",
+    "approved_by": "GEMINI_VISION_AGENT",
+    "details": {
+      "facility_id": "PHC-BBS-01",
+      "visual_count": 16,
+      "reported_count": 18,
+      "status": "VERIFIED_MATCH",
+      "batch_ocr": "BAT-842-26",
+      "expiry_ocr": "NOV 2026",
+      "is_simulated": true
+    },
+    "prev_hash": "bd66699637839bbf91cfcec60e260efd650d17c51a531d0b25bc31d668350f14",
+    "current_hash": "726a7623f2e53a478a0ad02b29e4cda2a7be022fce0178ad22dee4be83276177"
+  },
+  {
+    "index": 75,
+    "timestamp": "2026-09-12T18:02:03.426503Z",
+    "event_type": "MULTI_AGENT_PIPELINE_RUN",
+    "approved_by": "GOOGLE_ADK_ORCHESTRATOR",
+    "details": {
+      "target_facility": "PHC-BBS-01",
+      "status": "PIPELINE_COMPLETE"
+    },
+    "prev_hash": "726a7623f2e53a478a0ad02b29e4cda2a7be022fce0178ad22dee4be83276177",
+    "current_hash": "cd130de6c06ea91059177f85c2c55b4f3758a176107b7f22003cb9d6e820b599"
   }
 ]
