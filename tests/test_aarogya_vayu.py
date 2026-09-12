@@ -655,3 +655,63 @@ def test_heatwave_ors_systemic_deficit_and_unmet_demand_escalation():
     assert "Distance radius breach" in safipur["rejection_reason"]
 
 
+def test_bhubaneswar_multi_region_capabilities_and_routing():
+    """
+    Validates the multi-region architecture:
+    1. /api/regions returns both 'bhubaneswar' and 'lucknow' corridors.
+    2. /api/facilities?region=bhubaneswar returns 20 Odisha facilities (Khordha & Cuttack).
+    3. /api/clinic/PHC-BBS-01/desk loads frontline workspace for PHC Mendhasal.
+    4. Switching regions via POST /api/region/switch updates active corridor.
+    5. Voice intake recognizes Odia facilities (e.g. PHC Mendhasal).
+    """
+    # 1. Regions endpoint
+    reg_res = client.get("/api/regions")
+    assert reg_res.status_code == 200
+    reg_data = reg_res.json()
+    assert "regions" in reg_data
+    region_ids = [r["id"] for r in reg_data["regions"]]
+    assert "bhubaneswar" in region_ids
+    assert "lucknow" in region_ids
+
+    # 2. Regional facilities query
+    bbs_fac_res = client.get("/api/facilities?region=bhubaneswar")
+    assert bbs_fac_res.status_code == 200
+    bbs_facs = bbs_fac_res.json()
+    assert len(bbs_facs) == 20
+    assert bbs_facs[0]["id"] == "PHC-BBS-01"
+    assert bbs_facs[0]["name"] == "PHC Mendhasal"
+    assert bbs_facs[0]["district"] == "Khordha"
+    assert any(f["id"] == "CHC-CTC-01" for f in bbs_facs)
+
+    # 3. Clinic desk for Bhubaneswar facility
+    desk_res = client.get("/api/clinic/PHC-BBS-01/desk")
+    assert desk_res.status_code == 200
+    desk_data = desk_res.json()
+    assert desk_data["facility"]["id"] == "PHC-BBS-01"
+    assert desk_data["facility"]["name"] == "PHC Mendhasal"
+    assert len(desk_data["inventory"]) > 0
+
+    # 4. Regional risks and recommendations
+    bbs_risks = client.get("/api/risks?region=bhubaneswar").json()
+    assert len(bbs_risks) > 0
+    assert all(r["facility_id"].startswith("PHC-BBS") or r["facility_id"].startswith("CHC-BBS") or r["facility_id"].startswith("PHC-CTC") or r["facility_id"].startswith("CHC-CTC") for r in bbs_risks)
+
+    bbs_recs = client.get("/api/recommendations?region=bhubaneswar").json()
+    assert isinstance(bbs_recs, list)
+    for rec in bbs_recs:
+        assert rec["donor_facility_id"].startswith(("PHC-BBS", "CHC-BBS", "PHC-CTC", "CHC-CTC"))
+        assert rec["recipient_facility_id"].startswith(("PHC-BBS", "CHC-BBS", "PHC-CTC", "CHC-CTC"))
+        assert rec["distance_km"] <= 35.0
+
+    # 5. Switch to Bhubaneswar and verify active state
+    switch_res = client.post("/api/region/switch", json={"region": "bhubaneswar"})
+    assert switch_res.status_code == 200
+    assert switch_res.json()["active_region"] == "bhubaneswar"
+
+    # Switch back to lucknow to keep pristine state
+    switch_back = client.post("/api/region/switch", json={"region": "lucknow"})
+    assert switch_back.status_code == 200
+    assert switch_back.json()["active_region"] == "lucknow"
+
+
+

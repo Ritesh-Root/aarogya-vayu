@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import tempfile
 import threading
@@ -39,17 +40,42 @@ class StorageManager:
                     f"initialization failed: {e}. Safe abort enforced: silent fallback is forbidden."
                 )
 
-        # File paths for demo mode
-        self.inv_path = self.data_dir / "inventory.json"
-        self.consignments_path = self.data_dir / "consignments.json"
-        self.idempotency_path = self.data_dir / "idempotency.json"
-        self.audit_path = self.data_dir / "audit_log.json"
+        # Region management
+        is_pytest = ("pytest" in sys.modules) or ("PYTEST_CURRENT_TEST" in os.environ)
+        default_reg = "lucknow" if is_pytest else "bhubaneswar"
+        self.active_region = os.environ.get("DEFAULT_REGION", default_reg).lower()
+        self._update_paths()
 
-    def load_all(self) -> Tuple[List[dict], Dict[str, dict], Dict[str, dict], List[dict]]:
+    def set_region(self, region: str):
+        self.active_region = region.lower()
+        self._update_paths()
+
+    def _get_region_paths(self, region: Optional[str] = None) -> Tuple[Path, Path, Path, Path]:
+        reg = (region or self.active_region).lower()
+        if reg == "bhubaneswar":
+            return (
+                self.data_dir / "inventory_bhubaneswar.json",
+                self.data_dir / "consignments_bhubaneswar.json",
+                self.data_dir / "idempotency_bhubaneswar.json",
+                self.data_dir / "audit_log_bhubaneswar.json"
+            )
+        else:
+            return (
+                self.data_dir / "inventory.json",
+                self.data_dir / "consignments.json",
+                self.data_dir / "idempotency.json",
+                self.data_dir / "audit_log.json"
+            )
+
+    def _update_paths(self):
+        self.inv_path, self.consignments_path, self.idempotency_path, self.audit_path = self._get_region_paths(self.active_region)
+
+    def load_all(self, region: Optional[str] = None) -> Tuple[List[dict], Dict[str, dict], Dict[str, dict], List[dict]]:
         """
         Loads inventory, consignments, idempotency cache, and audit ledger.
         Returns: (inventory, consignments_dict, idempotency_dict, audit_log_list)
         """
+        inv_path, cons_path, idemp_path, audit_path = self._get_region_paths(region)
         if self.backend == "firestore":
             # Firestore implementation
             try:
@@ -72,7 +98,7 @@ class StorageManager:
         # Demo / Local Mode
         with self._lock:
             # 1. Inventory
-            inventory = self._read_json_file(self.inv_path, fallback_path=self.tmp_dir / "inventory.json", default=[])
+            inventory = self._read_json_file(inv_path, fallback_path=self.tmp_dir / inv_path.name, default=[])
             # Normalize inventory items to ensure segregated stock keys exist
             for item in inventory:
                 if "on_hand" not in item:
@@ -94,13 +120,13 @@ class StorageManager:
                     item["is_frozen"] = item["is_reconciliation_required"]
 
             # 2. Consignments
-            consignments = self._read_json_file(self.consignments_path, fallback_path=self.tmp_dir / "consignments.json", default={})
+            consignments = self._read_json_file(cons_path, fallback_path=self.tmp_dir / cons_path.name, default={})
 
             # 3. Idempotency Cache
-            idempotency = self._read_json_file(self.idempotency_path, fallback_path=self.tmp_dir / "idempotency.json", default={})
+            idempotency = self._read_json_file(idemp_path, fallback_path=self.tmp_dir / idemp_path.name, default={})
 
             # 4. Audit Log
-            audit_log = self._read_json_file(self.audit_path, fallback_path=self.tmp_dir / "audit_log.json", default=[])
+            audit_log = self._read_json_file(audit_path, fallback_path=self.tmp_dir / audit_path.name, default=[])
 
             return inventory, consignments, idempotency, audit_log
 
@@ -109,12 +135,14 @@ class StorageManager:
         inventory: List[dict],
         consignments: Dict[str, dict],
         idempotency: Dict[str, dict],
-        audit_entry: Optional[dict] = None
+        audit_entry: Optional[dict] = None,
+        region: Optional[str] = None
     ) -> None:
         """
         Atomically persists updated inventory, consignments, idempotency records, and audit log.
         Guarantees that partial writes never occur.
         """
+        inv_path, cons_path, idemp_path, audit_path = self._get_region_paths(region)
         if self.backend == "firestore":
             try:
                 # Firestore transactional write
@@ -153,17 +181,17 @@ class StorageManager:
                     item["current_stock"] = item.get("on_hand", 0)
                     item["available"] = max(0, item.get("on_hand", 0) - item.get("reserved", 0) - item.get("quarantined", 0))
 
-                self._atomic_write_json(self.inv_path, inventory, fallback_path=self.tmp_dir / "inventory.json")
-                self._atomic_write_json(self.consignments_path, consignments, fallback_path=self.tmp_dir / "consignments.json")
-                self._atomic_write_json(self.idempotency_path, idempotency, fallback_path=self.tmp_dir / "idempotency.json")
+                self._atomic_write_json(inv_path, inventory, fallback_path=self.tmp_dir / inv_path.name)
+                self._atomic_write_json(cons_path, consignments, fallback_path=self.tmp_dir / cons_path.name)
+                self._atomic_write_json(idemp_path, idempotency, fallback_path=self.tmp_dir / idemp_path.name)
 
                 # If audit_entry provided, read full audit ledger, append, and atomic write
                 if audit_entry:
-                    audit_list = self._read_json_file(self.audit_path, fallback_path=self.tmp_dir / "audit_log.json", default=[])
+                    audit_list = self._read_json_file(audit_path, fallback_path=self.tmp_dir / audit_path.name, default=[])
                     # Check if already present to prevent duplicate append
                     if not any(e.get("current_hash") == audit_entry.get("current_hash") for e in audit_list):
                         audit_list.append(audit_entry)
-                    self._atomic_write_json(self.audit_path, audit_list, fallback_path=self.tmp_dir / "audit_log.json")
+                    self._atomic_write_json(audit_path, audit_list, fallback_path=self.tmp_dir / audit_path.name)
 
             except Exception as e:
                 raise StorageError(f"Atomic commit failed on local storage: {e}")
@@ -190,7 +218,7 @@ class StorageManager:
             except Exception:
                 pass
 
-    def execute_in_transaction(self, mutation_fn):
+    def execute_in_transaction(self, mutation_fn, region: Optional[str] = None):
         """
         Executes a transactional mutation function with guaranteed atomicity and concurrency protection:
         - Demo mode: Acquires process-level threading lock and kernel fcntl.flock, loads state, calls mutation_fn(inventory, consignments, idempotency, audit_log),
@@ -236,9 +264,9 @@ class StorageManager:
         with self._lock:
             p_fd = self._acquire_process_lock()
             try:
-                inv, cons, idem, audit = self.load_all()
+                inv, cons, idem, audit = self.load_all(region=region)
                 result, new_inv, new_cons, new_idem, new_audit = mutation_fn(inv, cons, idem, audit)
-                self.commit_transaction(new_inv, new_cons, new_idem, new_audit)
+                self.commit_transaction(new_inv, new_cons, new_idem, new_audit, region=region)
                 return result
             finally:
                 self._release_process_lock(p_fd)

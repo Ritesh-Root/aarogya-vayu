@@ -116,9 +116,14 @@ class RedistributionOptimizer:
                 # Record candidate evaluation reasons for all other facilities in corridor
                 rejections: List[Dict[str, Any]] = []
 
-                # Evaluate all potential corridor facilities
-                for other_id, other_fac in self.facilities.items():
+                # Evaluate every peer facility in the regional cohort to prove no feasible redistribution donor exists
+                rejections = []
+                cohort_fac_ids = {a.facility_id for a in assessments}
+                for other_id in sorted(cohort_fac_ids):
                     if other_id == recipient.facility_id:
+                        continue
+                    other_fac = self.facilities.get(other_id)
+                    if not other_fac:
                         continue
 
                     dist = haversine_distance(other_fac["lat"], other_fac["lng"], rec_fac["lat"], rec_fac["lng"])

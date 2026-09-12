@@ -84,13 +84,14 @@ class VoiceIntakeService:
           3) Intelligent regex-based multilingual fallback
         """
         text = request.transcript_text.strip()
+        lang_code = self._detect_language(text)
 
         # 1) Try gpt-6-astra via Experiential first (if key present)
         if os.getenv("EXPLABS_API_KEY"):
             try:
                 extracted = await self._call_experiential_gpt6_astra(text, request.facility_id)
                 if extracted:
-                    return self._build_response(extracted, text, "hi" if re.search(r'[\u0900-\u097F]', text) else "en")
+                    return self._build_response(extracted, text, lang_code)
             except RuntimeError as e:
                 # Missing key already handled — propagate message, don't fallback silently
                 print(f"Experiential gating: {e}")
@@ -103,12 +104,19 @@ class VoiceIntakeService:
             try:
                 extracted = await self._call_gemini(text, request.facility_id)
                 if extracted:
-                    return self._build_response(extracted, text, "hi" if re.search(r'[\u0900-\u097F]', text) else "en")
+                    return self._build_response(extracted, text, lang_code)
             except Exception as e:
                 print(f"Gemini API fallback triggered: {e}")
 
         # 3) Intelligent Multilingual Heuristic Fallback
         return self._heuristic_extraction(text, request.facility_id)
+
+    def _detect_language(self, text: str) -> str:
+        if re.search(r'[\u0B00-\u0B7F]', text):
+            return "or"
+        elif re.search(r'[\u0900-\u097F]', text):
+            return "hi"
+        return "en"
 
     async def _call_experiential_gpt6_astra(self, text: str, hint_facility_id: Optional[str]) -> Optional[Dict[str, Any]]:
         """
@@ -234,7 +242,7 @@ class VoiceIntakeService:
             reported_stock=reported,
             dispensed_yesterday=dispensed,
             confidence_score=confidence if quality_passed else 0.45,
-            detected_language="Hindi" if lang_hint == "hi" else "English / Hinglish",
+            detected_language="Odia" if lang_hint == "or" else ("Hindi" if lang_hint == "hi" else "English / Hinglish"),
             quality_checks_passed=quality_passed,
             requires_confirmation=requires_confirm,
             anomaly_flag=anomaly_flag,
@@ -243,7 +251,7 @@ class VoiceIntakeService:
         )
 
     def _transliterated_match(self, eng_word: str, text: str) -> bool:
-        hindi_map = {
+        translit_map = {
             "kakori": "काकोरी",
             "malihabad": "मलिहाबाद",
             "sarojini": "सरोजिनी",
@@ -257,15 +265,40 @@ class VoiceIntakeService:
             "bighapur": "बीघापुर",
             "itaunja": "इटौंजा",
             "alambagh": "आलमबाग",
-            "nagram": "नग्राम"
+            "nagram": "नग्राम",
+            "mendhasal": "ମେଣ୍ଢାଶାଳ",
+            "capital": "କ୍ୟାପିଟାଲ",
+            "jatni": "ଜଟଣୀ",
+            "balianta": "ବାଳିଅନ୍ତା",
+            "balipatna": "ବାଳିପାଟଣା",
+            "chandaka": "ଚନ୍ଦକା",
+            "khordha": "ଖୋର୍ଦ୍ଧା",
+            "begunia": "ବେଗୁନିଆ",
+            "bolagarh": "ବୋଲଗଡ଼",
+            "tangi": "ଟାଙ୍ଗୀ",
+            "choudwar": "ଚୌଦ୍ୱାର",
+            "salipur": "ସାଳେପୁର",
+            "athagarh": "ଆଠଗଡ଼",
+            "baramba": "ବଡ଼ମ୍ବା",
+            "niali": "ନିଆଳୀ",
+            "mahanga": "ମାହାଙ୍ଗା",
+            "kantapada": "କଣ୍ଟାପଡ଼ା",
+            "badamba": "ବଡ଼ମ୍ବା",
+            "narasinghpur": "ନରସିଂହପୁର"
         }
-        val = hindi_map.get(eng_word.lower())
+        val = translit_map.get(eng_word.lower())
         return bool(val and val in text)
 
     def _heuristic_extraction(self, text: str, hint_facility_id: Optional[str]) -> VoiceIntakeResponse:
-        # Detect language
+        # Detect language (Devanagari Hindi, Odia script, or English/Hinglish)
         has_devanagari = bool(re.search(r'[\u0900-\u097F]', text))
-        lang = "hi" if has_devanagari else "en"
+        has_odia = bool(re.search(r'[\u0B00-\u0B7F]', text))
+        if has_odia:
+            lang = "or"
+        elif has_devanagari:
+            lang = "hi"
+        else:
+            lang = "en"
         lower_text = text.lower()
 
         # Match Facility
@@ -291,23 +324,23 @@ class VoiceIntakeService:
             "MED-001": [
                 "salbutamol", "inhaler", "respule", "साल्बुटामोल", "रेस्प्यूल", "अस्थमा", "dama", 
                 "दमा", "saans", "सांस", "सांस की दवाई", "साँस", "साँस की दवा", "asthalin", "अस्थलीन",
-                "nebulizer", "नेबुलाइजर"
+                "nebulizer", "नेबुलाइजर", "ସାଲବୁଟାମଲ୍", "ଶ୍ୱାସ", "ଇନହେଲର", "ରେସପୁଲ"
             ],
             "MED-002": [
                 "ors", "sachet", "electrolyte", "ओआरएस", "घोल", "डिहाइड्रेशन", "churan", 
-                "दस्त", "dast", "electral", "इलेक्ट्रल", "jeevarakshak"
+                "दस्त", "dast", "electral", "इलेक्ट्रल", "jeevarakshak", "ଓଆରଏସ", "ଘୋଳ"
             ],
             "MED-003": [
-                "dexamethasone", "dexa", "injection", "डेक्सामेथासोन", "डेक्सा", "इंजेक्शन", "सूजन", "anaphylaxis"
+                "dexamethasone", "dexa", "injection", "डेक्सामेथासोन", "डेक्सा", "इंजेक्शन", "सूजन", "anaphylaxis", "ଡେକ୍ସା"
             ],
             "MED-004": [
-                "amoxicillin", "amoxy", "mox", "एमोक्सिसिलिन", "एंटीबायोटिक", "clav", "clavam", "क्लेवाम"
+                "amoxicillin", "amoxy", "mox", "एमोक्सिसिलिन", "एंटीबायोटिक", "clav", "clavam", "क्लेवाम", "ଏମୋକ୍ସିସିଲିନ"
             ],
             "MED-005": [
-                "paracetamol", "pcm", "fever", "पैरासिटामोल", "बुखार", "bukhar", "calpol", "डोल"
+                "paracetamol", "pcm", "fever", "पैरासिटामोल", "बुखार", "bukhar", "calpol", "डोल", "ପାରାସିଟାମୋଲ", "ଜ୍ୱର"
             ],
             "MED-006": [
-                "cetirizine", "citrizen", "alerid", "सिट्रिजिन", "एलर्जी", "खांसी", "khansi", "allergy"
+                "cetirizine", "citrizen", "alerid", "सिट्रिजिन", "एलर्जी", "खांसी", "khansi", "allergy", "ସିଟ୍ରିଜିନ"
             ]
         }
 
@@ -317,10 +350,13 @@ class VoiceIntakeService:
                 break
 
         # Extract Numbers
-        # Hindi devanagari numerals mapping
-        dev_digits = {'०': '0', '१': '1', '२': '2', '३': '3', '४': '4', '५': '5', '६': '6', '७': '7', '८': '8', '९': '9'}
+        # Hindi Devanagari and Odia numerals mapping
+        indic_digits = {
+            '०': '0', '१': '1', '२': '2', '३': '3', '୪': '4', '५': '5', '६': '6', '७': '7', '८': '8', '९': '9',
+            '୦': '0', '୧': '1', '୨': '2', '୩': '3', '୪': '4', '୫': '5', '୬': '6', '୭': '7', '୮': '8', '୯': '9'
+        }
         clean_text = text
-        for d, digit in dev_digits.items():
+        for d, digit in indic_digits.items():
             clean_text = clean_text.replace(d, digit)
 
         numbers = [int(n) for n in re.findall(r'\b\d+\b', clean_text)]
@@ -369,7 +405,7 @@ class VoiceIntakeService:
             reported_stock=reported_stock,
             dispensed_yesterday=dispensed_yesterday,
             confidence_score=0.96 if quality_passed else 0.45,
-            detected_language="Hindi" if lang == "hi" else "English / Hinglish",
+            detected_language="Odia" if lang == "or" else ("Hindi" if lang == "hi" else "English / Hinglish"),
             quality_checks_passed=quality_passed,
             requires_confirmation=requires_confirm,
             anomaly_flag=anomaly_flag,

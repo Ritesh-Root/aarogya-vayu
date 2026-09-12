@@ -4,11 +4,22 @@ from typing import List, Dict, Tuple
 from app.models import EnvironmentalReading, StockoutRiskAssessment, Facility, Medicine, InventoryItem
 
 class SurgeEngine:
-    def __init__(self, facilities_path: str, medicines_path: str):
-        with open(facilities_path, "r") as f:
-            self.facilities: Dict[str, dict] = {fac["id"]: fac for fac in json.load(f)}
-        with open(medicines_path, "r") as f:
-            self.medicines: Dict[str, dict] = {med["id"]: med for med in json.load(f)}
+    def __init__(self, facilities_path, medicines_path):
+        if isinstance(facilities_path, dict):
+            self.facilities = facilities_path
+        elif isinstance(facilities_path, list):
+            self.facilities = {fac["id"]: fac for fac in facilities_path}
+        else:
+            with open(facilities_path, "r", encoding="utf-8") as f:
+                self.facilities = {fac["id"]: fac for fac in json.load(f)}
+
+        if isinstance(medicines_path, dict):
+            self.medicines = medicines_path
+        elif isinstance(medicines_path, list):
+            self.medicines = {med["id"]: med for med in medicines_path}
+        else:
+            with open(medicines_path, "r", encoding="utf-8") as f:
+                self.medicines = {med["id"]: med for med in json.load(f)}
 
     def calculate_surge_multipliers(self, env: EnvironmentalReading) -> Dict[str, float]:
         """

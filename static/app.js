@@ -9,8 +9,123 @@ let allLogs = [];
 let activeSearchQuery = '';
 let currentLang = 'en';
 
+// Regional Corridors Configuration
+let currentRegion = 'bhubaneswar';
+
+const REGIONS = {
+  bhubaneswar: {
+    id: 'bhubaneswar',
+    name: 'Bhubaneswar–Cuttack Health Corridor (Odisha)',
+    shortName: 'Bhubaneswar (OD)',
+    center: [20.30, 85.83],
+    zoom: 10,
+    defaultFacility: 'PHC-BBS-01',
+    polygon: [
+      [20.62, 85.65],
+      [20.65, 86.18],
+      [20.45, 86.22],
+      [20.10, 86.12],
+      [19.90, 85.35],
+      [20.15, 85.25],
+      [20.40, 85.60]
+    ],
+    sensors: [
+      {
+        id: "SNS-BBS-01",
+        name: "Chandrasekharpur OSPCB CAAQMS",
+        type: "Continuous Ambient Air Quality Node",
+        lat: 20.325,
+        lng: 85.820
+      },
+      {
+        id: "SNS-BBS-02",
+        name: "Biju Patnaik Airport Met (IMD)",
+        type: "Synoptic Automated Doppler Node",
+        lat: 20.252,
+        lng: 85.818
+      },
+      {
+        id: "SNS-CTC-03",
+        name: "Cuttack Badambadi Transport Hub OSPCB",
+        type: "Urban Traffic Emission Node",
+        lat: 20.463,
+        lng: 85.877
+      },
+      {
+        id: "SNS-BBS-04",
+        name: "Khordha Industrial Estate IoT Sensor",
+        type: "Industrial Emission Monitoring Stn",
+        lat: 20.180,
+        lng: 85.620
+      },
+      {
+        id: "SNS-CTC-05",
+        name: "Choudwar Industrial Complex Sensor",
+        type: "OSPCB Real-time Industrial Stn",
+        lat: 20.525,
+        lng: 85.920
+      }
+    ]
+  },
+  lucknow: {
+    id: 'lucknow',
+    name: 'Lucknow–Unnao Health Corridor (UP)',
+    shortName: 'Lucknow (UP)',
+    center: [26.75, 80.72],
+    zoom: 10,
+    defaultFacility: 'PHC-LKO-01',
+    polygon: [
+      [27.02, 80.45],
+      [27.00, 80.85],
+      [26.90, 81.16],
+      [26.72, 81.15],
+      [26.54, 80.70],
+      [26.46, 80.35],
+      [26.60, 80.22],
+      [26.85, 80.32]
+    ],
+    sensors: [
+      {
+        id: "SNS-LKO-01",
+        name: "Talkatora Industrial CPCB Stn",
+        type: "Continuous Ambient Air Quality Node",
+        lat: 26.832,
+        lng: 80.892
+      },
+      {
+        id: "SNS-LKO-02",
+        name: "Amausi Airport Met Center (IMD)",
+        type: "Synoptic Automated Doppler Node",
+        lat: 26.760,
+        lng: 80.880
+      },
+      {
+        id: "SNS-UNA-03",
+        name: "Unnao Industrial Cluster Node",
+        type: "UPPCB IoT Emission Hub",
+        lat: 26.545,
+        lng: 80.495
+      },
+      {
+        id: "SNS-LKO-04",
+        name: "Malihabad Agro-Met Station",
+        type: "Agri-Weather & Particulate Node",
+        lat: 26.925,
+        lng: 80.705
+      },
+      {
+        id: "SNS-LKO-05",
+        name: "Gomti River Basin Hydrological Node",
+        type: "River Valley Inversion Monitor",
+        lat: 26.865,
+        lng: 80.950
+      }
+    ]
+  }
+};
+
 // Clinic Daily Desk State
-let currentClinicFacilityId = "PHC-LKO-01";
+let currentClinicFacilityId = "PHC-BBS-01";
 let activeClinicDeskData = null;
 let selectedStockActionType = "PHYSICAL_COUNT";
 let currentStockActionMedicineId = null;
@@ -30,18 +145,6 @@ let activeMapFilter = 'all';
 let currentInspectFacilityId = null;
 let isSpeaking = false;
 let currentTelemetry = null;
-
-// Lucknow-Unnao Atmospheric Inversion Polygon Coordinates
-const CORRIDOR_POLYGON = [
-  [27.02, 80.45],
-  [27.00, 80.85],
-  [26.90, 81.16],
-  [26.72, 81.15],
-  [26.54, 80.70],
-  [26.46, 80.35],
-  [26.60, 80.22],
-  [26.85, 80.32]
-];
 
 document.addEventListener('DOMContentLoaded', async () => {
   initMap();
@@ -85,8 +188,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function initMap() {
-  // Center roughly between Lucknow and Unnao
-  map = L.map('map', { zoomControl: true }).setView([26.75, 80.72], 10);
+  const reg = REGIONS[currentRegion] || REGIONS['bhubaneswar'];
+  map = L.map('map', { zoomControl: true }).setView(reg.center, reg.zoom);
   
   // Standard OpenStreetMap tiles (100% free, zero watermark, crystal clear)
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -111,8 +214,71 @@ function initMap() {
   startCourierAnimationLoop();
 }
 
+function updateRegionButtons(regId) {
+  const btnBbs = document.getElementById('btnRegionBbs');
+  const btnLko = document.getElementById('btnRegionLko');
+  const sub = document.getElementById('networkSubtitle');
+  if (btnBbs && btnLko) {
+    if (regId === 'bhubaneswar') {
+      btnBbs.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-clay-terracotta text-white shadow-clay-btn transition flex items-center space-x-1.5';
+      btnLko.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition flex items-center space-x-1.5';
+      if (sub) sub.textContent = 'Bhubaneswar–Cuttack Dynamic Multi-Echelon Network';
+    } else {
+      btnLko.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-clay-terracotta text-white shadow-clay-btn transition flex items-center space-x-1.5';
+      btnBbs.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition flex items-center space-x-1.5';
+      if (sub) sub.textContent = 'Lucknow–Unnao Dynamic Multi-Echelon Network';
+    }
+  }
+}
+
+async function switchRegion(regionId) {
+  if (!REGIONS[regionId]) return;
+  currentRegion = regionId;
+  updateRegionButtons(regionId);
+
+  try {
+    await fetch('/api/region/switch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ region: regionId })
+    });
+  } catch (e) {
+    console.error("switchRegion error:", e);
+  }
+
+  if (map && REGIONS[regionId]) {
+    map.setView(REGIONS[regionId].center, REGIONS[regionId].zoom);
+  }
+
+  currentClinicFacilityId = REGIONS[regionId].defaultFacility;
+
+  await fetchEnvironmental();
+  await fetchFacilities();
+  await fetchRisks();
+  await fetchRecommendations();
+  await fetchAuditLog();
+  await loadClinicDesk(currentClinicFacilityId);
+}
+
 async function loadInitialData() {
   try {
+    try {
+      const regRes = await fetch('/api/regions');
+      if (regRes.ok) {
+        const regData = await regRes.json();
+        if (regData.active_region && REGIONS[regData.active_region]) {
+          currentRegion = regData.active_region;
+          currentClinicFacilityId = REGIONS[currentRegion].defaultFacility;
+          updateRegionButtons(currentRegion);
+          if (map) {
+            map.setView(REGIONS[currentRegion].center, REGIONS[currentRegion].zoom);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not query /api/regions:", e);
+    }
+
     await fetchEnvironmental();
     await fetchFacilities();
     await fetchRisks();
@@ -148,13 +314,13 @@ async function fetchEnvironmental() {
     const mults = data.surge_multipliers || {};
 
     if (t.smog_episode) {
-      if (bannerTitle) bannerTitle.textContent = "Lucknow-Unnao Smog Inversion Active";
+      if (bannerTitle) bannerTitle.textContent = `${t.corridor || 'Bhubaneswar–Cuttack'} Smog Inversion Active`;
       if (bannerDesc) bannerDesc.textContent = `AQI ${t.aqi} • PM2.5: ${t.pm25} µg/m³ • +${Math.round(((mults['AQI / Smog'] || 1.62) - 1) * 100)}% Acute Respiratory Demand • 42h Lag Onset`;
     } else if (t.heatwave_alert) {
-      if (bannerTitle) bannerTitle.textContent = "Central Awadh Heatwave Alert Active";
+      if (bannerTitle) bannerTitle.textContent = `${t.corridor || 'Bhubaneswar–Cuttack'} Heatwave Alert Active`;
       if (bannerDesc) bannerDesc.textContent = `Temp: ${t.temperature_c}°C • +${Math.round(((mults['Heatwave / Drought'] || 1.85) - 1) * 100)}% Dehydration / ORS Demand`;
     } else {
-      if (bannerTitle) bannerTitle.textContent = "All District Corridors Operating at Baseline";
+      if (bannerTitle) bannerTitle.textContent = `${t.corridor || 'Bhubaneswar–Cuttack'} Baseline Normal Operations`;
       if (bannerDesc) bannerDesc.textContent = `AQI ${t.aqi} • Temp: ${t.temperature_c}°C • Baseline Normal Consumption`;
     }
 
@@ -171,29 +337,31 @@ function updateAtmosphericPlume(t) {
     map.removeLayer(atmosphericPlumeLayer);
   }
 
+  const reg = REGIONS[currentRegion] || REGIONS['bhubaneswar'];
+
   let strokeColor = '#DE6B48';
   let fillColor = '#DE6B48';
   let fillOpacity = 0.22;
-  let label = `🌫️ Lucknow-Unnao Smog Inversion Corridor (AQI ${t.aqi})`;
+  let label = `🌫️ ${t.corridor || reg.name} Inversion Corridor (AQI ${t.aqi})`;
 
   if (t.smog_episode) {
     strokeColor = '#C25433';
     fillColor = '#DE6B48';
     fillOpacity = 0.32;
-    label = `🌫️ Severe Smog Inversion Corridor • Inversion Base: 320m • AQI ${t.aqi} • PM2.5: ${t.pm25} µg/m³`;
+    label = `🌫️ ${t.corridor || reg.name} Smog Inversion Corridor • Inversion Base: 320m • AQI ${t.aqi} • PM2.5: ${t.pm25} µg/m³`;
   } else if (t.heatwave_alert) {
     strokeColor = '#DC2626';
     fillColor = '#F97316';
     fillOpacity = 0.28;
-    label = `🔥 Central Awadh Heatwave Isotherm Zone • Max Temp: ${t.temperature_c}°C • Extreme Dehydration Risk`;
+    label = `🔥 ${t.corridor || reg.name} Heatwave Zone • Max Temp: ${t.temperature_c}°C • Extreme Dehydration Risk`;
   } else {
     fillOpacity = 0.08;
     strokeColor = '#0284C7';
     fillColor = '#38BDF8';
-    label = `🍃 Baseline Atmospheric Zone • AQI ${t.aqi} • Normal Ventilation`;
+    label = `🍃 ${t.corridor || reg.name} Baseline Atmospheric Zone • AQI ${t.aqi} • Normal Ventilation`;
   }
 
-  atmosphericPlumeLayer = L.polygon(CORRIDOR_POLYGON, {
+  atmosphericPlumeLayer = L.polygon(reg.polygon, {
     color: strokeColor,
     weight: 2,
     dashArray: '6, 8',
@@ -214,7 +382,7 @@ function updateAtmosphericPlume(t) {
         <strong class="text-slate-900">${t.smog_episode ? 'Atmospheric Inversion Trap' : (t.heatwave_alert ? 'Heatwave Corridor' : 'Baseline Corridor')}</strong>
       </div>
       <div class="text-slate-600 space-y-0.5 text-[11px]">
-        <div>Corridor: <strong class="text-slate-900">${t.corridor}</strong></div>
+        <div>Corridor: <strong class="text-slate-900">${t.corridor || reg.name}</strong></div>
         <div>Active AQI: <strong class="text-[#DE6B48]">${t.aqi}</strong> (PM2.5: ${t.pm25} µg/m³)</div>
         <div>Inversion Ceiling: <strong>${t.smog_episode ? '320m AGL (Severe Trap)' : '1,200m AGL'}</strong></div>
         <div>Ventilation Index: <strong>${t.smog_episode ? '1,850 m²/s (Stagnant)' : '6,400 m²/s (Good)'}</strong></div>
@@ -229,7 +397,7 @@ function updateAtmosphericPlume(t) {
   // Update Glassmorphic Map HUD
   const hudCorridor = document.getElementById('hudCorridor');
   if (hudCorridor) {
-    hudCorridor.textContent = t.smog_episode ? "AQI 385 • Severe Smog Inversion" : (t.heatwave_alert ? `${t.temperature_c}°C • Heatwave Alert` : `AQI ${t.aqi} • Baseline Normal`);
+    hudCorridor.textContent = t.corridor || (currentRegion === 'bhubaneswar' ? 'Bhubaneswar-Cuttack' : 'Lucknow-Unnao');
   }
   const hudInversion = document.getElementById('hudInversion');
   if (hudInversion) {
@@ -241,63 +409,26 @@ function updateSensorStations(t) {
   if (!sensorMarkersLayer) return;
   sensorMarkersLayer.clearLayers();
 
-  const sensorData = [
-    {
-      id: "SNS-LKO-01",
-      name: "Talkatora Industrial CPCB Stn",
-      type: "Continuous Ambient Air Quality Node",
-      lat: 26.832,
-      lng: 80.892,
-      aqi: t.smog_episode ? 412 : (t.heatwave_alert ? 165 : 82),
-      pm25: t.smog_episode ? 298.4 : 35.0,
-      temp: t.temperature_c,
-      status: t.smog_episode ? "Hazardous" : "Moderate"
-    },
-    {
-      id: "SNS-LKO-02",
-      name: "Amausi Airport Met Center (IMD)",
-      type: "Synoptic Automated Doppler Node",
-      lat: 26.760,
-      lng: 80.880,
-      aqi: t.smog_episode ? 375 : (t.heatwave_alert ? 145 : 70),
-      pm25: t.smog_episode ? 245.0 : 26.0,
-      temp: t.temperature_c - 0.5,
-      status: t.smog_episode ? "Very Poor" : "Satisfactory"
-    },
-    {
-      id: "SNS-UNA-03",
-      name: "Unnao Industrial Cluster Node",
-      type: "UPPCB IoT Emission Hub",
-      lat: 26.545,
-      lng: 80.495,
-      aqi: t.smog_episode ? 398 : (t.heatwave_alert ? 155 : 78),
-      pm25: t.smog_episode ? 278.2 : 31.0,
-      temp: t.temperature_c + 0.5,
-      status: t.smog_episode ? "Severe" : "Moderate"
-    },
-    {
-      id: "SNS-LKO-04",
-      name: "Malihabad Agro-Met Station",
-      type: "Agri-Weather & Particulate Node",
-      lat: 26.925,
-      lng: 80.705,
-      aqi: t.smog_episode ? 310 : (t.heatwave_alert ? 130 : 62),
-      pm25: t.smog_episode ? 195.5 : 22.0,
-      temp: t.temperature_c - 1.0,
-      status: t.smog_episode ? "Poor" : "Good"
-    },
-    {
-      id: "SNS-LKO-05",
-      name: "Gomti River Basin Hydrological Node",
-      type: "River Valley Inversion Monitor",
-      lat: 26.865,
-      lng: 80.950,
-      aqi: t.smog_episode ? 340 : (t.heatwave_alert ? 138 : 68),
-      pm25: t.smog_episode ? 220.0 : 25.0,
-      temp: t.temperature_c - 0.2,
-      status: t.smog_episode ? "Poor" : "Good"
-    }
-  ];
+  const reg = REGIONS[currentRegion] || REGIONS['bhubaneswar'];
+  const sensorConfigs = reg.sensors || REGIONS['bhubaneswar'].sensors;
+
+  const sensorData = sensorConfigs.map((cfg, idx) => {
+    const offsetAqi = (idx === 0 ? 25 : (idx === 1 ? -15 : (idx === 2 ? 10 : (idx === 3 ? -30 : -10))));
+    const aqiVal = Math.max(20, (t.aqi || 200) + offsetAqi);
+    const pmOffset = (idx === 0 ? 30 : (idx === 1 ? -20 : (idx === 2 ? 15 : -15)));
+    const pmVal = Math.max(10, (t.pm25 || 100) + pmOffset);
+    return {
+      id: cfg.id,
+      name: cfg.name,
+      type: cfg.type,
+      lat: cfg.lat,
+      lng: cfg.lng,
+      aqi: Math.round(aqiVal),
+      pm25: parseFloat(pmVal.toFixed(1)),
+      temp: parseFloat(((t.temperature_c || 30) + (idx % 2 === 0 ? 0.4 : -0.4)).toFixed(1)),
+      status: aqiVal > 300 ? "Hazardous" : (aqiVal > 200 ? "Very Poor" : (aqiVal > 100 ? "Moderate" : "Good"))
+    };
+  });
 
   sensorData.forEach(s => {
     const isSevere = s.aqi > 300;
@@ -359,8 +490,11 @@ async function fetchFacilities() {
         opt.textContent = `${fac.name} (${fac.type} - ${fac.district})`;
         clinicSelect.appendChild(opt);
       });
-      if (facilities.length > 0 && !currentClinicFacilityId) {
-        currentClinicFacilityId = facilities[0].id;
+      if (facilities.length > 0) {
+        const found = facilities.find(f => f.id === currentClinicFacilityId);
+        if (!found) {
+          currentClinicFacilityId = facilities[0].id;
+        }
       }
       clinicSelect.value = currentClinicFacilityId;
     }
@@ -598,7 +732,7 @@ function updateCourierFleet() {
   courierMarkersLayer.clearLayers();
   activeCouriers = [];
 
-  const baseTransfers = activeRecs.length > 0 ? activeRecs : [
+  const defaultLkoTransfers = [
     {
       id: "REC-LIVE-01",
       donor_facility_id: "CHC-LKO-02",
@@ -634,6 +768,33 @@ function updateCourierFleet() {
     }
   ];
 
+  const defaultBbsTransfers = [
+    {
+      id: "REC-LIVE-BBS-01",
+      donor_facility_id: "CHC-CTC-01",
+      recipient_facility_id: "PHC-BBS-01",
+      donor_facility_name: "CHC Choudwar",
+      recipient_facility_name: "PHC Mendhasal",
+      medicine_name: "Salbutamol Respirator Solution (Respules 2.5mg)",
+      units_to_transfer: 35,
+      distance_km: 24.5,
+      vehicle_id: "OD-02-AX-3190"
+    },
+    {
+      id: "REC-LIVE-BBS-02",
+      donor_facility_id: "CHC-CTC-03",
+      recipient_facility_id: "PHC-BBS-03",
+      donor_facility_name: "CHC Athagarh",
+      recipient_facility_name: "PHC Jatni",
+      medicine_name: "Oral Rehydration Salts (ORS WHO Formula)",
+      units_to_transfer: 140,
+      distance_km: 28.2,
+      vehicle_id: "OD-05-BG-7741"
+    }
+  ];
+
+  const baseTransfers = activeRecs.length > 0 ? activeRecs : (currentRegion === 'bhubaneswar' ? defaultBbsTransfers : defaultLkoTransfers);
+
   baseTransfers.forEach((rec, idx) => {
     const donor = facilities.find(f => f.id === rec.donor_facility_id);
     const recip = facilities.find(f => f.id === rec.recipient_facility_id);
@@ -643,7 +804,8 @@ function updateCourierFleet() {
     const currentLat = donor.lat + (recip.lat - donor.lat) * initialProgress;
     const currentLng = donor.lng + (recip.lng - donor.lng) * initialProgress;
 
-    const vehicleId = rec.vehicle_id || `UP-32-BG-${3200 + idx * 142}`;
+    const defaultPlatePrefix = currentRegion === 'bhubaneswar' ? 'OD-02-BB' : 'UP-32-BG';
+    const vehicleId = rec.vehicle_id || `${defaultPlatePrefix}-${3200 + idx * 142}`;
     const medicineShort = rec.medicine_name.split('(')[0];
 
     const vanIcon = L.divIcon({
@@ -1035,13 +1197,16 @@ function loadSampleVoice(idx) {
   } else if (idx === 3) {
     txt.value = "PHC Itaunja reporting: Paracetamol syrup stock is depleted, urgently require 50 bottles for pediatric cases.";
     if (facSelect) facSelect.value = "PHC-LKO-08";
+  } else if (idx === 4) {
+    txt.value = "ଏହା PHC Mendhasal ରିପୋର୍ଟ। ଆମ ପାଖରେ ମାତ୍ର ୧୮ ଟି ସାଲବୁଟାମଲ୍ (Salbutamol) ବାକି ଅଛି ଏବଂ ଗତକାଲି ୪୨ ଜଣ ଶ୍ୱାସରୋଗୀଙ୍କୁ ଚିକିତ୍ସା କରିଛୁ।";
+    if (facSelect) facSelect.value = "PHC-BBS-01";
   }
 }
 
 async function submitVoiceIntake() {
   const text = document.getElementById('voiceTranscript').value.trim();
   if (!text) {
-    alert("Please enter or record a voice message in English or Hindi.");
+    alert("Please enter or record a voice message in English, Hindi, or Odia.");
     return;
   }
 
@@ -1252,7 +1417,7 @@ async function runAgentPipeline(targetFacId = null) {
   const snippet = document.getElementById('voiceTranscript').value.trim() || null;
   const facSelect = document.getElementById('voiceFacilitySelect');
   
-  const facId = targetFacId || (facSelect ? (facSelect.value || 'PHC-LKO-01') : 'PHC-LKO-01');
+  const facId = targetFacId || (facSelect && facSelect.value ? facSelect.value : (currentClinicFacilityId || (facilities.length > 0 ? facilities[0].id : (currentRegion === 'bhubaneswar' ? 'PHC-BBS-01' : 'PHC-LKO-01'))));
   if (facSelect && facId) facSelect.value = facId;
 
   if (btn) {
@@ -1558,9 +1723,9 @@ async function runVisionVerification() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        image_name: "phc_kakori_cupboard_01.jpg",
-        facility_id: "PHC-LKO-01",
-        reported_count: 15
+        image_name: currentRegion === 'bhubaneswar' ? "phc_mendhasal_cupboard_01.jpg" : "phc_kakori_cupboard_01.jpg",
+        facility_id: currentClinicFacilityId || (facilities.length > 0 ? facilities[0].id : (currentRegion === 'bhubaneswar' ? 'PHC-BBS-01' : 'PHC-LKO-01')),
+        reported_count: currentRegion === 'bhubaneswar' ? 18 : 15
       })
     });
 
@@ -1727,13 +1892,23 @@ function filterMedicine(medId) {
   const searchInput = document.getElementById('searchInput');
 
   if (medId === 'MED-001') {
-    document.getElementById('voiceTranscript').value = "PHC Kakori: Respiratory medicine (Salbutamol) has only 15 respules remaining.";
-    if (facSelect) facSelect.value = "PHC-LKO-01";
+    if (currentRegion === 'bhubaneswar') {
+      document.getElementById('voiceTranscript').value = "PHC Mendhasal: Respiratory medicine (Salbutamol) has only 18 respules remaining.";
+      if (facSelect) facSelect.value = "PHC-BBS-01";
+    } else {
+      document.getElementById('voiceTranscript').value = "PHC Kakori: Respiratory medicine (Salbutamol) has only 15 respules remaining.";
+      if (facSelect) facSelect.value = "PHC-LKO-01";
+    }
     if (searchInput) searchInput.value = "Salbutamol";
     filterDashboardBySearch("Salbutamol");
   } else if (medId === 'MED-002') {
-    document.getElementById('voiceTranscript').value = "CHC Sarojini Nagar: ORS oral rehydration buffer has 120 packets remaining.";
-    if (facSelect) facSelect.value = "CHC-LKO-06";
+    if (currentRegion === 'bhubaneswar') {
+      document.getElementById('voiceTranscript').value = "CHC Choudwar: ORS oral rehydration buffer has 110 packets remaining.";
+      if (facSelect) facSelect.value = "CHC-CTC-01";
+    } else {
+      document.getElementById('voiceTranscript').value = "CHC Sarojini Nagar: ORS oral rehydration buffer has 120 packets remaining.";
+      if (facSelect) facSelect.value = "CHC-LKO-06";
+    }
     if (searchInput) searchInput.value = "ORS";
     filterDashboardBySearch("ORS");
   }
@@ -1945,7 +2120,7 @@ function onClinicFacilityChange(facilityId) {
 }
 
 async function loadClinicDesk(facilityId) {
-  if (!facilityId) facilityId = currentClinicFacilityId || "PHC-LKO-01";
+  if (!facilityId) facilityId = currentClinicFacilityId || (currentRegion === 'bhubaneswar' ? "PHC-BBS-01" : "PHC-LKO-01");
   currentClinicFacilityId = facilityId;
 
   const select = document.getElementById('clinicFacilitySelect');

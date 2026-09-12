@@ -65,8 +65,33 @@ class InventoryDomainService:
                     return item
         return None
 
+    def get_region_for_facility(self, facility_id: str) -> str:
+        fac = self.facilities.get(facility_id)
+        if fac:
+            district = fac.get("district", "")
+            if district in ["Khordha", "Cuttack"]:
+                return "bhubaneswar"
+            if district in ["Lucknow", "Unnao"]:
+                return "lucknow"
+        if any(tok in str(facility_id) for tok in ["BBS", "CTC", "OD"]):
+            return "bhubaneswar"
+        return getattr(self.storage, "active_region", "lucknow")
+
+    def _find_consignment_with_region(self, consignment_id: str) -> Tuple[str, dict]:
+        order = [getattr(self.storage, "active_region", "lucknow"), "bhubaneswar", "lucknow"]
+        seen = set()
+        for reg in order:
+            if reg in seen:
+                continue
+            seen.add(reg)
+            _, consignments, _, _ = self.storage.load_all(region=reg)
+            if consignment_id in consignments:
+                return reg, consignments[consignment_id]
+        raise HTTPException(status_code=404, detail="Consignment not found.")
+
     def get_facility_inventory(self, facility_id: str) -> List[dict]:
-        inventory, consignments, _, _ = self.storage.load_all()
+        reg = self.get_region_for_facility(facility_id)
+        inventory, consignments, _, _ = self.storage.load_all(region=reg)
         fac_items = [i for i in inventory if i["facility_id"] == facility_id]
         
         # Add derived in_transit count from active dispatched consignments heading to this facility
@@ -271,10 +296,12 @@ class InventoryDomainService:
             self._record_idempotency(req.idempotency_key, req.model_dump(), result.model_dump(), idempotency_cache)
             return result, inventory, consignments, idempotency_cache, audit_entry
 
-        return self.storage.execute_in_transaction(_txn)
+        reg = self.get_region_for_facility(req.facility_id)
+        return self.storage.execute_in_transaction(_txn, region=reg)
 
     def approve_transfer_to_consignment(self, req: ApprovalRequest, rec: TransferRecommendation) -> TransferConsignment:
-        inventory, consignments, idempotency_cache, _ = self.storage.load_all()
+        reg = self.get_region_for_facility(rec.donor_facility_id)
+        inventory, consignments, idempotency_cache, _ = self.storage.load_all(region=reg)
 
         cached = self._check_idempotency(req.idempotency_key, req.model_dump(), idempotency_cache)
         if cached:
@@ -382,11 +409,12 @@ class InventoryDomainService:
         rec.challan_id = challan_id
 
         self._record_idempotency(req.idempotency_key, req.model_dump(), consignment.model_dump(), idempotency_cache)
-        self.storage.commit_transaction(inventory, consignments, idempotency_cache, audit_entry)
+        self.storage.commit_transaction(inventory, consignments, idempotency_cache, audit_entry, region=reg)
         return consignment
 
     def cancel_consignment(self, req: CancelConsignmentRequest) -> TransferConsignment:
-        inventory, consignments, idempotency_cache, _ = self.storage.load_all()
+        reg, _ = self._find_consignment_with_region(req.consignment_id)
+        inventory, consignments, idempotency_cache, _ = self.storage.load_all(region=reg)
 
         cached = self._check_idempotency(req.idempotency_key, req.model_dump(), idempotency_cache)
         if cached:
@@ -430,11 +458,12 @@ class InventoryDomainService:
         consignment = TransferConsignment(**c_data)
 
         self._record_idempotency(req.idempotency_key, req.model_dump(), consignment.model_dump(), idempotency_cache)
-        self.storage.commit_transaction(inventory, consignments, idempotency_cache, audit_entry)
+        self.storage.commit_transaction(inventory, consignments, idempotency_cache, audit_entry, region=reg)
         return consignment
 
     def dispatch_consignment(self, req: DispatchConsignmentRequest) -> TransferConsignment:
-        inventory, consignments, idempotency_cache, _ = self.storage.load_all()
+        reg, _ = self._find_consignment_with_region(req.consignment_id)
+        inventory, consignments, idempotency_cache, _ = self.storage.load_all(region=reg)
 
         cached = self._check_idempotency(req.idempotency_key, req.model_dump(), idempotency_cache)
         if cached:
@@ -506,11 +535,12 @@ class InventoryDomainService:
         consignment = TransferConsignment(**c_data)
 
         self._record_idempotency(req.idempotency_key, req.model_dump(), consignment.model_dump(), idempotency_cache)
-        self.storage.commit_transaction(inventory, consignments, idempotency_cache, audit_entry)
+        self.storage.commit_transaction(inventory, consignments, idempotency_cache, audit_entry, region=reg)
         return consignment
 
     def receive_consignment(self, req: ReceiveConsignmentRequest) -> TransferConsignment:
-        inventory, consignments, idempotency_cache, _ = self.storage.load_all()
+        reg, _ = self._find_consignment_with_region(req.consignment_id)
+        inventory, consignments, idempotency_cache, _ = self.storage.load_all(region=reg)
 
         cached = self._check_idempotency(req.idempotency_key, req.model_dump(), idempotency_cache)
         if cached:
@@ -616,11 +646,12 @@ class InventoryDomainService:
         consignment = TransferConsignment(**c_data)
 
         self._record_idempotency(req.idempotency_key, req.model_dump(), consignment.model_dump(), idempotency_cache)
-        self.storage.commit_transaction(inventory, consignments, idempotency_cache, audit_entry)
+        self.storage.commit_transaction(inventory, consignments, idempotency_cache, audit_entry, region=reg)
         return consignment
 
     def get_facility_action_items(self, facility_id: str) -> List[DailyActionItem]:
-        inventory, consignments, _, _ = self.storage.load_all()
+        reg = self.get_region_for_facility(facility_id)
+        inventory, consignments, _, _ = self.storage.load_all(region=reg)
         actions: List[DailyActionItem] = []
 
         # 1. Impending Stockouts (Coverage < 4.0 days)
@@ -719,7 +750,8 @@ class InventoryDomainService:
                 detail=f"Unauthorized: Role '{req.supervisor_role}' cannot resolve reconciliation exceptions. Requires MOIC or Supervisor authorization."
             )
 
-        inventory, consignments, idempotency_cache, _ = self.storage.load_all()
+        reg = self.get_region_for_facility(req.facility_id)
+        inventory, consignments, idempotency_cache, _ = self.storage.load_all(region=reg)
 
         cached = self._check_idempotency(req.idempotency_key, req.model_dump(), idempotency_cache)
         if cached:
@@ -849,7 +881,7 @@ class InventoryDomainService:
         )
 
         self._record_idempotency(req.idempotency_key, req.model_dump(), result.model_dump(), idempotency_cache)
-        self.storage.commit_transaction(inventory, consignments, idempotency_cache, audit_entry)
+        self.storage.commit_transaction(inventory, consignments, idempotency_cache, audit_entry, region=reg)
         return result
 
     def get_stock_movement_register(self, facility_id: str, medicine_id: str, batch_number: Optional[str] = None) -> StockMovementRegister:
@@ -861,7 +893,8 @@ class InventoryDomainService:
         - Resulting balances per event
         - Closing balances and compliance statement
         """
-        inventory, _, _, audit_log = self.storage.load_all()
+        reg = self.get_region_for_facility(facility_id)
+        inventory, _, _, audit_log = self.storage.load_all(region=reg)
         item = self._find_item(inventory, facility_id, medicine_id, batch_number)
         if not item:
             item = self._find_item(inventory, facility_id, medicine_id)
