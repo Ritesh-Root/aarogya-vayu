@@ -10,9 +10,11 @@
 
 > **Submission for "Build with AI: Code for Communities (2nd Edition)"**  
 > **Track 3: Smart Health & Supply Chain Resilience**  
-> **Target Region:** Lucknow–Unnao Rural Public Health Corridor, Uttar Pradesh, India  
+> **Target Corridors:** Bhubaneswar–Cuttack Coastal & Urban-Rural Health Corridor (Odisha, Default) & Lucknow–Unnao Rural Public Health Corridor (Uttar Pradesh)  
 > **Author & Lead Developer:** Ritesh Kumar Mahato  
-> **Live Production Application:** [https://aarogya-vayu.vercel.app](https://aarogya-vayu.vercel.app)
+> **Live Production Application:** [https://aarogya-vayu.vercel.app](https://aarogya-vayu.vercel.app)  
+> **Interactive Video Walkthrough:** [https://youtu.be/D8w2qviTuW4](https://youtu.be/D8w2qviTuW4)  
+> **GitHub Repository:** [https://github.com/Ritesh-Root/aarogya-vayu](https://github.com/Ritesh-Root/aarogya-vayu)
 
 ---
 
@@ -23,10 +25,12 @@ To ensure total transparency for technical judges, the table below delineates wh
 | Capability / Subsystem | Live Production Code (Implemented) | Calibrated Scientific Models | Demonstration Simulation |
 | :--- | :--- | :--- | :--- |
 | **Logistics Redistribution** | **Pure-Python Deterministic Constrained Optimizer** (<2ms latency, serverless-ready, 0 cold start). Enforces strict stock conservation ($\\Delta \\text{donor} + \\Delta \\text{rec} = 0$), donor surge reserves ($\\ge 14$d), and batch expiry salvage. | Winding road penalty (1.25× Haversine great-circle distance) for rural roads. | N/A |
-| **Frontline Voice Intake** | Multilingual entity extraction (Hindi / Hinglish / English), numeric normalization (Devanagari numerals), quality checks, and **EDL-UP-2026 Grounding**. Powered by **Google Gemini 2.5 Flash** with offline edge regex fallback. | Phonetic dialect mapping for 14 rural UP blocks (e.g. *"सांस की दवाई"* $\\to$ `MED-001 Salbutamol 2.5mg`). | Synthetic 10s audio clip for reproducible judging evaluations. |
-| **Environmental Early Warning** | Dynamic Category Surge Engine: translates environmental readings into forward consumption multipliers (1.0× to 2.1×). | Epidemiological lag curves (42h lag between inversion trap and peak respiratory admissions) calibrated from Indo-Gangetic health studies. | Scenario toggles (AQI 385 Winter Smog Inversion, 43.5°C Pre-Monsoon Heatwave, Clean Baseline). |
-| **Audit & Governance** | **Tamper-evident SHA-256 chained hash ledger** (`data/audit_log.json`) with an active cryptographic integrity validator endpoint (`/api/audit-log/verify`). Official Challan generation with idempotency keys. | UP Clinical Establishments Act 2010 and DPDP Act 2023 compliance workflow. | Digital challan signature stamp. |
-| **GIS Command Center** | Interactive **Leaflet.js** map with 20 geo-tagged PHCs & CHCs across Lucknow & Unnao, color-coded risk envelopes, and real-time inventory inspection. | Geo-coordinates and catchment populations (~840k residents) from UP Health Department open data. | Cold-chain courier transit path (`UP-35-AH-2041`) and 4.2°C temperature sensor stream. |
+| **Frontline Voice Intake** | Multilingual entity extraction (Hindi / Odia / Hinglish / English), numeric normalization (Devanagari numerals), quality checks, and **Essential Drug List (EDL) Grounding**. Powered by **Google Gemini 2.5 Flash** with offline edge regex fallback. | Phonetic dialect mapping for 14 rural UP blocks & coastal Odisha facilities (e.g. *"सांस की दवाई"* / *"ନିଶ୍ୱାସ ଔଷଧ"* $\\to$ `MED-001 Salbutamol 2.5mg`). | Synthetic 10s audio clip for reproducible judging evaluations. |
+| **Environmental Early Warning** | Dynamic Category Surge Engine: translates environmental readings into forward consumption multipliers (1.0× to 2.1×). Ingests **Live Open-Meteo Satellite & Sensor Telemetry** in real-time. | Epidemiological lag curves (42h lag between inversion trap and peak respiratory admissions) calibrated from Indo-Gangetic health studies. | Scenario toggles (AQI 385 Winter Smog Inversion, 43.5°C Pre-Monsoon Heatwave, Clean Baseline). |
+| **Dual-Corridor GIS Command Center** | Interactive **Leaflet.js** map with 20 geo-tagged PHCs & CHCs across **Bhubaneswar–Cuttack (Odisha, Default)** and **Lucknow–Unnao (UP)** with instant regional toggle, color-coded risk envelopes, and real-time inventory inspection. | Geo-coordinates and catchment populations (~1.8M residents) from Odisha Health & Family Welfare and UP Health Department open data. | Cold-chain courier transit path and 4.2°C temperature sensor stream. |
+| **Regional Health & Climate News Bureau** | Live asynchronous Google News RSS parser with geo-topic filters + verified regulatory alerts from official state portals (IMD, OSPCB, OSMCL, UPPCB, KGMU, AIIMS). Direct outbound citation links to original dispatches. | Clinical category mapping (Respiratory, Vector-Borne, Heatwave) tying public events to immediate facility-level medicine impact. | Real-time ticker & modal reader in UI. |
+| **CMO Strategic AI Studio** | Multi-scenario conversational decision support powered by **Google Gemini 2.5 Flash** with corridor context injection and actionable mitigation protocols. | Epidemic escalation response policies and buffer reallocation guidelines. | Interactive Q&A chat for District Health Leadership. |
+| **Audit & Governance** | **Tamper-evident SHA-256 chained hash ledger** (`data/audit_log.json`) with an active cryptographic integrity validator endpoint (`/api/audit-log/verify`). Official Challan generation with idempotency keys. | Clinical Establishments Act and DPDP Act 2023 compliance workflow. | Digital challan signature stamp. |
 
 ---
 
@@ -211,10 +215,17 @@ Open your browser at **`http://localhost:8000`** or access the live deployment a
 
 ---
 
-## 👥 10. Submission Metadata
+## 👥 10. Submission Metadata & Deliverables
 
 - **Competition:** Build with AI: Code for Communities (2nd Edition)
 - **Track:** Track 3: Smart Health & Supply Chain Resilience
-- **Developer:** Ritesh Kumar Mahato (Solo Entrant)
+- **Developer:** Ritesh Kumar Mahato (Solo Entrant & Distributed Systems Architect)
 - **Live Production URL:** [https://aarogya-vayu.vercel.app](https://aarogya-vayu.vercel.app)
-- **Repository:** [https://github.com/Ritesh-Root/aarogya-vayu](https://github.com/Ritesh-Root/aarogya-vayu)
+- **Interactive Video Walkthrough:** [https://youtu.be/D8w2qviTuW4](https://youtu.be/D8w2qviTuW4)
+- **Open-Source GitHub Repository:** [https://github.com/Ritesh-Root/aarogya-vayu](https://github.com/Ritesh-Root/aarogya-vayu)
+- **Pitch Deck (PDF):** [`Aarogya_Vayu_Pitch_Deck.pdf`](file:///home/ritesh/Downloads/Aarogya_Vayu_Pitch_Deck.pdf)
+- **Pitch Deck (PPTX):** [`Aarogya_Vayu_Pitch_Deck.pptx`](file:///home/ritesh/Downloads/Aarogya_Vayu_Pitch_Deck.pptx)
+- **Dual Corridors Implemented:**
+  1. **Bhubaneswar–Cuttack Urban-Rural Health Corridor (Odisha, Default):** 10 geo-tagged facilities covering Khordha and Cuttack districts.
+  2. **Lucknow–Unnao Rural Public Health Corridor (Uttar Pradesh):** 10 geo-tagged facilities covering Lucknow and Unnao districts.
+- **External Real-Time Data Integrations:** Open-Meteo live sensor telemetry & Regional Health News Bureau (Google News RSS + verified state regulatory gazettes).

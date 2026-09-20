@@ -156,12 +156,14 @@ p.space_after = Pt(14)
 p = tf1.add_paragraph()
 p.text = "• Challenge Track: Track 3 — Smart Health & Supply Chain Resilience\n" \
          "• System Architect: Ritesh Kumar Mahato (Solo Participant)\n" \
-         "• Core Focus: Real-Time Dynamic Inversion Sensing & Stock Redistribution\n" \
-         "• Pilot Corridor: Lucknow–Unnao Healthcare Corridor (20 Facilities)\n" \
-         "• Google Tech: Gemini 2.5 Flash • Google ADK • Vertex AI • GEE • STT v2 • Gemma 2B"
-p.font.size = Pt(11)
+         "• Dual Corridors: Bhubaneswar–Cuttack (Odisha, Default) & Lucknow–Unnao (UP)\n" \
+         "• Live Web App: https://aarogya-vayu.vercel.app\n" \
+         "• Demo Video: https://youtu.be/D8w2qviTuW4\n" \
+         "• GitHub Repository: https://github.com/Ritesh-Root/aarogya-vayu\n" \
+         "• Google Tech: Gemini 2.5 Flash • Google ADK • Vertex AI • GEE • STT v2"
+p.font.size = Pt(10)
 p.font.color.rgb = TEXT_BODY
-p.space_after = Pt(18)
+p.space_after = Pt(12)
 
 p = tf1.add_paragraph()
 p.text = "LIVE SYSTEM DEMONSTRATION & PRODUCTION PITCH"
@@ -729,16 +731,16 @@ p.space_after = Pt(12)
 
 p = tf_d.add_paragraph()
 p.text = "• Event: Build with AI: Code for Communities (2nd Edition)\n" \
-         "• Selected Challenge: Track 3 — Smart Health & Supply Chain Resilience\n" \
-         "• Public GitHub Repository:\n" \
-         "  https://github.com/Ritesh-Root/aarogya-vayu\n" \
-         "• Live Working Application:\n" \
-         "  https://aarogya-vayu.vercel.app (FastAPI + Google ADK + Leaflet GIS)\n" \
-         "• Google Cloud & AI Stack:\n" \
-         "  Gemini 2.5 Flash • Google ADK • Vertex AI • GEE • STT v2 • Gemma 2B"
-p.font.size = Pt(10)
+         "• Challenge Track: Track 3 — Smart Health & Supply Chain Resilience\n" \
+         "• Live Working Application: https://aarogya-vayu.vercel.app\n" \
+         "• Video Demo Walkthrough: https://youtu.be/D8w2qviTuW4\n" \
+         "• GitHub Repository: https://github.com/Ritesh-Root/aarogya-vayu\n" \
+         "• Corridors: Bhubaneswar–Cuttack (Odisha, Default) & Lucknow–Unnao (UP)\n" \
+         "• Real-Time Telemetry: Open-Meteo Satellite Sensors + Regional News Bureau\n" \
+         "• Google Tech: Gemini 2.5 Flash • Google ADK • Vertex AI • GEE • STT v2"
+p.font.size = Pt(9.5)
 p.font.color.rgb = TEXT_BODY
-p.space_after = Pt(14)
+p.space_after = Pt(12)
 
 p = tf_d.add_paragraph()
 p.text = "Thank you for reviewing Aarogya-Vāyu!"
