@@ -23,7 +23,7 @@ COORDINATES = {
     "lucknow": {
         "lat": 26.8467,
         "lng": 80.9462,
-        "name": "Lucknow-Unnao Indo-Gangetic Smog Corridor (Severe Inversion)",
+        "name": "Lucknow-Unnao Indo-Gangetic Corridor (UP)",
         "district": "Lucknow",
         "heatwave_threshold_c": 40.0,
     }

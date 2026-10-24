@@ -29,9 +29,9 @@ LIGHT_BLUE_BG = RGBColor(239, 246, 255)  # Soft Blue Tint
 SHOT_DIR = "/home/ritesh/aarogya_vayu/screenshots"
 IMG_DASHBOARD = os.path.join(SHOT_DIR, "proj_dashboard_overview.png")
 IMG_FACILITY = os.path.join(SHOT_DIR, "proj_facility_command_center.png")
-IMG_TERMINAL = os.path.join(SHOT_DIR, "proj_adk_agent_terminal.png")
+IMG_TERMINAL = os.path.join(SHOT_DIR, "proj_agent_pipeline_console.png")
 IMG_CHALLAN = os.path.join(SHOT_DIR, "proj_official_transfer_challan.png")
-IMG_GIS_MAP = os.path.join(SHOT_DIR, "proj_gis_map_couriers.png")
+IMG_GIS_MAP = os.path.join(SHOT_DIR, "proj_facility_map.png")
 IMG_CMO_STUDIO = os.path.join(SHOT_DIR, "proj_cmo_ai_studio.png")
 IMG_VISION = os.path.join(SHOT_DIR, "proj_vision_ocr_verification.png")
 IMG_LEDGER = os.path.join(SHOT_DIR, "proj_cryptographic_ledger.png")
@@ -160,7 +160,7 @@ p.text = "• Challenge Track: Track 3 — Smart Health & Supply Chain Resilienc
          "• Live Web App: https://aarogya-vayu.vercel.app\n" \
          "• Demo Video: https://youtu.be/D8w2qviTuW4\n" \
          "• GitHub Repository: https://github.com/Ritesh-Root/aarogya-vayu\n" \
-         "• Google Tech: Gemini 3.8 Flash • Google ADK • Vertex AI • GEE • STT v2"
+         "• Google AI: Gemini 3.8 Flash (language, function calling, audio, vision) • Data: Copernicus CAMS via Open-Meteo"
 p.font.size = Pt(10)
 p.font.color.rgb = TEXT_BODY
 p.space_after = Pt(12)
@@ -176,7 +176,7 @@ add_image_card(
     Inches(6.8), Inches(0.8), Inches(5.7), Inches(5.9), 
     IMG_DASHBOARD, 
     "Live Production Interface — Civic Command Center",
-    "Figure 1: Real-time Aarogya-Vāyu Civic Command Center running on FastAPI & Leaflet GIS, showing Lucknow–Unnao smog inversion alert (AQI 385), active dispatch orders, and stockout watch."
+    "Figure 1: Aarogya-Vāyu command center (FastAPI + Leaflet) with live Copernicus CAMS air quality, transfer recommendations and the stockout watch."
 )
 
 # ==============================================================================
@@ -200,9 +200,9 @@ p.space_after = Pt(10)
 
 stats = [
     ("17% – 51%", "Baseline availability of critical respiratory medicines (Salbutamol, Dexamethasone) in rural primary health centres.", RED_ALERT),
-    ("4 – 14 Weeks", "Average lag required for district centralized warehouses to fulfill emergency stock indents via paper bureaucracy.", AMBER),
+    ("4 – 14 Weeks", "Typical duration of a stockout at a rural PHC under monthly indent cycles.", AMBER),
     ("+30% – 50%", "Surge in acute respiratory admissions during winter boundary-layer smog trapping events across the Gangetic belt.", TERRACOTTA),
-    ("Zero AI Forecasting", "Clinics currently rely on static monthly quotas with zero dynamic link to atmospheric telemetry.", TEXT_HEAD)
+    ("No Climate Signal", "Clinics rely on static monthly quotas with no link to air quality or heat forecasts.", TEXT_HEAD)
 ]
 
 for val, desc, col in stats:
@@ -222,8 +222,8 @@ add_image_card(
     slide2, 
     Inches(6.8), Inches(1.45), Inches(5.7), Inches(5.5), 
     IMG_FACILITY, 
-    "Real Facility Telemetry — PHC Kakori Command View",
-    "Figure 2: Real-time Facility Command Center showing imminent stockout at PHC Kakori (Salbutamol down to 0.5 days cover, 100% stockout risk) during acute 385 AQI smog inversion."
+    "Facility View — PHC Kakori (Smog Scenario)",
+    "Figure 2: Facility view in the smog scenario (AQI 385): PHC Kakori is down to 15 salbutamol respules, 0.5 days of cover (demo data)."
 )
 
 # ==============================================================================
@@ -235,38 +235,38 @@ add_header(
     slide3, 
     "02 / THE SOLUTION ARCHITECTURE", 
     "The Causal Resilience Loop: From Atmosphere to Delivery", 
-    "Automating the end-to-end cycle from satellite telemetry to physical medicine dispatch"
+    "From live air-quality telemetry to an approved, audited medicine transfer"
 )
 
 steps = [
     ("1. SENSE", "Atmospheric Telemetry", 
-     "• Ingests Copernicus Sentinel-5P NO2 & AOD via Google Earth Engine.\n"
-     "• Monitors real-time CPCB ground stations (AQI, PM2.5, Inversion).\n"
-     "• Detects stubble fire thermal anomalies from NASA FIRMS.", 
+     "• Live Copernicus CAMS air quality + Open-Meteo weather.\n"
+     "• AQI, PM2.5, aerosol optical depth, boundary-layer height, 72h forecast.\n"
+     "• NASA FIRMS fire hotspots when an API key is set.", 
      BLUE_ACCENT, LIGHT_BLUE_BG),
     
-    ("2. FORECAST", "Epidemiological Lags", 
-     "• Vertex AI AutoML tabular model trained on clinical OPD datasets.\n"
-     "• Models 48–72h biological lags between spikes and hospital surges.\n"
-     "• Outputs P10, P50, P90 probabilistic stockout risk curves.", 
+    ("2. FORECAST", "Rule-Based Surge Engine", 
+     "• Converts AQI and heat into demand multipliers per medicine class.\n"
+     "• Projects days of cover from baseline consumption × multiplier.\n"
+     "• Outputs a 7-day stockout probability (transparent, no training data needed).", 
      AMBER, LIGHT_AMBER_BG),
     
     ("3. LISTEN", "Frontline Voice Intake", 
-     "• Multilingual voice reporting via Google Cloud Speech-to-Text v2.\n"
+     "• Gemini 3.8 Flash transcribes Hindi, Odia and English voice notes.\n"
      "• Frontline ASHA/ANM workers report shelf stock in Hindi dialect.\n"
-     "• Grounded against UP Essential Drug List (EDL-UP-2026).", 
+     "• Parsed and grounded to the state Essential Drug List; staff confirm.", 
      EMERALD, LIGHT_GREEN_BG),
     
-    ("4. SOLVE", "Simplex Optimization", 
-     "• SciPy Operations Research engine executes lateral redistribution.\n"
+    ("4. SOLVE", "Constrained Allocator", 
+     "• Gemini function call → deterministic allocator picks the quantity.\n"
      "• Enforces 35 km ambulance radius & 14-day donor safety buffer.\n"
      "• Prioritizes near-expiry medicine batches to eliminate waste.", 
      TERRACOTTA, CARD_BG),
     
     ("5. GOVERN", "Human-in-the-Loop", 
-     "• 1-Click Chief Medical Officer (CMO) authorization via AI studio.\n"
-     "• Generates cryptographically sealed SHA-256 e-Challan dispatch orders.\n"
-     "• Gemini Flash Vision cross-verifies physical shelf photos before sign-off.", 
+     "• Chief Medical Officer approves every transfer.\n"
+     "• Dispatch challan; every step in a SHA-256 hash-chained ledger.\n"
+     "• Gemini vision checks shelf photos against the register.", 
      BLUE_ACCENT, LIGHT_BLUE_BG)
 ]
 
@@ -309,27 +309,27 @@ tf_fl = tb_fl.text_frame
 tf_fl.word_wrap = True
 
 p = tf_fl.paragraphs[0]
-p.text = "SEAMLESS CLOSED-LOOP CAUSAL AUTOMATION"
+p.text = "CLOSED LOOP, HUMAN IN CHARGE"
 p.font.size = Pt(11)
 p.font.bold = True
 p.font.color.rgb = EMERALD
 p.space_after = Pt(4)
 
 p = tf_fl.add_paragraph()
-p.text = "Satellite Inversion Signal (Sentinel-5P) ➔ 48h Predictive Surge Curve (Vertex AI) ➔ Real-Time Voice Inventory Verification (STT v2 + Gemini Vision) ➔ Zero-Hallucination Simplex Solver (SciPy) ➔ CMO Cryptographic Approval & Ambulance Green Corridor Dispatch."
+p.text = "Live CAMS air quality ➔ Surge multipliers & days of cover ➔ Gemini voice & photo stock checks ➔ Deterministic allocator (35 km, 14-day reserve, FEFO) ➔ CMO approval, challan & hash-chained audit."
 p.font.size = Pt(10)
 p.font.color.rgb = TEXT_BODY
 
 # ==============================================================================
-# SLIDE 4: Google ADK Autonomous Multi-Agent Mesh
+# SLIDE 4: Multi-Agent Pipeline (Python orchestrator)
 # ==============================================================================
 slide4 = prs.slides.add_slide(blank_slide_layout)
 set_slide_background(slide4)
 add_header(
     slide4, 
     "03 / MULTI-AGENT ORCHESTRATION", 
-    "Google Agent Developer Kit (ADK) Autonomous Mesh", 
-    "Decentralized, event-driven agent collaboration with step-by-step trace transparency"
+    "Five Agents, One Auditable Pipeline", 
+    "A Python orchestrator chains specialised agents and shows every step"
 )
 
 card_mesh = add_card(slide4, Inches(0.8), Inches(1.45), Inches(5.7), Inches(5.5), bg_color=CARD_BG, border_color=CARD_BORDER, corner_radius=0.025)
@@ -338,17 +338,17 @@ tf_m = tb_m.text_frame
 tf_m.word_wrap = True
 
 p = tf_m.paragraphs[0]
-p.text = "THE 4 SPECIALIZED ADK AGENTS"
+p.text = "THE 4 SPECIALISED AGENTS"
 p.font.size = Pt(11)
 p.font.bold = True
 p.font.color.rgb = BLUE_ACCENT
 p.space_after = Pt(8)
 
 agents = [
-    ("🛰️ Environmental Sentinel Agent", "Subscribes to Google Earth Engine satellite feeds and CPCB ground sensors. Detects thermal inversions and publishes SURGE_TRIGGER events.", BLUE_ACCENT),
-    ("🎙️ Frontline Intake Agent", "Processes audio clips from ASHA nurses via Speech-to-Text v2. Uses Vertex AI Search to ground colloquial Hindi dialect to standard UP drug codes.", EMERALD),
-    ("📈 Demand Intelligence Agent", "Applies 48–72h epidemiological lag curves to estimate ward-level patient spikes and computes probabilistic stockout risks (P10, P50, P90).", AMBER),
-    ("📦 Logistics Redistribution Agent", "Gemini 3.8 Flash Tool Calling invokes deterministic constrained solver; balances multi-facility inventories within 35 km in <2ms.", TERRACOTTA)
+    ("🛰️ Environmental Sentinel Agent", "Reads live Copernicus CAMS air quality and Open-Meteo weather (boundary layer, 30-day aerosol anomaly, 72h forecast) and flags smog or heatwave conditions.", BLUE_ACCENT),
+    ("🎙️ Frontline Intake Agent", "Gemini 3.8 Flash transcribes nurses' voice notes and extracts facility, medicine and count, mapping colloquial terms ('सांस की दवाई') to state EDL codes.", EMERALD),
+    ("📈 Demand Intelligence Agent", "Rule-based surge engine: climate multipliers × baseline consumption give days of cover and a 7-day stockout probability per clinic and medicine.", AMBER),
+    ("📦 Logistics Redistribution Agent", "Gemini 3.8 Flash function calling invokes the deterministic allocator; the model cannot change the 35 km radius, the donor reserve or the quantity.", TERRACOTTA)
 ]
 
 for ag_t, ag_d, ag_c in agents:
@@ -368,69 +368,69 @@ add_image_card(
     slide4, 
     Inches(6.8), Inches(1.45), Inches(5.7), Inches(5.5), 
     IMG_TERMINAL, 
-    "Live ADK Multi-Agent Execution Terminal",
-    "Figure 3: Live execution terminal showing real-time Google ADK multi-agent collaboration, Gemini function calling (calculate_optimal_transfer), and deterministic solver results."
+    "Agent Pipeline Console",
+    "Figure 3: Pipeline console showing each agent step, the Gemini function call (calculate_optimal_transfer) and the allocator's result."
 )
 
 # ==============================================================================
-# SLIDE 5: Google Cloud & AI Ecosystem Tools Slide (2x4 Interactive Grid)
+# SLIDE 5: AI & Data Stack (2x4 grid)
 # ==============================================================================
 slide5 = prs.slides.add_slide(blank_slide_layout)
 set_slide_background(slide5)
 add_header(
     slide5, 
-    "04 / GOOGLE CLOUD & AI STACK", 
-    "Comprehensive Google Cloud Ecosystem Integration", 
-    "Every operational layer of Aarogya-Vāyu is engineered upon native Google Cloud Platform & AI services"
+    "04 / AI & DATA STACK", 
+    "What Runs in the Deployed App", 
+    "Gemini does the language and perception work; deterministic code does the maths"
 )
 
 g_tools = [
-    ("⚡ Google Gemini 3.8 Flash & Flash-Lite",
-     "• Real-time cognitive reasoning engine for clinical & logistical decision-making.\n"
-     "• Native Function Calling (`calculate_optimal_transfer`) bridges AI to math.\n"
-     "• Powers bilingual CMO conversational advisor in English and natural Hindi.",
+    ("⚡ Gemini 3.8 Flash: Reasoning & Function Calling",
+     "• Parses stock reports into structured JSON with a fixed schema.\n"
+     "• Function calling (`calculate_optimal_transfer`) hands the maths to the allocator.\n"
+     "• CMO advisor answers only from the system's own figures, in English or Hindi.",
      TERRACOTTA),
     
-    ("🤖 Google Agent Developer Kit (ADK)",
-     "• Multi-agent mesh orchestration connecting Sentinel, Intake & Logistics.\n"
-     "• Event-driven asynchronous Pub/Sub message passing between agents.\n"
-     "• Full transparency: Emits step-by-step execution traces for live auditability.",
+    ("🎙️ Gemini 3.8 Flash: Speech-to-Text",
+     "• Transcribes Hindi, Odia and English voice notes recorded in the browser.\n"
+     "• Silent or too-short clips are rejected before they reach the model.\n"
+     "• Browser speech recognition is the fallback when recording isn't supported.",
      EMERALD),
     
-    ("📊 Vertex AI AutoML & Forecaster",
-     "• Time-series tabular forecaster modeling 48–72h epidemiological lags.\n"
-     "• Generates probabilistic confidence intervals (P10, P50, P90 quantile curves).\n"
-     "• Evaluates stockout probabilities under severe climate stress conditions.",
+    ("📷 Gemini 3.8 Flash: Vision",
+     "• Reads uploaded shelf photos: medicine, batch and visible unit count.\n"
+     "• Compares the count with the stock register and flags discrepancies.\n"
+     "• Partial counts are reported as partial, never as a match.",
      AMBER),
     
-    ("🔍 Vertex AI Search & Grounding Store",
-     "• Clinical dialect normalization against Uttar Pradesh Essential Drug List (EDL-UP-2026).\n"
-     "• Prevents drug name confusion (e.g. mapping colloquial 'saans ki dawai' to Salbutamol 2.5mg).\n"
-     "• Validates clinical schedule classifications & therapeutic equivalence.",
+    ("🛡️ Resilience: Fallbacks",
+     "• Gemini 3.5 Flash-Lite, then Claude Haiku 5.5, if the primary model fails.\n"
+     "• Rule-based parser when no model is reachable; guesses are flagged.\n"
+     "• Per-request time budget so the pipeline always answers.",
      BLUE_ACCENT),
     
-    ("🎙️ Google Cloud Speech-to-Text v2",
-     "• Multilingual frontline audio ingestion for rural Hindi and regional dialect notes.\n"
-     "• Noise-robust acoustic models designed for rural clinic ambient environments.\n"
-     "• Automated quantity & temporal extraction with zero desktop typing required.",
+    ("🛰️ Copernicus CAMS via Open-Meteo",
+     "• Live AQI, PM2.5, aerosol optical depth and dust for each corridor.\n"
+     "• Boundary-layer height to detect pollution trapped near the ground.\n"
+     "• 30-day history and 72h forecast; no API key needed.",
      EMERALD),
     
-    ("🛰️ Google Earth Engine (GEE)",
-     "• Atmospheric trace gas monitoring (Copernicus Sentinel-5P NO2 / AOD).\n"
-     "• Detects boundary layer thermal inversions and aerosol trapping.\n"
-     "• Ingests NASA FIRMS active fire hotspots across agricultural corridors.",
+    ("🔥 NASA FIRMS & News Signals",
+     "• VIIRS fire hotspots near each corridor when a FIRMS key is set.\n"
+     "• Google News RSS headlines tagged by keyword for situational awareness.\n"
+     "• Every data source is labelled live, simulated or demo in the UI.",
      BLUE_ACCENT),
     
-    ("🗺️ Google Maps Platform (AQ & Routes)",
-     "• Real-time ward-level Air Quality API feeds (AQI, PM2.5, meteorological telemetry).\n"
-     "• Routes API computed transit distance matrix strictly enforcing 35 km radius.\n"
-     "• Green corridor route optimization leveraging ambulance empty-leg trips.",
+    ("📦 Deterministic Constrained Allocator",
+     "• Most critical recipients first; donors by soonest expiry.\n"
+     "• 35 km straight-line radius and a 14-day donor reserve are hard limits.\n"
+     "• Explains every rejected donor; escalates unmet demand to the district.",
      AMBER),
     
-    ("📱 Gemma 2B Local Edge Intelligence",
-     "• On-device compressed language model for offline rural clinic resilience.\n"
-     "• Enables local voice parsing and encrypted emergency buffer queues when offline.\n"
-     "• Auto-syncs with central cloud ledger upon GSM/4G signal restoration.",
+    ("🔗 Hash-Chained Audit Ledger",
+     "• Every stock action, approval, dispatch and AI query is SHA-256 chained.\n"
+     "• One-click verification walks the whole chain.\n"
+     "• Tamper-evident today; digital signatures are on the roadmap.",
      TERRACOTTA)
 ]
 
@@ -466,7 +466,7 @@ tb_gb = slide5.shapes.add_textbox(Inches(1.0), Inches(6.88), Inches(11.3), Inche
 tf_gb = tb_gb.text_frame
 tf_gb.word_wrap = True
 p = tf_gb.paragraphs[0]
-p.text = "100% GOOGLE CLOUD NATIVE: Production-ready on Google Cloud Run, Cloud Firestore & Vertex AI."
+p.text = "Deployed today: FastAPI on Vercel. Inventory is synthetic demo data; telemetry and AI calls are live."
 p.font.size = Pt(11)
 p.font.bold = True
 p.font.color.rgb = EMERALD
@@ -479,8 +479,8 @@ set_slide_background(slide6)
 add_header(
     slide6, 
     "05 / MATHEMATICAL FOUNDATION", 
-    "Operations Research vs. LLM Arithmetic Hallucinations", 
-    "Eliminating hallucinated medicine allocations through Gemini Function Calling & SciPy"
+    "Why the Model Never Picks the Quantity", 
+    "Gemini decides to call the tool; deterministic code computes the transfer"
 )
 
 card_lp = add_card(slide6, Inches(0.8), Inches(1.45), Inches(5.7), Inches(5.5), bg_color=CARD_BG, border_color=CARD_BORDER, corner_radius=0.025)
@@ -496,14 +496,14 @@ p.font.color.rgb = TERRACOTTA
 p.space_after = Pt(6)
 
 p = tf.add_paragraph()
-p.text = "Multi-Objective Linear Programming Objective:"
+p.text = "Greedy Constrained Allocation:"
 p.font.size = Pt(13)
 p.font.bold = True
 p.font.color.rgb = TEXT_HEAD
 p.space_after = Pt(4)
 
 p = tf.add_paragraph()
-p.text = "min ∑ [ c_ij · x_ij  -  ω_exp · Ψ_ij · x_ij  -  ω_risk · ΔR_j(x_ij) ]"
+p.text = "for recipient j by cover ↑ :  for donor i by expiry ↑ :  x_ij = min(need_j, surplus_i)"
 p.font.size = Pt(11.5)
 p.font.bold = True
 p.font.color.rgb = EMERALD
@@ -515,9 +515,9 @@ p.text = "HARD OPERATIONAL CONSTRAINTS:\n\n" \
          "   d_ij ≤ 35 km (strictly within rural district ambulance transit radius).\n\n" \
          "2. Mandatory Donor Safety Buffer:\n" \
          "   Donor must retain ≥ 14 days of safety stock to prevent secondary stockouts.\n\n" \
-         "3. Expiry Prioritization Weight (Ψ_ij):\n" \
-         "   Inversely scaled with shelf-life (prioritizes batches with < 90 days left).\n\n" \
-         "Execution Speed: SciPy solves 20 facilities in <85 ms with zero arithmetic errors."
+         "3. First-Expiry-First-Out:\n" \
+         "   Donors with batches nearest expiry give first, so stock is used, not wasted.\n\n" \
+         "Every rejected donor is listed with the rule it failed; unmet demand is escalated."
 p.font.size = Pt(10)
 p.font.color.rgb = TEXT_BODY
 
@@ -525,8 +525,8 @@ add_image_card(
     slide6, 
     Inches(6.8), Inches(1.45), Inches(5.7), Inches(5.5), 
     IMG_CHALLAN, 
-    "Verified Official Dispatch Challan (Simplex Output)",
-    "Figure 4: Cryptographically minted Government of Uttar Pradesh Emergency Medicine Transfer Challan showing verified donor, recipient, batch number, and SHA-256 hash."
+    "Dispatch Challan (Allocator Output)",
+    "Figure 4: Dispatch challan generated after CMO approval, showing donor, recipient, batch, quantity and the ledger hash."
 )
 
 # ==============================================================================
@@ -536,9 +536,9 @@ slide7 = prs.slides.add_slide(blank_slide_layout)
 set_slide_background(slide7)
 add_header(
     slide7, 
-    "06 / PRODUCT DEMO — GIS & FLEET", 
-    "Tactical GIS Map & Real-Time Cold-Chain Fleet", 
-    "Live geospatial tracking of 20 healthcare facilities and moving ambulance couriers"
+    "06 / PRODUCT DEMO — MAP & CLINIC DESK", 
+    "Facility Map, Transfers & Clinic Desk", 
+    "20 facilities per region, colour-coded by cover, with proposed transfer corridors"
 )
 
 card_ginfo = add_card(slide7, Inches(0.8), Inches(1.45), Inches(4.3), Inches(5.5), bg_color=CARD_BG, border_color=CARD_BORDER, corner_radius=0.025)
@@ -555,9 +555,9 @@ p.space_after = Pt(8)
 
 g_points = [
     ("🏥 20 Geo-Tagged Facilities", "Live status pins across Lucknow & Unnao with color-coded coverage indicators (Red: <4d, Amber: <8d, Green: Healthy).", BLUE_ACCENT),
-    ("🚑 Real-Time Ambulance GPS", "Live vehicle animations with dashed transit corridors and active delivery status (UP-32-BG-3200, UP-32-BG-3342).", EMERALD),
-    ("🌫️ Atmospheric Smog Plume HUD", "Dynamic overlay of severe boundary inversion layer (320m AGL) and real-time wind trapping vectors.", TERRACOTTA),
-    ("🎙️ Frontline Multilingual Voice", "Quick voice simulation card allowing nurses to record stock status in Hindi with instant QA verification.", AMBER)
+    ("🚚 Transfer Lifecycle", "Approve → reserve → dispatch → receive, with consignment status on the clinic desk and stock updated on receipt.", EMERALD),
+    ("🌫️ Live Air-Quality HUD", "Live AQI, PM2.5, boundary-layer height and ventilation index from Copernicus CAMS, with a 72h forecast.", TERRACOTTA),
+    ("🎙️ Frontline Multilingual Voice", "Nurses record a stock update in Hindi, Odia or English; Gemini transcribes and parses it into a draft for confirmation.", AMBER)
 ]
 
 for gp_t, gp_d, gp_c in g_points:
@@ -577,8 +577,8 @@ add_image_card(
     slide7, 
     Inches(5.3), Inches(1.45), Inches(7.2), Inches(5.5), 
     IMG_GIS_MAP, 
-    "Live Tactical GIS Corridor & Courier Fleet",
-    "Figure 5: High-resolution Leaflet GIS map showing Lucknow–Unnao facilities, active courier ambulances with transit routes, atmospheric inversion HUD, and frontline voice intake."
+    "Facility Map & Transfer Corridors",
+    "Figure 5: Leaflet map of facilities with proposed transfer corridors, the live air-quality HUD and frontline voice intake."
 )
 
 # ==============================================================================
@@ -589,8 +589,8 @@ set_slide_background(slide8)
 add_header(
     slide8, 
     "07 / PRODUCT DEMO — CMO & VISION", 
-    "CMO Strategic Studio & Gemini Flash Vision OCR", 
-    "Bilingual natural language simulation and physical shelf photo verification"
+    "CMO Strategic Studio & Gemini Vision Shelf Check", 
+    "Grounded answers in plain language and photo-based stock verification"
 )
 
 add_image_card(
@@ -598,15 +598,15 @@ add_image_card(
     Inches(0.8), Inches(1.45), Inches(5.7), Inches(5.5), 
     IMG_CMO_STUDIO, 
     "CMO Strategic Studio (Gemini 3.8 Flash)",
-    "Figure 6: Chief Medical Officer Strategic Studio showing natural language simulation ('What if this smog inversion lasts 5 more days?'), bilingual Hindi translation, and action protocols."
+    "Figure 6: CMO Strategic Studio: questions in plain language, answered only from the system's own stock, cover and transfer figures."
 )
 
 add_image_card(
     slide8, 
     Inches(6.8), Inches(1.45), Inches(5.7), Inches(5.5), 
     IMG_VISION, 
-    "Gemini Flash Multimodal Vision OCR",
-    "Figure 7: Frontline shelf photo cross-check using Gemini Vision to verify medicine batch (BAT-842-26) and count (16 units verified) against nurse voice reports with 93.3% precision."
+    "Gemini Vision Shelf Check",
+    "Figure 7: Gemini reads a shelf photo, counts visible units and compares them with the stock register."
 )
 
 # ==============================================================================
@@ -618,7 +618,7 @@ add_header(
     slide9, 
     "08 / GOVERNANCE & IMPACT", 
     "Cryptographic Audit Ledger & Quantifiable Impact", 
-    "Ensuring statutory compliance, zero-repudiation, and measurable healthcare outcomes"
+    "Tamper-evident records and the outcomes a pilot would measure"
 )
 
 add_image_card(
@@ -626,7 +626,7 @@ add_image_card(
     Inches(0.8), Inches(1.45), Inches(5.7), Inches(5.5), 
     IMG_LEDGER, 
     "Tamper-Evident Cryptographic Audit Ledger",
-    "Figure 8: Immutable SHA-256 chained transaction log recording multi-agent pipeline executions, CMO queries, and vision scans compliant with UP Clinical Establishment Act."
+    "Figure 8: SHA-256 hash-chained log of pipeline runs, approvals, CMO queries and vision scans; editing any entry breaks verification."
 )
 
 card_imp = add_card(slide9, Inches(6.8), Inches(1.45), Inches(5.7), Inches(5.5), bg_color=CARD_BG, border_color=CARD_BORDER, corner_radius=0.025)
@@ -635,17 +635,17 @@ tf_i = tb_i.text_frame
 tf_i.word_wrap = True
 
 p = tf_i.paragraphs[0]
-p.text = "MEASURABLE CIVIC & ECONOMIC RESILIENCE"
+p.text = "WHAT A PILOT WOULD MEASURE"
 p.font.size = Pt(11)
 p.font.bold = True
 p.font.color.rgb = EMERALD
 p.space_after = Pt(8)
 
 imp_metrics = [
-    ("840,000 Citizens Protected", "Vulnerable rural population covered across 20 pilot facilities in the Lucknow–Unnao healthcare corridor.", EMERALD),
-    ("82% Reduction in Stockouts", "Imminent respiratory stockout events averted through proactive 48h temporal lag forecasting.", TERRACOTTA),
-    ("₹8.4 Lakhs Saved Per District", "Annual bio-hazard medication expiration waste eliminated through dynamic near-expiry matching.", AMBER),
-    ("100% DPDP Act 2023 Compliant", "Zero Patient PII stored or processed. All transactions cryptographically sealed for public accountability.", BLUE_ACCENT)
+    ("40 Facilities, 2 States", "Demo dataset across Lucknow–Unnao (UP) and Khordha–Cuttack (Odisha); inventory is synthetic.", EMERALD),
+    ("Stockout Days Avoided", "Transfers proposed while clinics still have days of cover, before the surge peaks.", TERRACOTTA),
+    ("Expiry Waste Avoided", "Donors send the batch nearest expiry first, so stock is used instead of incinerated.", AMBER),
+    ("No Patient Data", "Only aggregate facility stock and batch codes, in line with the DPDP Act 2023.", BLUE_ACCENT)
 ]
 
 for m_v, m_d, m_c in imp_metrics:
@@ -724,7 +724,7 @@ p.font.bold = True
 p.font.color.rgb = TEXT_HEAD
 
 p = tf_d.add_paragraph()
-p.text = "Full-Stack AI Engineer & Distributed Systems Architect"
+p.text = "Full-Stack AI Engineer"
 p.font.size = Pt(12)
 p.font.color.rgb = TEXT_MUTED
 p.space_after = Pt(12)
@@ -736,8 +736,8 @@ p.text = "• Event: Build with AI: Code for Communities (2nd Edition)\n" \
          "• Video Demo Walkthrough: https://youtu.be/D8w2qviTuW4\n" \
          "• GitHub Repository: https://github.com/Ritesh-Root/aarogya-vayu\n" \
          "• Corridors: Bhubaneswar–Cuttack (Odisha, Default) & Lucknow–Unnao (UP)\n" \
-         "• Real-Time Telemetry: Open-Meteo Satellite Sensors + Regional News Bureau\n" \
-         "• Google Tech: Gemini 3.8 Flash • Google ADK • Vertex AI • GEE • STT v2"
+         "• Live Data: Copernicus CAMS & Open-Meteo, Google News RSS\n" \
+         "• Google AI: Gemini 3.8 Flash (language, function calling, audio, vision) • Data: Copernicus CAMS via Open-Meteo"
 p.font.size = Pt(9.5)
 p.font.color.rgb = TEXT_BODY
 p.space_after = Pt(12)

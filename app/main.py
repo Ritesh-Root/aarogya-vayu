@@ -125,7 +125,7 @@ REGIONS_CONFIG = {
     },
     "lucknow": {
         "id": "lucknow",
-        "name": "Lucknow-Unnao Indo-Gangetic Smog Corridor (Severe Inversion)",
+        "name": "Lucknow-Unnao Indo-Gangetic Corridor (UP)",
         "short_name": "Lucknow (UP)",
         "state": "Uttar Pradesh",
         "districts": ["Lucknow", "Unnao"],
