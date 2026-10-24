@@ -35,6 +35,7 @@ from app.news_service import news_service
 from app.telemetry_service import telemetry_service
 from app.llm import provider_status, GEMINI_MODELS, CLAUDE_MODEL
 from app.vision_service import decode_image, scan_shelf, compare_with_register
+from app.speech_service import decode_audio, transcribe
 
 app = FastAPI(
     title="Aarogya-Vāyu API",
@@ -352,7 +353,7 @@ async def get_system_capabilities():
             "cmo_strategic_chat": "LIVE LLM: Gemini primary, Claude fallback, template answers last",
             "logistics_tool_selection": "LIVE LLM function calling (Gemini primary, Claude fallback); allocation by deterministic solver",
             "shelf_photo_vision": "LIVE LLM vision on the uploaded photo (Gemini primary, Claude fallback)",
-            "speech_to_text": "Browser Web Speech API (on-device/browser vendor), not Google Cloud STT",
+            "speech_to_text": "LIVE: Gemini transcribes the recorded voice note (English/Hindi/Odia); browser Web Speech API only where the browser cannot record audio",
             "demand_forecast": "Rule-based lag-curve forecaster driven by live surge multipliers (not a trained ML model)",
             "facilities": "Named after real PHC/CHC sites; coordinates, population and staffing are demo values, not an official registry",
             "inventory": "SYNTHETIC demo stock register (no public API exposes PHC stock)",
@@ -496,6 +497,28 @@ def enforce_llm_rate_limit(http_request: Request):
     if len(hits) >= LLM_RATE_LIMIT_PER_MIN:
         raise HTTPException(status_code=429, detail="Too many AI requests. Please wait a minute and try again.")
     hits.append(now)
+
+@app.post("/api/voice-intake/transcribe")
+async def transcribe_voice_note(http_request: Request, payload: Dict[str, Any] = Body(...)):
+    """
+    Speech-to-text for a recorded voice note (16 kHz mono WAV) using Gemini. Returns the transcript
+    only; parsing and the draft stock report still go through /api/voice-intake.
+    """
+    try:
+        audio = decode_audio(str(payload.get("audio_base64") or ""), payload.get("mime_type"))
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex))
+    enforce_llm_rate_limit(http_request)
+    result = await transcribe(audio)
+    if not result:
+        raise HTTPException(status_code=503, detail="Speech model unavailable; please type the report.")
+    note, _ = result
+    return {
+        "is_speech": note.is_speech,
+        "transcript": note.transcript.strip()[:MAX_LLM_INPUT_CHARS] if note.is_speech else "",
+        "language": note.language,
+        "transcribed_by": f"Gemini ({GEMINI_MODELS[0]})",
+    }
 
 @app.post("/api/voice-intake")
 async def process_voice_intake(request: VoiceIntakeRequest, http_request: Request):

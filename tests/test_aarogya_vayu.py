@@ -793,11 +793,11 @@ from app.voice_service import VoiceExtraction
 def test_llm_falls_back_to_claude_only_when_gemini_fails(monkeypatch):
     calls = []
 
-    async def gemini_down(system, user, schema, image=None):
+    async def gemini_down(system, user, schema, media=None):
         calls.append("gemini")
         return None
 
-    async def claude_ok(system, user, schema, image=None):
+    async def claude_ok(system, user, schema, media=None):
         calls.append("claude")
         return schema(reported_stock=12)
 
@@ -807,7 +807,7 @@ def test_llm_falls_back_to_claude_only_when_gemini_fails(monkeypatch):
     assert provider == "claude" and parsed.reported_stock == 12
     assert calls == ["gemini", "claude"]
 
-    async def gemini_ok(system, user, schema, image=None):
+    async def gemini_ok(system, user, schema, media=None):
         calls.append("gemini")
         return schema(reported_stock=7)
 
@@ -846,7 +846,7 @@ def test_voice_intake_without_stock_count_uses_heuristic_path(monkeypatch):
 
 
 def test_llm_total_budget_returns_none_instead_of_hanging(monkeypatch):
-    async def hangs(system, user, schema, image=None):
+    async def hangs(system, user, schema, media=None):
         await asyncio.sleep(5)
 
     monkeypatch.setattr(llm, "_generate_json", hangs)
@@ -1014,3 +1014,53 @@ def test_llm_chosen_radius_cannot_hide_a_policy_feasible_transfer(monkeypatch):
     res = asyncio.run(main_module.agent_orchestrator.run_logistics_agent(target[0], target[1], risks, inv))
     assert res["recommendation"] is not None and res["status"] == "TRANSFER_OPTIMIZED"
     assert res["radius_widened_to_policy"] == (res["recommendation"]["distance_km"] > 5)
+
+
+def _wav(n_samples=1600):
+    import struct
+    pcm = b"\x00\x00" * n_samples
+    return (b"RIFF" + struct.pack("<I", 36 + len(pcm)) + b"WAVEfmt " + struct.pack("<IHHIIHH", 16, 1, 1, 16000, 32000, 2, 16)
+            + b"data" + struct.pack("<I", len(pcm)) + pcm)
+
+
+def test_audio_is_never_sent_to_claude(monkeypatch):
+    calls = []
+
+    async def gemini_down(system, user, schema, media=None):
+        calls.append("gemini")
+        return None
+
+    async def claude_ok(system, user, schema, media=None):
+        calls.append("claude")
+        return schema(reported_stock=1)
+
+    monkeypatch.setattr(llm, "_call_gemini", gemini_down)
+    monkeypatch.setattr(llm, "_call_claude", claude_ok)
+    assert asyncio.run(llm.generate_json("sys", "user", VoiceExtraction, media=(_wav(), "audio/wav"))) is None
+    assert calls == ["gemini"]
+
+
+def test_transcribe_requires_wav_and_returns_gemini_transcript(monkeypatch):
+    import app.speech_service as speech_module
+    monkeypatch.setattr(main_module, "_llm_hits", {})
+    webm = "data:audio/webm;base64," + base64.b64encode(b"\x1aE\xdf\xa3" + b"0" * 64).decode()
+    assert client.post("/api/voice-intake/transcribe", json={"audio_base64": webm}).status_code == 400
+    fake_wav = "data:audio/wav;base64," + base64.b64encode(b"0" * 64).decode()
+    assert client.post("/api/voice-intake/transcribe", json={"audio_base64": fake_wav}).status_code == 400
+
+    async def fake_transcribe(audio):
+        assert audio[1] == "audio/wav" and audio[0][:4] == b"RIFF"
+        return speech_module.Transcript(is_speech=True, transcript="  PHC Kakori: 15 Salbutamol respules left ", language="en"), "gemini"
+
+    monkeypatch.setattr(main_module, "transcribe", fake_transcribe)
+    wav = "data:audio/wav;base64," + base64.b64encode(_wav()).decode()
+    res = client.post("/api/voice-intake/transcribe", json={"audio_base64": wav})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["transcript"] == "PHC Kakori: 15 Salbutamol respules left" and data["transcribed_by"].startswith("Gemini")
+
+    async def no_model(audio):
+        return None
+
+    monkeypatch.setattr(main_module, "transcribe", no_model)
+    assert client.post("/api/voice-intake/transcribe", json={"audio_base64": wav}).status_code == 503

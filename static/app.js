@@ -1316,10 +1316,116 @@ async function submitVoiceIntake() {
   }
 }
 
-function recordMockMic() {
+const VOICE_MAX_SECONDS = 30;
+let voiceRecorder = null;
+
+function setVoiceRecordingUi(active, placeholder) {
+  const micBtn = document.getElementById('btnMic');
+  const wave = document.getElementById('voiceWaveform');
+  const txt = document.getElementById('voiceTranscript');
+  if (micBtn) micBtn.classList.toggle('bg-red-600', active);
+  if (micBtn) micBtn.classList.toggle('text-white', active);
+  if (wave) {
+    wave.classList.toggle('hidden', !active);
+    wave.classList.toggle('flex', active);
+  }
+  if (txt && placeholder) txt.placeholder = placeholder;
+}
+
+// Gemini rejects the Opus/WebM audio MediaRecorder produces, so re-encode as 16 kHz mono 16-bit WAV
+async function blobToWav(blob) {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  let decoded;
+  try {
+    decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+  } finally {
+    ctx.close();
+  }
+  const rate = 16000;
+  const offline = new OfflineAudioContext(1, Math.ceil(decoded.duration * rate), rate);
+  const src = offline.createBufferSource();
+  src.buffer = decoded;
+  src.connect(offline.destination);
+  src.start();
+  const pcm = (await offline.startRendering()).getChannelData(0);
+  const view = new DataView(new ArrayBuffer(44 + pcm.length * 2));
+  const tag = (o, t) => [...t].forEach((c, i) => view.setUint8(o + i, c.charCodeAt(0)));
+  tag(0, 'RIFF'); view.setUint32(4, 36 + pcm.length * 2, true); tag(8, 'WAVE');
+  tag(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  tag(36, 'data'); view.setUint32(40, pcm.length * 2, true);
+  pcm.forEach((v, i) => view.setInt16(44 + i * 2, Math.max(-1, Math.min(1, v)) * 0x7fff, true));
+  return new Blob([view], { type: 'audio/wav' });
+}
+
+async function transcribeVoiceNote(blob) {
+  const txt = document.getElementById('voiceTranscript');
+  setVoiceRecordingUi(false, 'Transcribing with Gemini...');
+  try {
+    const wav = await blobToWav(blob);
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(wav);
+    });
+    const res = await fetch('/api/voice-intake/transcribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audio_base64: dataUrl, mime_type: 'audio/wav' })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || `Transcription failed (${res.status})`);
+    if (!data.is_speech) {
+      if (txt) txt.placeholder = 'No speech detected. Tap the mic and try again.';
+      return;
+    }
+    if (txt) {
+      txt.value = data.transcript;
+      txt.placeholder = '';
+    }
+  } catch (err) {
+    console.error('transcribeVoiceNote error:', err);
+    if (txt) txt.placeholder = 'Transcription failed. Type the report or try again.';
+    alert(err.message || 'Transcription failed');
+  }
+}
+
+async function recordVoiceNote() {
+  if (voiceRecorder && voiceRecorder.state === 'recording') {
+    voiceRecorder.stop();
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder || !window.OfflineAudioContext) {
+    recordWithBrowserSpeech();
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    alert('Microphone access was blocked. Allow the microphone or type the report.');
+    return;
+  }
+  const chunks = [];
+  const recorder = new MediaRecorder(stream);
+  voiceRecorder = recorder;
+  const stopTimer = setTimeout(() => recorder.state === 'recording' && recorder.stop(), VOICE_MAX_SECONDS * 1000);
+  recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+  recorder.onstop = () => {
+    clearTimeout(stopTimer);
+    stream.getTracks().forEach(t => t.stop());
+    voiceRecorder = null;
+    transcribeVoiceNote(new Blob(chunks, { type: recorder.mimeType }));
+  };
+  recorder.start();
+  setVoiceRecordingUi(true, `Recording (English, Hindi or Odia)... tap the mic again to stop (max ${VOICE_MAX_SECONDS} s)`);
+}
+
+function recordWithBrowserSpeech() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
-    alert("Browser speech recognition is not supported in this environment. Please click on one of the sample scenario buttons!");
+    alert("Voice recording is not available in this browser. Please type the report or use a sample scenario button.");
     return;
   }
 

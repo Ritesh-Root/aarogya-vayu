@@ -601,7 +601,7 @@
                     <button id="btnSubmitVoice" onclick="submitVoiceIntake()" class="flex-1 bg-clay-terracotta hover:bg-clay-terracottaDark text-white font-black py-3 px-4 rounded-full text-xs sm:text-sm shadow-clay-btn transition flex items-center justify-center space-x-1.5">
                       <span>Process &amp; Commit Record</span>
                     </button>
-                    <button onclick="recordMockMic()" id="btnMic" class="p-3 bg-white text-clay-terracotta hover:bg-clay-terracotta hover:text-white rounded-full border border-clay-salmon/30 transition">
+                    <button onclick="recordVoiceNote()" id="btnMic" class="p-3 bg-white text-clay-terracotta hover:bg-clay-terracotta hover:text-white rounded-full border border-clay-salmon/30 transition">
                       <i data-lucide="mic" class="w-4 h-4"></i>
                     </button>
                   </div>
@@ -687,7 +687,7 @@
                 <div class="space-y-1.5 text-slate-400 text-xs">
                   <p><span class="text-emerald-400">✓</span> LLM: Gemini 3.8 Flash primary, Claude fallback</p>
                   <p><span class="text-emerald-400">✓</span> Environmental Sentinel: Open-Meteo + Copernicus CAMS live feed (72h forecast)</p>
-                  <p><span class="text-emerald-400">✓</span> Frontline Intake: browser speech-to-text + Gemini structured parsing to EDL codes</p>
+                  <p><span class="text-emerald-400">✓</span> Frontline Intake: Gemini speech-to-text (English/Hindi/Odia) + Gemini structured parsing to EDL codes</p>
                   <p><span class="text-emerald-400">✓</span> Transfer Solver: deterministic greedy allocator (35 km radius, 14-day donor reserve, FEFO)</p>
                   <p class="pt-2 text-slate-400 italic">// Standby. Click <span class="text-clay-terracotta font-bold">"Run Agent Pipeline"</span> above to trigger real-time multi-agent negotiation and transfer execution.</p>
                 </div>

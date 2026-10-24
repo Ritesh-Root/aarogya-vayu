@@ -21,8 +21,8 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
-# (raw bytes, mime type) of an image sent alongside the prompt
-Image = Tuple[bytes, str]
+# (raw bytes, mime type) of an image or audio clip sent alongside the prompt
+Media = Tuple[bytes, str]
 
 # `or` (not a getenv default) so an env var that exists but is empty still gets the default
 GEMINI_MODELS = [
@@ -71,7 +71,7 @@ def _claude():
     return _claude_client
 
 
-async def _call_gemini(system: str, user: str, schema: Type[T], image: Optional[Image] = None) -> Optional[T]:
+async def _call_gemini(system: str, user: str, schema: Type[T], media: Optional[Media] = None) -> Optional[T]:
     try:
         client = _gemini()
         if not client:
@@ -87,7 +87,7 @@ async def _call_gemini(system: str, user: str, schema: Type[T], image: Optional[
         max_output_tokens=MAX_OUTPUT_TOKENS,
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
-    contents = [types.Part.from_bytes(data=image[0], mime_type=image[1]), user] if image else user
+    contents = [types.Part.from_bytes(data=media[0], mime_type=media[1]), user] if media else user
     for model in GEMINI_MODELS:
         try:
             resp = await asyncio.wait_for(
@@ -107,16 +107,16 @@ async def _call_gemini(system: str, user: str, schema: Type[T], image: Optional[
     return None
 
 
-def _claude_content(user: str, image: Optional[Image]):
-    if not image:
+def _claude_content(user: str, media: Optional[Media]):
+    if not media:
         return user
     return [
-        {"type": "image", "source": {"type": "base64", "media_type": image[1], "data": base64.b64encode(image[0]).decode()}},
+        {"type": "image", "source": {"type": "base64", "media_type": media[1], "data": base64.b64encode(media[0]).decode()}},
         {"type": "text", "text": user},
     ]
 
 
-async def _call_claude(system: str, user: str, schema: Type[T], image: Optional[Image] = None) -> Optional[T]:
+async def _call_claude(system: str, user: str, schema: Type[T], media: Optional[Media] = None) -> Optional[T]:
     try:
         client = _claude()
         if not client:
@@ -130,7 +130,7 @@ async def _call_claude(system: str, user: str, schema: Type[T], image: Optional[
             model=CLAUDE_MODEL,
             max_tokens=MAX_OUTPUT_TOKENS,
             system=system,
-            messages=[{"role": "user", "content": _claude_content(user, image)}],
+            messages=[{"role": "user", "content": _claude_content(user, media)}],
             output_format=schema,
         )
         if resp.stop_reason == "refusal":
@@ -146,20 +146,22 @@ async def _call_claude(system: str, user: str, schema: Type[T], image: Optional[
     return None
 
 
-async def _generate_json(system: str, user: str, schema: Type[T], image: Optional[Image] = None) -> Optional[Tuple[T, str]]:
-    parsed = await _call_gemini(system, user, schema, image)
+async def _generate_json(system: str, user: str, schema: Type[T], media: Optional[Media] = None) -> Optional[Tuple[T, str]]:
+    parsed = await _call_gemini(system, user, schema, media)
     if parsed is not None:
         return parsed, "gemini"
-    parsed = await _call_claude(system, user, schema, image)
+    if media and not media[1].startswith("image/"):
+        return None  # Claude reads images but not audio
+    parsed = await _call_claude(system, user, schema, media)
     if parsed is not None:
         return parsed, "claude"
     return None
 
 
-async def generate_json(system: str, user: str, schema: Type[T], image: Optional[Image] = None) -> Optional[Tuple[T, str]]:
+async def generate_json(system: str, user: str, schema: Type[T], media: Optional[Media] = None) -> Optional[Tuple[T, str]]:
     """Gemini first, Claude as fallback. Returns (parsed, provider) or None."""
     try:
-        return await asyncio.wait_for(_generate_json(system, user, schema, image), timeout=LLM_TOTAL_BUDGET_S)
+        return await asyncio.wait_for(_generate_json(system, user, schema, media), timeout=LLM_TOTAL_BUDGET_S)
     except asyncio.TimeoutError:
         logger.warning("LLM budget of %ss exhausted; using offline fallback", LLM_TOTAL_BUDGET_S)
         return None

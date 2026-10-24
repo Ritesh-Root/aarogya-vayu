@@ -60,7 +60,7 @@ async def scan_shelf(image: Tuple[bytes, str], medicines: Dict[str, dict]) -> Op
         "Map each product to one of these catalogue IDs when it clearly matches, else null:\n" + catalogue +
         "\nIf the photo is not a medicine shelf, set is_medicine_shelf to false and return no items. Never invent text you cannot read."
     )
-    return await generate_json(system, "Inspect this shelf photo.", ShelfScan, image=image)
+    return await generate_json(system, "Inspect this shelf photo.", ShelfScan, media=image)
 
 
 def compare_with_register(scan: ShelfScan, facility_id: str, inventory: List[dict], medicines: Dict[str, dict]) -> List[dict]:

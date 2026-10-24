@@ -160,7 +160,7 @@ Aarogya-Vāyu covers **20 real, geo-tagged public healthcare facilities** along 
 
 ## 💻 6. Technology Stack
 
-- **AI & Reasoning:** Google Gemini 3.8 Flash via the Google GenAI SDK (structured output, function calling, vision), Claude Haiku 5.5 fallback; browser Web Speech API for speech-to-text.
+- **AI & Reasoning:** Google Gemini 3.8 Flash via the Google GenAI SDK (structured output, function calling, vision), Claude Haiku 5.5 fallback; Gemini audio transcription for speech-to-text (English/Hindi/Odia), with the browser Web Speech API as a fallback where audio recording is unsupported.
 - **Optimization Solver:** Pure-Python Deterministic Constrained Optimizer (sub-2ms, zero serverless cold-start overhead).
 - **Backend API:** FastAPI, Pydantic v2, Uvicorn, ASGI Middleware (Vercel Serverless Function).
 - **GIS & Frontend UI:** Single-Page Application (HTML5, Tailwind CSS, Leaflet.js, Lucide Icons).
