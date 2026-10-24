@@ -21,11 +21,12 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
+# `or` (not a getenv default) so an env var that exists but is empty still gets the default
 GEMINI_MODELS = [
-    os.getenv("DEFAULT_MODEL", "gemini-2.5-flash"),
-    os.getenv("FALLBACK_MODEL", "gemini-2.5-flash-lite"),
+    os.getenv("DEFAULT_MODEL") or "gemini-3.5-flash",
+    os.getenv("FALLBACK_MODEL") or "gemini-3.5-flash-lite",
 ]
-CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-haiku-5-5")
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL") or "claude-haiku-5-5"
 LLM_ATTEMPT_TIMEOUT_S = float(os.getenv("LLM_ATTEMPT_TIMEOUT_S", "12"))
 # Overall budget across all attempts, so callers reach their offline fallback before a serverless timeout
 LLM_TOTAL_BUDGET_S = float(os.getenv("LLM_TOTAL_BUDGET_S", "28"))
