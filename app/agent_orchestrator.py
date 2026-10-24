@@ -233,7 +233,7 @@ class MultiAgentResilienceOrchestrator:
             "properties": {
                 "target_facility_id": {"type": "string", "description": "Facility that needs stock"},
                 "medicine_id": {"type": "string", "description": "Medicine ID, e.g. MED-001"},
-                "max_distance_km": {"type": "number", "description": "Maximum donor distance, 5 to 35 km"},
+                "max_distance_km": {"type": "number", "description": "Maximum donor distance in km. District policy is 35; use 35 unless the context requires a closer limit"},
                 "allow_substitution": {"type": "boolean", "description": "Evaluate a therapeutic substitute if no donor is feasible"},
             },
             "required": ["target_facility_id", "medicine_id", "max_distance_km", "allow_substitution"],
@@ -276,11 +276,13 @@ class MultiAgentResilienceOrchestrator:
         started = time.perf_counter()
         recs = self.optimizer.optimize(risks, raw_inventory)
         solver_ms = round((time.perf_counter() - started) * 1000, 2)
-        chosen_rec = next(
-            (r for r in recs if r.recipient_facility_id == args["target_facility_id"] and r.medicine_id == args["medicine_id"]
-             and r.distance_km <= args["max_distance_km"]),
-            None,
-        )
+        matches = [r for r in recs if r.recipient_facility_id == args["target_facility_id"] and r.medicine_id == args["medicine_id"]]
+        chosen_rec = next((r for r in matches if r.distance_km <= args["max_distance_km"]), None)
+        # A model-chosen radius must never hide a transfer the 35 km policy allows
+        radius_widened = False
+        if not chosen_rec and matches:
+            chosen_rec = matches[0]
+            radius_widened = True
 
         substitution_info = None
         if not chosen_rec and args["allow_substitution"]:
@@ -303,6 +305,7 @@ class MultiAgentResilienceOrchestrator:
             "recommendation": chosen_rec.model_dump() if chosen_rec else None,
             "drug_substitution": substitution_info,
             "solver_runtime_ms": solver_ms,
+            "radius_widened_to_policy": radius_widened,
             "status": "TRANSFER_OPTIMIZED" if chosen_rec else "UNMET_DEMAND_ESCALATED"
         }
 
@@ -532,7 +535,9 @@ class MultiAgentResilienceOrchestrator:
 
         rec = logistics_res.get("recommendation")
         if rec:
-            solver_msg = (
+            widened = (f"No donor within the requested {args['max_distance_km']} km, so the search used the 35 km policy radius. "
+                       if logistics_res.get("radius_widened_to_policy") else "")
+            solver_msg = widened + (
                 f"Solver ({logistics_res['solver_runtime_ms']} ms) matched donor {rec['donor_facility_name']} ({rec['distance_km']} km): "
                 f"{rec['units_to_transfer']} units from batch {rec.get('batch_number') or 'n/a'}"
                 + (f", expiring in {rec['batch_expiry_days']} days." if rec.get("batch_expiry_days") is not None else ".")

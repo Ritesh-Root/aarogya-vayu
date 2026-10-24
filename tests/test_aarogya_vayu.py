@@ -996,3 +996,21 @@ def test_sample_news_advisories_are_labelled():
     articles = client.get("/api/news?region=bhubaneswar").json()["articles"]
     samples = [a for a in articles if not a["is_live"]]
     assert samples and all(a["title"].startswith("[Sample advisory]") and a["published_at"] == "Sample" for a in samples)
+
+
+def test_llm_chosen_radius_cannot_hide_a_policy_feasible_transfer(monkeypatch):
+    target = next((r.recipient_facility_id, r.medicine_id) for r in main_module.active_recommendations_by_region["lucknow"].values()) \
+        if main_module.active_recommendations_by_region["lucknow"] else None
+    if target is None:
+        pytest.skip("no feasible transfer in the demo data")
+
+    async def tight_radius(system, user, name, description, parameters):
+        return {"target_facility_id": target[0], "medicine_id": target[1], "max_distance_km": 5, "allow_substitution": False}, "gemini"
+
+    monkeypatch.setattr(orchestrator_module, "call_tool", tight_radius)
+    inv, _, _, _ = main_module.storage.load_all(region="lucknow")
+    env = main_module.current_env_by_region["lucknow"]
+    risks = main_module.surge_engine.assess_facility_risks(inv, env)
+    res = asyncio.run(main_module.agent_orchestrator.run_logistics_agent(target[0], target[1], risks, inv))
+    assert res["recommendation"] is not None and res["status"] == "TRANSFER_OPTIMIZED"
+    assert res["radius_widened_to_policy"] == (res["recommendation"]["distance_km"] > 5)
