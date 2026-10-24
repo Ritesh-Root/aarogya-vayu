@@ -27,7 +27,7 @@ class NewsArticle(BaseModel):
     url: Optional[str] = None
     is_live: bool = False
 
-# Official State Health & Pollution Regulatory Directives
+# Illustrative sample advisories (hand-written; shown labelled as samples alongside live Google News RSS)
 CURATED_OFFICIAL_DIRECTIVES: Dict[str, List[Dict[str, Any]]] = {
     "bhubaneswar": [
         {
@@ -334,7 +334,17 @@ class NewsService:
             
             # 2. Get curated official state health & pollution directives
             curated_raw = CURATED_OFFICIAL_DIRECTIVES.get(reg, CURATED_OFFICIAL_DIRECTIVES["bhubaneswar"])
-            curated_articles = [NewsArticle(**item) for item in curated_raw]
+            # These are hand-written illustrative advisories, not fetched bulletins: label them so they are never mistaken for live news
+            curated_articles = [
+                NewsArticle(**{
+                    **item,
+                    "title": f"[Sample advisory] {item['title']}",
+                    "source": f"{item['source']} (illustrative sample, not a live bulletin)",
+                    "published_at": "Sample",
+                    "is_live": False,
+                })
+                for item in curated_raw
+            ]
             
             # 3. Interleave/merge live news with curated official directives
             # Keep live articles first, followed by official regulatory notices

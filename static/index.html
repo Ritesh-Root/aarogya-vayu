@@ -218,7 +218,7 @@
         <button id="nav-clinic" onclick="switchTab('clinic')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="Clinic Daily Desk (Frontline Workspace)">
           <i data-lucide="clipboard-check" class="w-5 h-5"></i>
         </button>
-        <button id="nav-agents" onclick="switchTab('agents')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="ADK Multi-Agent Terminal">
+        <button id="nav-agents" onclick="switchTab('agents')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="Multi-Agent Terminal">
           <i data-lucide="bot" class="w-5 h-5"></i>
         </button>
         <button id="nav-cmo" onclick="switchTab('cmo')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="CMO Strategic Studio">
@@ -354,7 +354,7 @@
                 <button onclick="filterMedicine('MED-001')" class="w-11 h-11 rounded-2xl bg-clay-sageLight/95 backdrop-blur-md flex items-center justify-center text-emerald-800 shadow-sm hover:scale-110 transition cursor-pointer" title="Filter Essential EDL Medicines">
                   <i data-lucide="leaf" class="w-5 h-5"></i>
                 </button>
-                <button onclick="switchTab('agents')" class="w-11 h-11 rounded-2xl bg-[#FFE4D6]/95 backdrop-blur-md flex items-center justify-center text-clay-terracotta shadow-sm hover:scale-110 transition cursor-pointer" title="Launch ADK Multi-Agent Pipeline">
+                <button onclick="switchTab('agents')" class="w-11 h-11 rounded-2xl bg-[#FFE4D6]/95 backdrop-blur-md flex items-center justify-center text-clay-terracotta shadow-sm hover:scale-110 transition cursor-pointer" title="Launch Multi-Agent Pipeline">
                   <i data-lucide="bot" class="w-5 h-5"></i>
                 </button>
               </div>
@@ -466,7 +466,7 @@
                 <div class="w-full aspect-square rounded-2xl overflow-hidden mb-2.5 bg-[#FBF5E8]">
                   <img src="/static/images/card_agent_network.jpg" alt="Health AI" class="w-full h-full object-cover">
                 </div>
-                <h4 class="text-sm sm:text-base font-black text-clay-dark">ADK Autonomous AI</h4>
+                <h4 class="text-sm sm:text-base font-black text-clay-dark">Gemini Multi-Agent AI</h4>
                 <p class="text-xs sm:text-sm text-indigo-700 font-bold mt-1">03:45 PM &bull; 6 Agents</p>
               </div>
 
@@ -558,7 +558,7 @@
                   <span class="text-xs bg-clay-terracotta/10 text-clay-terracotta font-black px-2.5 py-1 rounded-full">Gemini 3.8 Flash</span>
                 </div>
                 <p class="text-xs sm:text-sm text-clay-muted font-medium mb-3.5 leading-relaxed">
-                  Frontline health staff record 10-second updates in English or Hindi. Gemma 2 provides offline edge fallback.
+                  Frontline health staff record 10-second updates in English or Hindi. An offline rule-based parser takes over if the AI is unreachable.
                 </p>
 
                 <div class="space-y-3">
@@ -638,7 +638,7 @@
 
           </div>
 
-          <!-- Multi-Agent ADK Live Terminal -->
+          <!-- Multi-Agent Live Terminal -->
           <div class="bg-clay-inner rounded-3xl p-5 border border-clay-salmon/20 shadow-sm space-y-4">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div class="flex items-center space-x-3">
@@ -648,7 +648,7 @@
                 </span>
                 <div>
                   <div class="flex items-center space-x-2 flex-wrap">
-                    <h3 class="text-base sm:text-lg font-black text-clay-dark tracking-tight">Google ADK Autonomous Multi-Agent Terminal</h3>
+                    <h3 class="text-base sm:text-lg font-black text-clay-dark tracking-tight">Gemini Multi-Agent Terminal</h3>
                     <span class="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300/60 px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider">LIVE ORCHESTRATION</span>
                   </div>
                   <p class="text-xs text-clay-muted font-medium">Sentinel (Earth Engine) &bull; Frontline Intake (EDL-UP-2026) &bull; Logistics (OR-Tools) &bull; Governance (HMIS Dispatch)</p>
@@ -657,7 +657,7 @@
               <div class="flex items-center space-x-2">
                 <button id="btnRunAgents" onclick="runAgentPipeline()" class="bg-clay-terracotta hover:bg-clay-terracottaDark text-white font-black text-xs sm:text-sm px-5 py-2.5 rounded-full shadow-clay-btn transition flex items-center space-x-2 group">
                   <i data-lucide="play" class="w-4 h-4 fill-current group-hover:scale-110 transition-transform"></i>
-                  <span>Run ADK Pipeline (Live Demo)</span>
+                  <span>Run Agent Pipeline (Live)</span>
                 </button>
               </div>
             </div>
@@ -672,7 +672,7 @@
                     <span class="w-3 h-3 rounded-full bg-amber-400/80 inline-block shadow-sm"></span>
                     <span class="w-3 h-3 rounded-full bg-emerald-400/80 inline-block shadow-sm"></span>
                   </div>
-                  <span class="text-slate-400 text-xs font-mono font-semibold pl-2">adk-orchestrator@aarogya-vayu:~ (Gemini 2.5 Pro + OR-Tools)</span>
+                  <span class="text-slate-400 text-xs font-mono font-semibold pl-2">agent-orchestrator@aarogya-vayu:~ (Gemini 3.8 Flash + constrained solver)</span>
                 </div>
                 <div class="flex items-center space-x-2 text-[11px] font-mono text-slate-400">
                   <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -685,11 +685,11 @@
               <!-- Terminal Body -->
               <div id="agentTerminalBody" class="p-4 sm:p-5 font-mono text-xs sm:text-sm text-slate-200 space-y-3 min-h-[300px] max-h-[460px] overflow-y-auto custom-scrollbar leading-relaxed">
                 <div class="space-y-1.5 text-slate-400 text-xs">
-                  <p><span class="text-emerald-400">✓</span> Connected to Google ADK Mesh (Protocol v2.4, Vertex AI Grounding Store)</p>
-                  <p><span class="text-emerald-400">✓</span> Environmental Sentinel: Sentinel-5P + INSAT-3DR data stream active</p>
-                  <p><span class="text-emerald-400">✓</span> Frontline Intake Engine: Multilingual ASR + EDL-UP-2026 grounder online</p>
-                  <p><span class="text-emerald-400">✓</span> Operations Research Transfer Solver: Simplex-Greedy Routing Matrix calibrated</p>
-                  <p class="pt-2 text-slate-400 italic">// Standby. Click <span class="text-clay-terracotta font-bold">"Run ADK Pipeline"</span> above to trigger real-time multi-agent negotiation and transfer execution.</p>
+                  <p><span class="text-emerald-400">✓</span> LLM: Gemini 3.8 Flash primary, Claude fallback</p>
+                  <p><span class="text-emerald-400">✓</span> Environmental Sentinel: Open-Meteo + Copernicus CAMS live feed (72h forecast)</p>
+                  <p><span class="text-emerald-400">✓</span> Frontline Intake: browser speech-to-text + Gemini structured parsing to EDL codes</p>
+                  <p><span class="text-emerald-400">✓</span> Transfer Solver: deterministic greedy allocator (35 km radius, 14-day donor reserve, FEFO)</p>
+                  <p class="pt-2 text-slate-400 italic">// Standby. Click <span class="text-clay-terracotta font-bold">"Run Agent Pipeline"</span> above to trigger real-time multi-agent negotiation and transfer execution.</p>
                 </div>
               </div>
             </div>
@@ -808,18 +808,19 @@
                 <i data-lucide="camera" class="w-4 h-4 text-cyan-600"></i>
                 <span>Gemini 3.8 Flash Vision Verification</span>
               </span>
-              <span class="text-xs bg-cyan-100 text-cyan-800 font-extrabold px-2.5 py-1 rounded-full">OCR VERIFIED</span>
+              <span class="text-xs bg-cyan-100 text-cyan-800 font-extrabold px-2.5 py-1 rounded-full">LIVE VISION</span>
             </div>
             <p class="text-xs sm:text-sm text-clay-muted font-medium">
-              Nurse shelf photo cross-check &bull; Batch &amp; expiry certification
+              Nurse shelf photo cross-check against the stock register &bull; batch &amp; expiry reading (advisory)
             </p>
-            <button onclick="runVisionVerification()" id="btnVision" class="w-full bg-white hover:bg-clay-bg text-cyan-800 border border-cyan-300 font-bold py-2.5 rounded-2xl text-xs sm:text-sm shadow-sm transition flex items-center justify-center space-x-2">
-              <span>Scan Cupboard Image (BAT-842-26)</span>
+            <input type="file" id="visionFileInput" accept="image/jpeg,image/png,image/webp" capture="environment" class="hidden" onchange="runVisionVerification(this.files[0]); this.value='';">
+            <button onclick="document.getElementById('visionFileInput').click()" id="btnVision" class="w-full bg-white hover:bg-clay-bg text-cyan-800 border border-cyan-300 font-bold py-2.5 rounded-2xl text-xs sm:text-sm shadow-sm transition flex items-center justify-center space-x-2">
+              <span>Upload / Snap Shelf Photo</span>
             </button>
             <div id="visionResultBox" class="hidden mt-2 p-3.5 bg-white rounded-2xl border border-cyan-300 text-xs sm:text-sm space-y-1.5">
               <div class="flex justify-between font-extrabold text-cyan-900">
-                <span>OCR: Asthalin 2.5mg</span>
-                <span class="text-emerald-600 font-black">16 Units Verified</span>
+                <span id="visionStatusLabel">Scan result</span>
+                <span id="visionCountLabel" class="text-emerald-600 font-black"></span>
               </div>
               <p id="visionSummaryText" class="text-clay-muted italic text-xs font-medium"></p>
             </div>
@@ -1148,7 +1149,7 @@
       <div class="border-t border-slate-100 pt-3 flex items-center justify-between text-xs text-clay-muted font-medium">
         <span class="flex items-center space-x-1.5">
           <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>Feeds synchronized with State Surveillance Unit &amp; CAAQMS automated streams</span>
+          <span>Live headlines via Google News RSS &middot; sample advisories are marked</span>
         </span>
         <button onclick="closeNewsModal()" class="text-clay-terracotta hover:underline font-bold cursor-pointer">
           Close Intelligence Feed
@@ -1284,13 +1285,13 @@
         <div class="p-4 bg-clay-inner rounded-2xl border border-clay-salmon/20">
           <h4 class="font-black text-clay-terracotta text-sm sm:text-base mb-1.5">Autonomous Multi-Agent Resilience Pipeline</h4>
           <p class="text-clay-muted leading-relaxed font-medium">
-            Unlike static linear pipelines, Aarogya-Vāyu utilizes Google’s Agent Development Kit (ADK) where 4 specialized AI agents collaborate dynamically:
+            Aarogya-Vāyu chains specialised agents in a Python orchestrator, with Gemini doing the language work and deterministic code doing the maths:
           </p>
           <ul class="list-disc list-inside mt-2.5 space-y-1.5 text-xs sm:text-sm text-clay-dark font-medium">
-            <li><strong>Atmospheric Sentinel Agent:</strong> Ingests OpenAQ &amp; IMD feeds, detects thermal smog inversions and heatwaves.</li>
-            <li><strong>Frontline Intake Agent:</strong> Gemini 3.8 Flash multimodal parser extracts stock reports from voice updates with Gemma 2 edge fallback.</li>
-            <li><strong>Logistics Optimization Agent:</strong> Gemini tool-calling triggers a deterministic constrained multi-objective solver to minimize stockout probabilities and shelf expiry waste.</li>
-            <li><strong>Governance &amp; Audit Agent:</strong> Cryptographic SHA-256 hash chaining guarantees statutory compliance with UP Clinical Establishment Act.</li>
+            <li><strong>Atmospheric Sentinel Agent:</strong> Reads live Open-Meteo weather and Copernicus CAMS air quality (with 72h forecast and boundary-layer height) to detect smog trapping and heatwaves.</li>
+            <li><strong>Frontline Intake Agent:</strong> Gemini 3.8 Flash extracts stock reports from voice transcripts (Claude fallback, then an offline rule-based parser).</li>
+            <li><strong>Logistics Optimization Agent:</strong> Gemini function calling chooses the solver arguments; a deterministic constrained solver computes the transfer to cut stockout risk and expiry waste.</li>
+            <li><strong>Governance &amp; Audit Agent:</strong> SHA-256 hash chaining makes the decision log tamper-evident; every transfer needs human CMO sign-off.</li>
           </ul>
         </div>
 
@@ -1298,7 +1299,7 @@
           <div class="p-4 bg-white rounded-2xl border border-clay-salmon/30 shadow-sm">
             <h5 class="font-black text-clay-terracotta text-sm mb-1.5">🎮 Live Interactive Features</h5>
             <ul class="text-xs sm:text-sm space-y-1.5 text-clay-muted font-medium">
-              <li>&bull; Click <strong>Run ADK Pipeline</strong> to observe live multi-agent collaboration.</li>
+              <li>&bull; Click <strong>Run Agent Pipeline</strong> to observe live multi-agent collaboration.</li>
               <li>&bull; Click <strong>Solve</strong> on any facility to route emergency stock.</li>
               <li>&bull; Test <strong>Frontline Voice Intake</strong> with sample transcripts.</li>
               <li>&bull; Switch between <strong>Smog, Heatwave, and Baseline</strong>.</li>
@@ -1308,7 +1309,7 @@
             <h5 class="font-black text-clay-terracotta text-sm mb-1.5">🔍 Verification &amp; Compliance</h5>
             <ul class="text-xs sm:text-sm space-y-1.5 text-clay-muted font-medium">
               <li>&bull; Open <strong>CMO Studio</strong> for strategic what-if evaluations.</li>
-              <li>&bull; Click <strong>Scan Cupboard Image</strong> for Gemini 3.8 Vision OCR.</li>
+              <li>&bull; Click <strong>Upload / Snap Shelf Photo</strong> to have Gemini 3.8 Flash read a real shelf photo.</li>
               <li>&bull; Click the <strong>Shield icon</strong> to view the SHA-256 ledger.</li>
               <li>&bull; Click <strong>Approve &amp; Dispatch</strong> to issue official transfer challans.</li>
             </ul>

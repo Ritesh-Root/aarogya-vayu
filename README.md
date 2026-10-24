@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Gemini](https://img.shields.io/badge/Google%20Gemini-3.8%20Flash-4285F4.svg?logo=google&logoColor=white)](https://deepmind.google/technologies/gemini/)
-[![Google ADK](https://img.shields.io/badge/Google%20ADK-Multi--Agent%20Mesh-34A853.svg)](https://cloud.google.com/)
+[![Open-Meteo CAMS](https://img.shields.io/badge/Live%20Data-Open--Meteo%20%2B%20Copernicus%20CAMS-34A853.svg)](https://open-meteo.com/)
 [![Vercel Live](https://img.shields.io/badge/Vercel-Live%20Production-black?logo=vercel&logoColor=white)](https://aarogya-vayu.vercel.app)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
@@ -69,9 +69,24 @@ graph TD
 
 ---
 
-## 🤖 3. Google ADK Multi-Agent Mesh Architecture
+## 📡 Data Provenance (what is live vs simulated)
 
-Aarogya-Vāyu is designed according to the **Google Agent Developer Kit (ADK)** multi-agent pattern, coordinating 5 specialized autonomous roles:
+| Feature | Source | Status |
+| :--- | :--- | :--- |
+| Weather, AQI, PM2.5, aerosol optical depth, boundary layer, 72h forecast | Open-Meteo + Copernicus CAMS (no key) | Live |
+| Fire hotspots | NASA FIRMS VIIRS (`FIRMS_MAP_KEY`) | Live when key set |
+| News | Google News RSS | Live (items tagged `[Sample advisory]` are illustrative) |
+| Voice-report parsing, CMO chat, solver argument selection, shelf-photo vision | Gemini 3.8 Flash → Claude Haiku 5.5 → offline fallback | Live LLM |
+| Transfer allocation | Deterministic greedy constrained solver | Real computation |
+| Demand forecast | Rule-based lag curve driven by live surge multipliers | Real computation, not a trained model |
+| Stock register / facility figures | Demo data | Synthetic |
+| Smog / Heatwave / Baseline buttons | Scenario presets | Simulated until "Live Sensors" is reselected |
+
+`GET /api/system/capabilities` returns the same map at runtime.
+
+## 🤖 3. Multi-Agent Architecture
+
+Aarogya-Vāyu chains 5 specialised agents in a Python orchestrator. Gemini 3.8 Flash does the language work (parsing, function calling, vision, CMO answers) with Claude as fallback; deterministic code does the maths:
 
 ```mermaid
 sequenceDiagram
@@ -93,7 +108,7 @@ sequenceDiagram
 
 | Agent Role | Implemented Engine | Core Responsibility |
 | :--- | :--- | :--- |
-| **1. Atmospheric Sentinel Agent** | OpenAQ / IMD calibrated feeds, Google Maps AQ API | Continuously evaluates air quality, aerosol optical depth, and thermal inversion risk. |
+| **1. Atmospheric Sentinel Agent** | Open-Meteo weather + Copernicus CAMS air quality (live, 30-day history, 72h forecast, boundary-layer height); NASA FIRMS when keyed | Continuously evaluates air quality, aerosol optical depth, and thermal inversion risk. |
 | **2. Frontline Intake Agent** | **Google Gemini 3.8 Flash** + Devanagari normalizer + EDL Grounding | Transcribes Hindi/dialects, normalizes stock counts, and matches colloquial terms to EDL-UP-2026 codes. |
 | **3. Demand Intelligence Agent** | Calibrated Forward Surge Risk Engine | Computes rolling 7-day Poisson-approximated stockout probabilities ($P_{\\text{stockout}}$) incorporating climate multipliers. |
 | **4. Logistics Redistribution Agent** | Deterministic Constrained Optimizer (Pure Python, zero-overhead) | Matches deficit PHCs to surplus donor facilities within 35 km, enforcing donor safety reserves ($\\ge 14$d) and prioritizing expiring stock. |
@@ -145,7 +160,7 @@ Aarogya-Vāyu covers **20 real, geo-tagged public healthcare facilities** along 
 
 ## 💻 6. Technology Stack
 
-- **AI & Reasoning:** Google Gemini 3.8 Flash, Google Cloud Speech-to-Text v2, Google GenAI SDK.
+- **AI & Reasoning:** Google Gemini 3.8 Flash via the Google GenAI SDK (structured output, function calling, vision), Claude Haiku 5.5 fallback; browser Web Speech API for speech-to-text.
 - **Optimization Solver:** Pure-Python Deterministic Constrained Optimizer (sub-2ms, zero serverless cold-start overhead).
 - **Backend API:** FastAPI, Pydantic v2, Uvicorn, ASGI Middleware (Vercel Serverless Function).
 - **GIS & Frontend UI:** Single-Page Application (HTML5, Tailwind CSS, Leaflet.js, Lucide Icons).
@@ -200,7 +215,7 @@ Open your browser at **`http://localhost:8000`** or access the live deployment a
 
 1. **The Smog Inversion Shock (0:00 – 0:15):** Observe the top atmospheric bar. AQI is **385 (Severe Inversion)**. On the map, **PHC Kakori** turns amber/red with only 1.7 days of respiratory medicine remaining.
 2. **Frontline Voice Logging (0:15 – 0:35):** In the *Frontline Telemetry* card, click **"Test Voice (Hindi)"**. Hear the ASHA nurse report: *"PHC काकोरी से बोल रहे हैं, सांस की दवाई (salbutamol) के सिर्फ 15 रेस्प्यूल बचे हैं, कल 40 मरीज आए थे।"* The system transcribes, normalizes, and grounds it to `MED-001 (Salbutamol 2.5mg)` via EDL-UP-2026.
-3. **ADK Multi-Agent Orchestration (0:35 – 0:60):** Click **"Run ADK Pipeline (Live Demo)"**. In the terminal console, watch the agents collaborate in real time: Sentinel checks satellite feeds $\\to$ Demand Forecaster calculates 42h surge $\\to$ Logistics Allocator invokes `calculate_optimal_transfer()` $\\to$ solver matches **CHC Nawabganj** (18.2 km away, 90 units, saves 70d near-expiry stock).
+3. **ADK Multi-Agent Orchestration (0:35 – 0:60):** Click **"Run Agent Pipeline (Live)"**. In the terminal console, watch the agents collaborate in real time: Sentinel checks live CAMS air-quality feeds $\\to$ Demand Forecaster calculates 42h surge $\\to$ Logistics Allocator invokes `calculate_optimal_transfer()` $\\to$ solver matches **CHC Nawabganj** (18.2 km away, 90 units, saves 70d near-expiry stock).
 4. **Governance Approval & Official Challan (0:60 – 0:75):** Click **"Approve & Dispatch"** under Recommendations. An official government transfer challan is minted with an immutable SHA-256 digital seal.
 5. **Cryptographic Ledger Live Verification (0:75 – 0:90):** Click the **Shield Icon** in the sidebar, then click **"Verify Live Integrity"**. The system walks the entire SHA-256 hash chain, verifying every block and proving non-repudiation and tamper-evidence.
 

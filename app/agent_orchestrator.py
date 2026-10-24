@@ -1,19 +1,16 @@
-import os
-import json
 import math
-import uuid
-import re
-from datetime import datetime, timedelta
+import time
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Literal
 from dotenv import load_dotenv
 load_dotenv()
 
 from pydantic import BaseModel
 
-from app.models import EnvironmentalReading, StockoutRiskAssessment, TransferRecommendation
+from app.models import EnvironmentalReading, StockoutRiskAssessment
 from app.surge_engine import SurgeEngine
 from app.optimizer import RedistributionOptimizer
-from app.llm import generate_json
+from app.llm import generate_json, call_tool, GEMINI_MODELS, CLAUDE_MODEL
 
 
 class CmoInsight(BaseModel):
@@ -76,30 +73,9 @@ DRUG_SUBSTITUTION_GRAPH = {
 # -------------------------------------------------------------
 # Grounding Knowledge Base: District Essential Drug List (EDL)
 # -------------------------------------------------------------
-DISTRICT_EDL_GROUNDING = {
-    "saans": {"code": "MED-001", "standard_name": "Salbutamol Respirator Solution (Respules 2.5mg)", "category": "Schedule H - Bronchodilator"},
-    "सांस": {"code": "MED-001", "standard_name": "Salbutamol Respirator Solution (Respules 2.5mg)", "category": "Schedule H - Bronchodilator"},
-    "salbutamol": {"code": "MED-001", "standard_name": "Salbutamol Respirator Solution (Respules 2.5mg)", "category": "Schedule H - Bronchodilator"},
-    "साल्बुटामोल": {"code": "MED-001", "standard_name": "Salbutamol Respirator Solution (Respules 2.5mg)", "category": "Schedule H - Bronchodilator"},
-    "respule": {"code": "MED-001", "standard_name": "Salbutamol Respirator Solution (Respules 2.5mg)", "category": "Schedule H - Bronchodilator"},
-    "रेस्प्यूल": {"code": "MED-001", "standard_name": "Salbutamol Respirator Solution (Respules 2.5mg)", "category": "Schedule H - Bronchodilator"},
-    "ors": {"code": "MED-002", "standard_name": "Oral Rehydration Salts (ORS Sachets, WHO Formula)", "category": "Essential Electrolytes"},
-    "ओआरएस": {"code": "MED-002", "standard_name": "Oral Rehydration Salts (ORS Sachets, WHO Formula)", "category": "Essential Electrolytes"},
-    "ghol": {"code": "MED-002", "standard_name": "Oral Rehydration Salts (ORS Sachets, WHO Formula)", "category": "Essential Electrolytes"},
-    "घोल": {"code": "MED-002", "standard_name": "Oral Rehydration Salts (ORS Sachets, WHO Formula)", "category": "Essential Electrolytes"},
-    "dexamethasone": {"code": "MED-003", "standard_name": "Dexamethasone Sodium Phosphate Injection (4mg/ml)", "category": "Critical Corticosteroid"},
-    "डेक्सामेथासोन": {"code": "MED-003", "standard_name": "Dexamethasone Sodium Phosphate Injection (4mg/ml)", "category": "Critical Corticosteroid"},
-    "amoxicillin": {"code": "MED-004", "standard_name": "Amoxicillin + Clavulanate 625mg Tablets", "category": "Broad Spectrum Antibacterial"},
-    "एमोक्सिसिलिन": {"code": "MED-004", "standard_name": "Amoxicillin + Clavulanate 625mg Tablets", "category": "Broad Spectrum Antibacterial"},
-    "paracetamol": {"code": "MED-005", "standard_name": "Paracetamol IV Infusion (1000mg/100ml bottle)", "category": "Analgesic / Antipyretic"},
-    "पैरासिटामोल": {"code": "MED-005", "standard_name": "Paracetamol IV Infusion (1000mg/100ml bottle)", "category": "Analgesic / Antipyretic"},
-    "cetirizine": {"code": "MED-006", "standard_name": "Cetirizine 10mg Tablets", "category": "Antihistaminic"},
-    "सिट्रिजिन": {"code": "MED-006", "standard_name": "Cetirizine 10mg Tablets", "category": "Antihistaminic"}
-}
-
 class AgentStepTrace:
     def __init__(self, agent_name: str, step_type: str, message: str, payload: Optional[Dict[str, Any]] = None):
-        self.timestamp = datetime.utcnow().strftime("%H:%M:%S.%f")[:-3]
+        self.timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S.%f")[:-3]
         self.agent_name = agent_name
         self.step_type = step_type  # "THINKING", "TOOL_CALL", "TOOL_RESULT", "GROUNDING_MATCH", "DISPATCH"
         self.message = message
@@ -126,170 +102,189 @@ class MultiAgentResilienceOrchestrator:
     # =========================================================================
     def run_sentinel_agent(self, env: EnvironmentalReading) -> Dict[str, Any]:
         """
-        Reasons over compound atmospheric factors:
-        AQI, PM2.5, Wind Trapping, Temperature Inversion, NASA FIRMS hotspots.
+        Reasons over compound atmospheric factors from live telemetry: AQI/PM2.5 now and the
+        72h CAMS forecast peak, wind, boundary-layer height (trapping), CAMS aerosol optical
+        depth vs its 30-day baseline, and NASA FIRMS fire detections when configured.
         """
-        # Simulated compound telemetry analysis
-        wind_speed_kmh = 3.2  # calm wind -> boundary layer inversion
-        upwind_fires_firms = 14  # NASA FIRMS active fire detections
-        aod_sigma = 2.1  # Sentinel-5P Aerosol Optical Depth anomaly
+        is_live = "Open-Meteo" in (env.source or "")
+        wind = env.wind_speed_kmh
+        blh = env.boundary_layer_m
+        # A shallow mixing layer with light wind traps particulates near the surface
+        trapping = blh is not None and blh < 300 and (wind is None or wind < 8.0)
 
-        is_compound_inversion = env.aqi >= 250 and wind_speed_kmh < 5.0
-        lag_onset_hours = 42  # peak OPD admissions arrive 42-48h after smog onset
+        parts = [f"Surface AQI={env.aqi}, PM2.5={env.pm25} µg/m³, {env.temperature_c}°C."]
+        if wind is not None:
+            parts.append(f"Wind {wind} km/h.")
+        if blh is not None:
+            parts.append(f"Boundary layer {round(blh)} m{' (shallow: particulates trapped near ground)' if trapping else ''}.")
+        if env.aod is not None:
+            sigma = f" ({env.aod_anomaly_sigma:+.1f}σ vs 30-day CAMS baseline)" if env.aod_anomaly_sigma is not None else ""
+            parts.append(f"Aerosol optical depth {env.aod}{sigma}.")
+        if env.forecast_peak_aqi_72h is not None:
+            parts.append(f"CAMS forecast: AQI peaks at {env.forecast_peak_aqi_72h} in ~{env.forecast_peak_in_hours}h.")
+        if env.forecast_max_temp_72h is not None:
+            parts.append(f"Max forecast temperature {env.forecast_max_temp_72h}°C in 72h.")
+        if env.fire_hotspots is not None:
+            parts.append(f"NASA FIRMS: {env.fire_hotspots} VIIRS fire detections within ~165 km (48h).")
+        parts.append("Respiratory admissions typically lag PM2.5 peaks by 1–3 days.")
+        if not is_live:
+            parts.insert(0, "SCENARIO MODE (simulated reading, not live telemetry):")
 
-        situation_brief = (
-            f"COMPOUND INVERSION ALERT: Surface AQI={env.aqi}, PM2.5={env.pm25} µg/m³. "
-            f"Stagnant wind ({wind_speed_kmh} km/h) combined with night-time thermal inversion is trapping particulates. "
-            f"NASA FIRMS reports {upwind_fires_firms} active crop-fire clusters upwind in Sitapur/Hardoi. "
-            f"Sentinel-5P AOD anomaly is +{aod_sigma}σ above 30-day baseline. "
-            f"Epidemiological lag: Peak acute respiratory admissions projected in {lag_onset_hours} hours."
-        )
+        if env.smog_episode and trapping:
+            condition = "SEVERE_COMPOUND_INVERSION"
+        elif env.smog_episode or env.heatwave_alert:
+            condition = "ELEVATED_SURGE"
+        elif max(env.aqi, env.forecast_peak_aqi_72h or 0) > 150:
+            condition = "WATCH"
+        else:
+            condition = "BASELINE"
 
-        resp_mult = 1.62 if env.aqi > 300 else 1.35
-        heat_mult = 1.68 if env.temperature_c > 40 else 1.0
-
+        multipliers = self.surge_engine.calculate_surge_multipliers(env)
         return {
             "agent": "EnvironmentalSentinelAgent",
-            "condition": "SEVERE_COMPOUND_INVERSION" if is_compound_inversion else "ELEVATED_SURGE",
-            "situation_brief": situation_brief,
+            "condition": condition,
+            "situation_brief": " ".join(parts),
             "telemetry": {
                 "aqi": env.aqi,
                 "pm25": env.pm25,
-                "wind_speed_kmh": wind_speed_kmh,
-                "firms_hotspots": upwind_fires_firms,
-                "sentinel5p_aod_sigma": aod_sigma,
-                "lag_onset_hours": lag_onset_hours
+                "wind_speed_kmh": wind,
+                "boundary_layer_m": blh,
+                "aod": env.aod,
+                "aod_anomaly_sigma": env.aod_anomaly_sigma,
+                "forecast_peak_aqi_72h": env.forecast_peak_aqi_72h,
+                "forecast_peak_in_hours": env.forecast_peak_in_hours,
+                "firms_hotspots": env.fire_hotspots,
+                "source": env.source or "Scenario preset",
+                "is_live": is_live,
             },
             "surge_multipliers": {
-                "respiratory": resp_mult,
-                "heat_dehydration": heat_mult
+                "respiratory": multipliers["AQI / Smog"],
+                "heat_dehydration": multipliers["Heatwave / Drought"],
             },
-            "confidence_score": 0.94
         }
 
     # =========================================================================
-    # AGENT 2: Frontline Intake Agent (Multi-turn, Grounding & Edge Fallback)
-    # =========================================================================
-    def process_frontline_intake(self, text: str, target_fac_id: str = "PHC-LKO-01", is_offline: bool = False) -> Dict[str, Any]:
-        """
-        Handles speech-to-text, multi-turn clarification detection,
-        Vertex AI Grounding against the EDL, and Gemma 2 Edge fallback.
-        """
-        # Multi-turn clarification check: Is quantity ambiguous?
-        is_ambiguous = bool(re.search(r'\b(kam|thoda|khatam|bache hain|low|finish)\b', text.lower())) and not bool(re.search(r'\b\d+\b', text))
-        
-        clarification_prompt = None
-        if is_ambiguous:
-            clarification_prompt = "कितने यूनिट या पैकेट बचे हैं, लगभग? (Please provide the estimated quantity)"
-
-        # Vertex AI Grounding Match
-        grounded_match = None
-        lower = text.lower()
-        for kw, standard in DISTRICT_EDL_GROUNDING.items():
-            if kw in lower:
-                grounded_match = standard
-                break
-
-        if not grounded_match:
-            grounded_match = {
-                "code": "MED-001",
-                "standard_name": "Salbutamol Respirator Solution (Respules 2.5mg)",
-                "category": "Schedule H - Bronchodilator"
-            }
-
-        # Extract numbers
-        numbers = [int(n) for n in re.findall(r'\b\d+\b', text)]
-        reported_stock = numbers[0] if numbers else (15 if not is_ambiguous else 0)
-        dispensed = numbers[1] if len(numbers) >= 2 else 40
-
-        # Gemma 2 Edge Resilience Simulation
-        edge_resilience = {
-            "mode": "GEMMA_2B_LOCAL_EDGE" if is_offline else "CLOUD_VERTEX_PRIMARY",
-            "offline_buffer_queued": is_offline,
-            "emergency_sms_triggered": reported_stock < 5,
-            "latency_ms": 42 if is_offline else 180
-        }
-
-        return {
-            "agent": "FrontlineIntakeAgent",
-            "needs_clarification": is_ambiguous,
-            "clarification_prompt": clarification_prompt,
-            "grounded_entity": grounded_match,
-            "facility_id": target_fac_id,
-            "reported_stock": reported_stock,
-            "dispensed_yesterday": dispensed,
-            "edge_resilience": edge_resilience,
-            "confidence_score": 0.98 if not is_ambiguous else 0.65
-        }
-
-    # =========================================================================
-    # AGENT 3: Demand Intelligence Agent (Vertex AI Tabular Learned Forecasting)
+    # AGENT 3: Demand Intelligence Agent (lag-curve surge forecast)
     # =========================================================================
     def run_demand_forecast(self, facility_id: str, medicine_id: str, raw_inventory: List[dict], env: EnvironmentalReading) -> Dict[str, Any]:
         """
-        Simulates Vertex AI AutoML Tabular Forecaster:
-        Incorporates 48-72h temporal lag, rolling 7-day features, and prediction intervals (P10, P50, P90).
+        Rule-based forecaster: baseline consumption × the surge engine's climate multiplier,
+        ramped in over a sigmoid lag curve peaking on day 3, with P10/P50/P90 bands from the
+        same demand variance (1.5× mean) the surge engine uses for stockout probability.
         """
-        item = next((i for i in raw_inventory if i["facility_id"] == facility_id and i["medicine_id"] == medicine_id), None)
-        base_rate = item["daily_consumption_base"] if item else 20.0
-        current_stock = item["current_stock"] if item else 15
+        items = [i for i in raw_inventory if i["facility_id"] == facility_id and i["medicine_id"] == medicine_id]
+        risk = next((r for r in self.surge_engine.assess_facility_risks(items, env)), None) if items else None
+        base_rate = items[0].get("daily_consumption_base", 15.0) if items else 0.0
+        current_stock = risk.current_stock if risk else 0
+        climate_cat = self.medicines.get(medicine_id, {}).get("climate_sensitive", "General")
+        surge_mult = self.surge_engine.calculate_surge_multipliers(env).get(climate_cat, 1.0)
 
-        # Temporal lag multiplier: Peak demand arrives 48h after smog
-        surge_mult = 1.62 if env.aqi > 300 else 1.20
-        median_daily_rate = round(base_rate * surge_mult, 1)
-
-        # 7-day probabilistic forecast with P10 and P90 quantile bands
         forecast_7d = []
-        cum_demand_p50 = 0
+        cum_demand_p50 = 0.0
         for day in range(1, 8):
-            # Sigmoidal lag curve peaking at Day 3 (48-72 hrs)
             lag_factor = 1.0 + (surge_mult - 1.0) / (1.0 + math.exp(-1.2 * (day - 3)))
-            day_p50 = round(base_rate * lag_factor, 1)
-            day_p10 = round(day_p50 * 0.82, 1)
-            day_p90 = round(day_p50 * 1.24, 1)
+            day_p50 = base_rate * lag_factor
+            band = 1.2816 * math.sqrt(day_p50 * 1.5)  # z(0.9) under the surge engine's variance model
             cum_demand_p50 += day_p50
-            forecast_7d.append({"day": day, "p10": day_p10, "p50": day_p50, "p90": day_p90})
+            forecast_7d.append({
+                "day": day,
+                "p10": round(max(0.0, day_p50 - band), 1),
+                "p50": round(day_p50, 1),
+                "p90": round(day_p50 + band, 1),
+            })
 
-        days_of_coverage = round(current_stock / median_daily_rate, 1)
-        stockout_prob_7d = 0.96 if current_stock < cum_demand_p50 else 0.15
+        if current_stock <= 0:
+            stockout_prob_7d = 1.0
+        elif cum_demand_p50 <= 0:
+            stockout_prob_7d = 0.0
+        else:
+            z = (current_stock - cum_demand_p50) / math.sqrt(cum_demand_p50 * 1.5)
+            stockout_prob_7d = round(1.0 - 0.5 * (1.0 + math.erf(z / math.sqrt(2.0))), 3)
 
+        peak_rate = max((d["p50"] for d in forecast_7d), default=0.0)
+        days_of_coverage = round(current_stock / peak_rate, 1) if peak_rate > 0 else None
         return {
             "agent": "DemandIntelligenceAgent",
-            "model": "Vertex_AI_AutoML_Tabular_Forecaster_v2",
+            "model": "lag_curve_surge_forecaster (rule-based)",
             "facility_id": facility_id,
             "medicine_id": medicine_id,
             "current_stock": current_stock,
             "baseline_daily_rate": base_rate,
-            "median_surge_rate": median_daily_rate,
+            "surge_multiplier": surge_mult,
+            "median_surge_rate": round(peak_rate, 1),
             "days_of_coverage": days_of_coverage,
             "stockout_probability_7d": stockout_prob_7d,
             "forecast_quantiles_7d": forecast_7d,
-            "risk_status": "CRITICAL" if days_of_coverage < 4.0 else ("WARNING" if days_of_coverage < 8.0 else "HEALTHY")
+            "risk_status": risk.status if risk else "NO_STOCK_RECORD"
         }
 
     # =========================================================================
-    # AGENT 4: Logistics Redistribution Agent (Gemini Tool Calling + Substitution)
+    # AGENT 4: Logistics Redistribution Agent (LLM function calling + solver)
     # =========================================================================
-    def run_logistics_agent(
+    SOLVER_TOOL = {
+        "name": "calculate_optimal_transfer",
+        "description": (
+            "Run the deterministic constrained redistribution solver for one facility and medicine. "
+            "It finds donor facilities within the distance limit that keep their own safety reserve, "
+            "preferring near-expiry batches (FEFO)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "target_facility_id": {"type": "string", "description": "Facility that needs stock"},
+                "medicine_id": {"type": "string", "description": "Medicine ID, e.g. MED-001"},
+                "max_distance_km": {"type": "number", "description": "Maximum donor distance, 5 to 35 km"},
+                "allow_substitution": {"type": "boolean", "description": "Evaluate a therapeutic substitute if no donor is feasible"},
+            },
+            "required": ["target_facility_id", "medicine_id", "max_distance_km", "allow_substitution"],
+        },
+    }
+
+    async def run_logistics_agent(
         self,
         target_phc_id: str,
         medicine_id: str,
         risks: List[StockoutRiskAssessment],
         raw_inventory: List[dict],
-        allow_substitution: bool = False
+        context: str = "",
     ) -> Dict[str, Any]:
         """
-        Uses Gemini Function Calling / Tool Execution to invoke the deterministic constrained redistribution solver.
-        Evaluates drug substitutions if primary drug inventory is constrained.
+        Asks the LLM (Gemini, Claude fallback) to choose the solver arguments via forced function
+        calling, validates them, then runs the deterministic solver. LLMs never compute the allocation.
         """
-        # Execute deterministic solver
+        tool = self.SOLVER_TOOL
+        default_args = {"target_facility_id": target_phc_id, "medicine_id": medicine_id, "max_distance_km": 35.0, "allow_substitution": True}
+        result = await call_tool(
+            "You are the logistics agent for a district medicine supply network. Decide the solver arguments for this "
+            "situation and call the tool. Use only facility and medicine IDs that appear in the context.",
+            f"{context}\nTarget facility: {target_phc_id} ({self.facilities.get(target_phc_id, {}).get('name', '')}). "
+            f"Medicine: {medicine_id} ({self.medicines.get(medicine_id, {}).get('name', '')}).",
+            tool["name"], tool["description"], tool["parameters"],
+        )
+        args, called_by = (result if result else (default_args, "deterministic_default"))
+        # Never trust model-chosen IDs or limits: clamp to known values
+        if args.get("target_facility_id") not in self.facilities:
+            args["target_facility_id"] = target_phc_id
+        if args.get("medicine_id") not in self.medicines:
+            args["medicine_id"] = medicine_id
+        try:
+            args["max_distance_km"] = min(35.0, max(5.0, float(args.get("max_distance_km", 35.0))))
+        except (TypeError, ValueError):
+            args["max_distance_km"] = 35.0
+        args["allow_substitution"] = bool(args.get("allow_substitution", True))
+
+        started = time.perf_counter()
         recs = self.optimizer.optimize(risks, raw_inventory)
-        chosen_rec = next((r for r in recs if r.recipient_facility_id == target_phc_id and r.medicine_id == medicine_id), None)
-        
+        solver_ms = round((time.perf_counter() - started) * 1000, 2)
+        chosen_rec = next(
+            (r for r in recs if r.recipient_facility_id == args["target_facility_id"] and r.medicine_id == args["medicine_id"]
+             and r.distance_km <= args["max_distance_km"]),
+            None,
+        )
+
         substitution_info = None
-        if not chosen_rec and allow_substitution:
-            # Check Drug Substitution Knowledge Graph
-            sub_meta = DRUG_SUBSTITUTION_GRAPH.get(medicine_id)
+        if not chosen_rec and args["allow_substitution"]:
+            sub_meta = DRUG_SUBSTITUTION_GRAPH.get(args["medicine_id"])
             if sub_meta and sub_meta["substitutes"]:
                 best_sub = sub_meta["substitutes"][0]
                 substitution_info = {
@@ -300,21 +295,14 @@ class MultiAgentResilienceOrchestrator:
                     "requires_special_cmo_signoff": True
                 }
 
-        if not chosen_rec and recs:
-            chosen_rec = recs[0]
-
         return {
             "agent": "LogisticsRedistributionAgent",
-            "gemini_tool_called": "calculate_optimal_transfer",
-            "tool_arguments": {
-                "target_facility_id": target_phc_id,
-                "medicine_id": medicine_id,
-                "max_distance_km": 35.0,
-                "donor_safety_buffer_days": 14.0
-            },
+            "tool_called": tool["name"],
+            "tool_called_by": called_by,
+            "tool_arguments": args,
             "recommendation": chosen_rec.model_dump() if chosen_rec else None,
             "drug_substitution": substitution_info,
-            "solver_runtime_ms": 1.4,
+            "solver_runtime_ms": solver_ms,
             "status": "TRANSFER_OPTIMIZED" if chosen_rec else "UNMET_DEMAND_ESCALATED"
         }
 
@@ -432,118 +420,138 @@ class MultiAgentResilienceOrchestrator:
 
         # Scenario 3: MP Impact & Accountability Report ("mp", "report", "रिपोर्ट", "साहब")
         else:
-            total_transfers = len(recs)
+            region_fac_ids = {i["facility_id"] for i in raw_inventory}
+            population = sum(self.facilities.get(f, {}).get("population_served", 0) for f in region_fac_ids)
+            at_risk_covered = len({(r.recipient_facility_id, r.medicine_id) for r in recs})
             expiry_prevented = sum(r.units_to_transfer for r in recs if r.expiry_waste_prevented)
             answer_en = (
                 f"PARLIAMENTARY CONSTITUENCY IMPACT REPORT ({mp_constituency}):\n"
-                f"• Population Protected: 840,000 rural citizens across 20 PHCs/CHCs.\n"
-                f"• Acute Stockouts Averted: High-risk peripheral health centers in {corridor_title} protected from stockout during surge episode.\n"
-                f"• Medicine Waste Saved: {expiry_prevented} units of near-expiry stock salvaged (Est. value: ₹68,400).\n"
-                f"• Governance Footprint: 100% of movements cryptographically audited under SHA-256; zero MPLADS emergency contingency funds required."
+                f"• Population Served: {population:,} people across {len(region_fac_ids)} monitored PHCs/CHCs.\n"
+                f"• Stockout Risks Addressed: {at_risk_covered} facility-medicine shortfalls in {corridor_title} have a proposed transfer awaiting CMO approval.\n"
+                f"• Medicine Waste Avoided: {expiry_prevented} units of near-expiry stock routed to where they will be used before expiry.\n"
+                f"• Governance Footprint: every approved movement is recorded in a SHA-256 hash-chained audit ledger."
             )
             answer_hi = (
                 f"सांसद महोदय के लिए संसदीय क्षेत्र रिपोर्ट ({mp_constituency}):\n"
-                f"• सुरक्षित जनसंख्या: 20 स्वास्थ्य केंद्रों के अंतर्गत 8.4 लाख ग्रामीण नागरिक।\n"
-                f"• टाले गए स्टॉकआउट: {corridor_title} के स्वास्थ्य केंद्रों में स्मॉग व हीटवेव के दौरान दवाओं की कमी रोकी गई।\n"
-                f"• एक्सपायरी की बचत: {expiry_prevented} यूनिट दवाइयां बायो-वेस्ट में जाने से बचाई गईं।"
+                f"• सेवा प्राप्त जनसंख्या: {len(region_fac_ids)} स्वास्थ्य केंद्रों के अंतर्गत {population:,} नागरिक।\n"
+                f"• स्टॉकआउट जोखिम: {corridor_title} में {at_risk_covered} कमियों के लिए स्थानांतरण प्रस्ताव CMO अनुमोदन हेतु लंबित।\n"
+                f"• एक्सपायरी की बचत: {expiry_prevented} यूनिट दवाइयां समय रहते उपयोग हेतु भेजी जा रही हैं।"
             )
             return {
                 "query_type": "PARLIAMENTARY_IMPACT_BRIEF",
                 "answer_en": answer_en,
                 "answer_hi": answer_hi,
                 "metrics": {
-                    "population_served": 840000,
-                    "facilities_covered": len(self.facilities),
-                    "stockouts_prevented": 2,
+                    "population_served": population,
+                    "facilities_covered": len(region_fac_ids),
+                    "stockout_risks_addressed": at_risk_covered,
                     "near_expiry_units_salvaged": expiry_prevented
                 }
             }
 
     # =========================================================================
-    # Master Execution Trace for the Live ADK Demo
+    # Master Execution Trace for the multi-agent pipeline
     # =========================================================================
-    def run_pipeline(
+    async def run_pipeline(
         self,
         env: EnvironmentalReading,
         raw_inventory: List[dict],
         target_phc_id: str = "PHC-LKO-01",
-        voice_input_snippet: Optional[str] = None
+        intake: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         traces: List[Dict[str, Any]] = []
+        facility_name = self.facilities.get(target_phc_id, {}).get("name", target_phc_id)
 
         # 1. Sentinel Agent
         sentinel_res = self.run_sentinel_agent(env)
-        traces.append(AgentStepTrace("EnvironmentalSentinelAgent", "THINKING", "Polling Google Earth Engine Sentinel-5P AOD & Google Maps AQ API...").to_dict())
+        if sentinel_res["telemetry"]["is_live"]:
+            polling = "Fetching Open-Meteo weather and Copernicus CAMS air-quality forecast" + (" + NASA FIRMS fires" if env.fire_hotspots is not None else "") + "..."
+        else:
+            polling = "Scenario mode: using the selected preset reading instead of live telemetry."
+        traces.append(AgentStepTrace("EnvironmentalSentinelAgent", "THINKING", polling).to_dict())
         traces.append(AgentStepTrace("EnvironmentalSentinelAgent", "DISPATCH", sentinel_res["situation_brief"], sentinel_res["telemetry"]).to_dict())
 
-        # 2. Frontline Intake Agent
-        snippet = voice_input_snippet or "PHC काकोरी से बोल रहे हैं, सांस की दवाई (salbutamol) के सिर्फ 15 रेस्प्यूल बचे हैं, कल 40 मरीज आए थे।"
-        intake_res = self.process_frontline_intake(snippet, target_phc_id)
-        traces.append(AgentStepTrace("FrontlineIntakeAgent", "THINKING", "Transcribing Hindi audio via Google Cloud STT v2...").to_dict())
+        # 2. Frontline Intake Agent: use the parsed field report when it is about this facility,
+        # otherwise pick the facility's highest-risk medicine from the live risk assessment
+        risks = self.surge_engine.assess_facility_risks(raw_inventory, env)
+        if intake and intake.get("facility_id") == target_phc_id:
+            medicine_id = intake["medicine_id"]
+            parser = {"gemini": f"Gemini ({GEMINI_MODELS[0]})", "claude": f"Claude ({CLAUDE_MODEL}, fallback)"}.get(
+                intake.get("parsed_by"), "offline rule-based parser")
+            register = sum(r.current_stock for r in risks if r.facility_id == target_phc_id and r.medicine_id == medicine_id)
+            traces.append(AgentStepTrace(
+                "FrontlineIntakeAgent", "THINKING",
+                f"Field report parsed by {parser}: {intake['reported_stock']} units left, confidence {round(intake['confidence_score'] * 100)}%. "
+                f"Saved as a draft; planning uses the register ({register} available) until staff confirm the count."
+            ).to_dict())
+            entity = {
+                "standard_name": intake.get("standard_name") or intake.get("medicine_name"),
+                "code": intake.get("medicine_code") or medicine_id,
+                "category": intake.get("edl_category") or "",
+            }
+        else:
+            facility_risks = sorted((r for r in risks if r.facility_id == target_phc_id), key=lambda r: -r.stockout_probability_7d)
+            medicine_id = facility_risks[0].medicine_id if facility_risks else "MED-001"
+            traces.append(AgentStepTrace(
+                "FrontlineIntakeAgent", "THINKING",
+                f"No stock report for {facility_name}; selecting its highest 7-day stockout risk from the inventory register."
+            ).to_dict())
+            med = self.medicines.get(medicine_id, {})
+            entity = {"standard_name": med.get("name", medicine_id), "code": medicine_id, "category": med.get("category", "")}
         traces.append(AgentStepTrace(
             "FrontlineIntakeAgent", "GROUNDING_MATCH",
-            f"Vertex AI Grounding matched dialect term to EDL-UP-2026: '{intake_res['grounded_entity']['standard_name']}' [{intake_res['grounded_entity']['code']}].",
-            {"grounded_entity": intake_res["grounded_entity"]}
+            f"Matched to Essential Drug List item '{entity['standard_name']}' [{entity['code']}].",
+            {"grounded_entity": entity}
         ).to_dict())
 
         # 3. Demand Intelligence Agent
-        demand_res = self.run_demand_forecast(target_phc_id, intake_res["grounded_entity"]["code"], raw_inventory, env)
+        demand_res = self.run_demand_forecast(target_phc_id, medicine_id, raw_inventory, env)
+        cover = f"{demand_res['days_of_coverage']}d" if demand_res["days_of_coverage"] is not None else "n/a"
         traces.append(AgentStepTrace(
             "DemandIntelligenceAgent", "THINKING",
-            f"Vertex AI AutoML Forecaster: Ingested 72h temporal lag. Projected rate={demand_res['median_surge_rate']} units/day. Days of cover={demand_res['days_of_coverage']}d. Stockout risk P(7d)={demand_res['stockout_probability_7d']}.",
+            f"Lag-curve forecast: baseline {demand_res['baseline_daily_rate']}/day × surge {demand_res['surge_multiplier']} → peak {demand_res['median_surge_rate']}/day. "
+            f"Stock {demand_res['current_stock']}, cover {cover}, 7-day stockout probability {round(demand_res['stockout_probability_7d'] * 100)}%.",
             {"forecast": demand_res["forecast_quantiles_7d"][:3]}
         ).to_dict())
 
         # 4. Logistics Agent
-        risks = self.surge_engine.assess_facility_risks(raw_inventory, env)
-        logistics_res = self.run_logistics_agent(target_phc_id, intake_res["grounded_entity"]["code"], risks, raw_inventory)
-        tool_args = logistics_res.get("tool_arguments", {})
+        context = (
+            f"Situation: {sentinel_res['situation_brief']}\n"
+            f"Demand forecast: {demand_res['risk_status']}, stock {demand_res['current_stock']}, "
+            f"7-day stockout probability {demand_res['stockout_probability_7d']}."
+        )
+        logistics_res = await self.run_logistics_agent(target_phc_id, medicine_id, risks, raw_inventory, context)
+        args = logistics_res["tool_arguments"]
+        caller = {"gemini": f"Gemini ({GEMINI_MODELS[0]}) function call", "claude": f"Claude ({CLAUDE_MODEL}) tool call (Gemini unavailable)"}.get(
+            logistics_res["tool_called_by"], "Deterministic default arguments (LLM unavailable)")
         traces.append(AgentStepTrace(
             "LogisticsAgent", "TOOL_CALL",
-            "Gemini Reasoning: 'LLMs cannot compute constrained inventory optimization. Invoking tool: calculate_optimal_transfer() via Gemini Function Calling.'",
-            {
-                "tool": "calculate_optimal_transfer",
-                "arguments": tool_args,
-                "target_facility_id": tool_args.get("target_facility_id", target_phc_id),
-                "medicine_id": tool_args.get("medicine_id", intake_res["grounded_entity"]["code"]),
-                "max_distance_km": tool_args.get("max_distance_km", 35.0),
-                "donor_safety_buffer_days": tool_args.get("donor_safety_buffer_days", 14.0)
-            }
+            f"{caller}: the LLM chooses arguments; the allocation itself is computed by the deterministic solver.",
+            {"tool": logistics_res["tool_called"], "arguments": args, "called_by": logistics_res["tool_called_by"]}
         ).to_dict())
 
         rec = logistics_res.get("recommendation")
         if rec:
-            donor_name = rec.get("donor_facility_name", "CHC Nawabganj")
-            dist = rec.get("distance_km", 18.2)
-            units = rec.get("units_to_transfer", 90)
-            batch = rec.get("batch_number", "BAT-842-26")
-            expiry = rec.get("batch_expiry_days", 70)
-            solver_msg = f"Deterministic OR Solver matched optimal donor: {donor_name} ({dist} km). {units} units allocated from Batch {batch} (expiring in {expiry} days). Expiry waste saved!"
+            solver_msg = (
+                f"Solver ({logistics_res['solver_runtime_ms']} ms) matched donor {rec['donor_facility_name']} ({rec['distance_km']} km): "
+                f"{rec['units_to_transfer']} units from batch {rec.get('batch_number') or 'n/a'}"
+                + (f", expiring in {rec['batch_expiry_days']} days." if rec.get("batch_expiry_days") is not None else ".")
+            )
             tool_res_payload = dict(rec)
-            tool_res_payload["donor_name"] = donor_name
-            tool_res_payload["transit_distance_km"] = dist
         else:
-            solver_msg = "Deterministic OR Solver verified: Multi-echelon stock safety buffers maintained."
-            tool_res_payload = {
-                "donor_facility_name": "CHC Nawabganj",
-                "donor_name": "CHC Nawabganj",
-                "units_to_transfer": 90,
-                "distance_km": 18.2,
-                "transit_distance_km": 18.2,
-                "batch_expiry_days": 70
-            }
+            solver_msg = (
+                f"Solver ({logistics_res['solver_runtime_ms']} ms): no donor within {args['max_distance_km']} km can spare stock "
+                f"without breaching its 14-day reserve. Escalated to the district requisition queue."
+            )
+            tool_res_payload = {"no_feasible_donor": True, "drug_substitution": logistics_res.get("drug_substitution")}
+        traces.append(AgentStepTrace("LogisticsAgent", "TOOL_RESULT", solver_msg, tool_res_payload).to_dict())
 
-        traces.append(AgentStepTrace(
-            "LogisticsAgent", "TOOL_RESULT",
-            solver_msg,
-            tool_res_payload
-        ).to_dict())
-
-        # 5. Strategic / Governance Agent
+        # 5. Governance Agent
         traces.append(AgentStepTrace(
             "GovernanceAgent", "DISPATCH",
-            "Generated bilingual Action Card & Official Dispatch Challan. Enqueued in Chief Medical Officer command portal. Awaiting human sign-off.",
-            {"status": "AWAITING_CMO_SIGN_OFF"}
+            "Transfer recommendation queued for CMO review. Nothing moves until a human signs off; the decision is sealed in the SHA-256 audit chain."
+            if rec else "Unmet demand report queued for the District Health Society. Any substitution needs CMO sign-off.",
+            {"status": "AWAITING_CMO_SIGN_OFF" if rec else "ESCALATED_UNMET_DEMAND"}
         ).to_dict())
 
         return {

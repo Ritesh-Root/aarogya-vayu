@@ -160,7 +160,7 @@ p.text = "• Challenge Track: Track 3 — Smart Health & Supply Chain Resilienc
          "• Live Web App: https://aarogya-vayu.vercel.app\n" \
          "• Demo Video: https://youtu.be/D8w2qviTuW4\n" \
          "• GitHub Repository: https://github.com/Ritesh-Root/aarogya-vayu\n" \
-         "• Google Tech: Gemini 2.5 Flash • Google ADK • Vertex AI • GEE • STT v2"
+         "• Google Tech: Gemini 3.8 Flash • Google ADK • Vertex AI • GEE • STT v2"
 p.font.size = Pt(10)
 p.font.color.rgb = TEXT_BODY
 p.space_after = Pt(12)
@@ -348,7 +348,7 @@ agents = [
     ("🛰️ Environmental Sentinel Agent", "Subscribes to Google Earth Engine satellite feeds and CPCB ground sensors. Detects thermal inversions and publishes SURGE_TRIGGER events.", BLUE_ACCENT),
     ("🎙️ Frontline Intake Agent", "Processes audio clips from ASHA nurses via Speech-to-Text v2. Uses Vertex AI Search to ground colloquial Hindi dialect to standard UP drug codes.", EMERALD),
     ("📈 Demand Intelligence Agent", "Applies 48–72h epidemiological lag curves to estimate ward-level patient spikes and computes probabilistic stockout risks (P10, P50, P90).", AMBER),
-    ("📦 Logistics Redistribution Agent", "Gemini 2.5 Flash Tool Calling invokes deterministic constrained solver; balances multi-facility inventories within 35 km in <2ms.", TERRACOTTA)
+    ("📦 Logistics Redistribution Agent", "Gemini 3.8 Flash Tool Calling invokes deterministic constrained solver; balances multi-facility inventories within 35 km in <2ms.", TERRACOTTA)
 ]
 
 for ag_t, ag_d, ag_c in agents:
@@ -385,7 +385,7 @@ add_header(
 )
 
 g_tools = [
-    ("⚡ Google Gemini 2.5 Flash & Flash-Lite",
+    ("⚡ Google Gemini 3.8 Flash & Flash-Lite",
      "• Real-time cognitive reasoning engine for clinical & logistical decision-making.\n"
      "• Native Function Calling (`calculate_optimal_transfer`) bridges AI to math.\n"
      "• Powers bilingual CMO conversational advisor in English and natural Hindi.",
@@ -597,7 +597,7 @@ add_image_card(
     slide8, 
     Inches(0.8), Inches(1.45), Inches(5.7), Inches(5.5), 
     IMG_CMO_STUDIO, 
-    "CMO Strategic Studio (Gemini 2.5 Flash)",
+    "CMO Strategic Studio (Gemini 3.8 Flash)",
     "Figure 6: Chief Medical Officer Strategic Studio showing natural language simulation ('What if this smog inversion lasts 5 more days?'), bilingual Hindi translation, and action protocols."
 )
 
@@ -737,7 +737,7 @@ p.text = "• Event: Build with AI: Code for Communities (2nd Edition)\n" \
          "• GitHub Repository: https://github.com/Ritesh-Root/aarogya-vayu\n" \
          "• Corridors: Bhubaneswar–Cuttack (Odisha, Default) & Lucknow–Unnao (UP)\n" \
          "• Real-Time Telemetry: Open-Meteo Satellite Sensors + Regional News Bureau\n" \
-         "• Google Tech: Gemini 2.5 Flash • Google ADK • Vertex AI • GEE • STT v2"
+         "• Google Tech: Gemini 3.8 Flash • Google ADK • Vertex AI • GEE • STT v2"
 p.font.size = Pt(9.5)
 p.font.color.rgb = TEXT_BODY
 p.space_after = Pt(12)

@@ -77,8 +77,17 @@ class EnvironmentalReading(BaseModel):
     heatwave_alert: bool = Field(default=False)
     smog_episode: bool = Field(default=True)
     corridor: str = Field(default="Lucknow-Unnao Industrial & Agricultural Corridor")
-    source: Optional[str] = Field(default=None, description="Data source attribution (e.g. Open-Meteo, CAAQMS)")
+    source: Optional[str] = Field(default=None, description="Data source attribution (e.g. Open-Meteo CAMS)")
     recorded_at: Optional[str] = Field(default=None, description="Telemetry timestamp")
+    # Live-only enrichments (None in scenario mode or when the feed is unavailable)
+    aod: Optional[float] = Field(default=None, description="CAMS aerosol optical depth (550nm)")
+    aod_anomaly_sigma: Optional[float] = Field(default=None, description="Current AOD vs trailing 30-day mean, in std devs")
+    boundary_layer_m: Optional[float] = Field(default=None, description="Planetary boundary layer height in metres")
+    forecast_peak_aqi_72h: Optional[int] = Field(default=None, description="Peak forecast US AQI over the next 72h")
+    forecast_peak_pm25_72h: Optional[float] = Field(default=None, description="Peak forecast PM2.5 over the next 72h")
+    forecast_peak_in_hours: Optional[int] = Field(default=None, description="Hours until the forecast AQI peak")
+    forecast_max_temp_72h: Optional[float] = Field(default=None, description="Max forecast temperature over the next 72h")
+    fire_hotspots: Optional[int] = Field(default=None, description="NASA FIRMS VIIRS detections near the corridor (last 48h)")
 
 class StockoutRiskAssessment(BaseModel):
     facility_id: str
@@ -399,6 +408,7 @@ class VoiceIntakeResponse(BaseModel):
     anomaly_flag: Optional[str] = None
     raw_transcript: str
     action_taken: str = "DRAFT_CREATED_AWAITING_CONFIRMATION"
+    parsed_by: Optional[str] = None  # "gemini", "claude" or "heuristic"
 
 class ApprovalRequest(BaseModel):
     recommendation_id: str

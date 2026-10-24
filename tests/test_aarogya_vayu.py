@@ -793,11 +793,11 @@ from app.voice_service import VoiceExtraction
 def test_llm_falls_back_to_claude_only_when_gemini_fails(monkeypatch):
     calls = []
 
-    async def gemini_down(system, user, schema):
+    async def gemini_down(system, user, schema, image=None):
         calls.append("gemini")
         return None
 
-    async def claude_ok(system, user, schema):
+    async def claude_ok(system, user, schema, image=None):
         calls.append("claude")
         return schema(reported_stock=12)
 
@@ -807,7 +807,7 @@ def test_llm_falls_back_to_claude_only_when_gemini_fails(monkeypatch):
     assert provider == "claude" and parsed.reported_stock == 12
     assert calls == ["gemini", "claude"]
 
-    async def gemini_ok(system, user, schema):
+    async def gemini_ok(system, user, schema, image=None):
         calls.append("gemini")
         return schema(reported_stock=7)
 
@@ -846,7 +846,7 @@ def test_voice_intake_without_stock_count_uses_heuristic_path(monkeypatch):
 
 
 def test_llm_total_budget_returns_none_instead_of_hanging(monkeypatch):
-    async def hangs(system, user, schema):
+    async def hangs(system, user, schema, image=None):
         await asyncio.sleep(5)
 
     monkeypatch.setattr(llm, "_generate_json", hangs)
@@ -879,3 +879,120 @@ def test_cmo_what_if_fallback_lists_each_facility_once(monkeypatch):
     assert res.status_code == 200
     names = [f["facility"] for f in res.json()["affected_facilities"]]
     assert names and len(names) == len(set(names))
+
+
+# ==============================================================================
+# Live telemetry enrichment, pipeline function calling and real vision
+# ==============================================================================
+import base64
+import app.telemetry_service as telemetry_module
+import app.vision_service as vision_module
+from datetime import datetime as _dt, timedelta as _td
+
+
+def _hourly(hours_back, hours_ahead, fn):
+    now = _dt.now(telemetry_module.IST).replace(minute=0, second=0, microsecond=0, tzinfo=None)
+    times = [(now + _td(hours=h)).isoformat(timespec="minutes") for h in range(-hours_back, hours_ahead + 1)]
+    return times, [fn(h) for h in range(-hours_back, hours_ahead + 1)]
+
+
+def test_live_telemetry_derives_forecast_peak_and_aod_anomaly(monkeypatch):
+    t_w, temps = _hourly(24, 96, lambda h: 41.0 if h == 30 else 30.0)
+    _, blh = _hourly(24, 96, lambda h: 120.0)
+    t_aq, aqi = _hourly(720, 96, lambda h: 260 if h == 20 else 150)
+    _, pm = _hourly(720, 96, lambda h: 60.0)
+    _, aod = _hourly(720, 96, lambda h: 0.4 + (0.1 if h % 2 else -0.1))
+
+    def fake_get_json(url, timeout=5):
+        if "air-quality" in url:
+            return {"current": {"pm2_5": 60.0, "pm10": 80.0, "us_aqi": 150, "aerosol_optical_depth": 0.7, "time": "now"},
+                    "hourly": {"time": t_aq, "us_aqi": aqi, "pm2_5": pm, "aerosol_optical_depth": aod}}
+        return {"current": {"temperature_2m": 30.0, "relative_humidity_2m": 60.0, "wind_speed_10m": 3.0},
+                "hourly": {"time": t_w, "temperature_2m": temps, "boundary_layer_height": blh}}
+
+    monkeypatch.setattr(telemetry_module, "_get_json", fake_get_json)
+    monkeypatch.delenv("FIRMS_MAP_KEY", raising=False)
+    reading = telemetry_module.LiveTelemetryService(cache_ttl_seconds=0).fetch_live_reading("lucknow")
+    assert reading.forecast_peak_aqi_72h == 260 and reading.forecast_peak_in_hours == 20
+    assert reading.forecast_max_temp_72h == 41.0 and reading.heatwave_alert is True  # Lucknow plains threshold is 40°C
+    assert reading.smog_episode is True  # forecast AQI peak >= 200
+    assert abs(reading.aod_anomaly_sigma - 3.0) < 0.05  # (0.7 - 0.4) / 0.1
+    assert reading.boundary_layer_m == 120.0 and reading.fire_hotspots is None
+    # The surge engine plans against the forecast peak, not just the current AQI of 150
+    assert main_module.surge_engine.calculate_surge_multipliers(reading)["AQI / Smog"] == 1.55
+
+
+def test_telemetry_outage_is_never_reported_as_live(monkeypatch):
+    def down(url, timeout=5):
+        raise OSError("network down")
+
+    monkeypatch.setattr(telemetry_module, "_get_json", down)
+    reading = telemetry_module.LiveTelemetryService(cache_ttl_seconds=0).fetch_live_reading("bhubaneswar")
+    assert "Open-Meteo" not in reading.source and "Offline" in reading.source
+
+
+def test_pipeline_clamps_llm_tool_arguments_and_reports_caller(monkeypatch):
+    async def tool_call(system, user, name, description, parameters):
+        return {"target_facility_id": "PHC-NOPE", "medicine_id": "MED-999", "max_distance_km": 500, "allow_substitution": True}, "gemini"
+
+    monkeypatch.setattr(orchestrator_module, "call_tool", tool_call)
+    monkeypatch.setattr(main_module, "_llm_hits", {})
+    res = client.post("/api/agents/run-resilience-pipeline", json={"target_facility_id": "PHC-LKO-01"})
+    assert res.status_code == 200
+    data = res.json()
+    args = data["logistics"]["tool_arguments"]
+    assert args["target_facility_id"] == "PHC-LKO-01"
+    assert args["medicine_id"] in main_module.medicines_dict and args["max_distance_km"] == 35.0
+    assert data["logistics"]["tool_called_by"] == "gemini"
+    tool_call_trace = next(t for t in data["traces"] if t["type"] == "TOOL_CALL")
+    assert tool_call_trace["payload"]["called_by"] == "gemini"
+    rec = data["logistics"]["recommendation"]
+    tool_result = next(t for t in data["traces"] if t["type"] == "TOOL_RESULT")["payload"]
+    if rec:
+        assert tool_result["donor_facility_name"] == rec["donor_facility_name"]
+    else:
+        assert tool_result["no_feasible_donor"] is True
+
+
+def test_pipeline_rejects_unknown_facility():
+    res = client.post("/api/agents/run-resilience-pipeline", json={"target_facility_id": "PHC-NOPE"})
+    assert res.status_code == 400
+
+
+def test_vision_requires_a_real_image_and_compares_with_register(monkeypatch):
+    monkeypatch.setattr(main_module, "_llm_hits", {})
+    assert client.post("/api/vision/verify-shelf-photo", json={"facility_id": "PHC-LKO-01"}).status_code == 400
+    assert client.post("/api/vision/verify-shelf-photo", json={"facility_id": "PHC-LKO-01", "image_base64": "data:text/html;base64,PGI+"}).status_code == 400
+
+    async def fake_scan(image, medicines):
+        assert image[1] == "image/png" and image[0].startswith(b"\x89PNG")
+        return vision_module.ShelfScan(is_medicine_shelf=True, items=[
+            vision_module.ShelfItem(medicine_name="Salbutamol respules", matched_medicine_id="MED-001", unit_count_estimate=9999),
+            vision_module.ShelfItem(medicine_name="Unknown syrup", matched_medicine_id="MED-999", unit_count_estimate=3),
+        ]), "gemini"
+
+    monkeypatch.setattr(main_module, "scan_shelf", fake_scan)
+    png = "data:image/png;base64," + base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"0" * 16).decode()
+    res = client.post("/api/vision/verify-shelf-photo", json={"facility_id": "PHC-LKO-01", "image_base64": png})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["is_simulated"] is False and data["status"] == "DISCREPANCY_FLAGGED"
+    first, second = data["detected_items"]
+    assert first["register_available"] is not None and first["discrepancy_units"] > 3
+    assert second["matched_medicine_id"] is None and second["register_available"] is None
+
+
+def test_scenario_preset_switches_region_out_of_live_mode(monkeypatch):
+    monkeypatch.setitem(main_module.env_mode_by_region, "bhubaneswar", "live")
+    res = client.post("/api/environmental?region=bhubaneswar", json={"aqi": 90, "pm25": 30.0, "temperature_c": 25.0, "humidity_pct": 60.0,
+                                                                   "heatwave_alert": False, "smog_episode": False, "corridor": "Bhubaneswar"})
+    assert res.status_code == 200
+    assert main_module.env_mode_by_region["bhubaneswar"] == "scenario"
+    env = client.get("/api/environmental?region=bhubaneswar").json()
+    assert env["mode"] == "scenario" and env["is_live"] is False and env["telemetry"]["aqi"] == 90
+
+
+def test_sample_news_advisories_are_labelled():
+    articles = client.get("/api/news?region=bhubaneswar").json()["articles"]
+    samples = [a for a in articles if not a["is_live"]]
+    assert samples and all(a["title"].startswith("[Sample advisory]") and a["published_at"] == "Sample" for a in samples)

@@ -11,15 +11,18 @@ so callers can drop to their deterministic offline fallback.
 """
 
 import os
+import base64
 import asyncio
 import logging
-from typing import Optional, Tuple, Type, TypeVar
+from typing import Any, Dict, Optional, Tuple, Type, TypeVar
 
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
+# (raw bytes, mime type) of an image sent alongside the prompt
+Image = Tuple[bytes, str]
 
 # `or` (not a getenv default) so an env var that exists but is empty still gets the default
 GEMINI_MODELS = [
@@ -68,7 +71,7 @@ def _claude():
     return _claude_client
 
 
-async def _call_gemini(system: str, user: str, schema: Type[T]) -> Optional[T]:
+async def _call_gemini(system: str, user: str, schema: Type[T], image: Optional[Image] = None) -> Optional[T]:
     try:
         client = _gemini()
         if not client:
@@ -84,10 +87,11 @@ async def _call_gemini(system: str, user: str, schema: Type[T]) -> Optional[T]:
         max_output_tokens=MAX_OUTPUT_TOKENS,
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
+    contents = [types.Part.from_bytes(data=image[0], mime_type=image[1]), user] if image else user
     for model in GEMINI_MODELS:
         try:
             resp = await asyncio.wait_for(
-                client.aio.models.generate_content(model=model, contents=user, config=config),
+                client.aio.models.generate_content(model=model, contents=contents, config=config),
                 timeout=LLM_ATTEMPT_TIMEOUT_S,
             )
             if isinstance(resp.parsed, schema):
@@ -103,7 +107,16 @@ async def _call_gemini(system: str, user: str, schema: Type[T]) -> Optional[T]:
     return None
 
 
-async def _call_claude(system: str, user: str, schema: Type[T]) -> Optional[T]:
+def _claude_content(user: str, image: Optional[Image]):
+    if not image:
+        return user
+    return [
+        {"type": "image", "source": {"type": "base64", "media_type": image[1], "data": base64.b64encode(image[0]).decode()}},
+        {"type": "text", "text": user},
+    ]
+
+
+async def _call_claude(system: str, user: str, schema: Type[T], image: Optional[Image] = None) -> Optional[T]:
     try:
         client = _claude()
         if not client:
@@ -117,7 +130,7 @@ async def _call_claude(system: str, user: str, schema: Type[T]) -> Optional[T]:
             model=CLAUDE_MODEL,
             max_tokens=MAX_OUTPUT_TOKENS,
             system=system,
-            messages=[{"role": "user", "content": user}],
+            messages=[{"role": "user", "content": _claude_content(user, image)}],
             output_format=schema,
         )
         if resp.stop_reason == "refusal":
@@ -133,20 +146,101 @@ async def _call_claude(system: str, user: str, schema: Type[T]) -> Optional[T]:
     return None
 
 
-async def _generate_json(system: str, user: str, schema: Type[T]) -> Optional[Tuple[T, str]]:
-    parsed = await _call_gemini(system, user, schema)
+async def _generate_json(system: str, user: str, schema: Type[T], image: Optional[Image] = None) -> Optional[Tuple[T, str]]:
+    parsed = await _call_gemini(system, user, schema, image)
     if parsed is not None:
         return parsed, "gemini"
-    parsed = await _call_claude(system, user, schema)
+    parsed = await _call_claude(system, user, schema, image)
     if parsed is not None:
         return parsed, "claude"
     return None
 
 
-async def generate_json(system: str, user: str, schema: Type[T]) -> Optional[Tuple[T, str]]:
+async def generate_json(system: str, user: str, schema: Type[T], image: Optional[Image] = None) -> Optional[Tuple[T, str]]:
     """Gemini first, Claude as fallback. Returns (parsed, provider) or None."""
     try:
-        return await asyncio.wait_for(_generate_json(system, user, schema), timeout=LLM_TOTAL_BUDGET_S)
+        return await asyncio.wait_for(_generate_json(system, user, schema, image), timeout=LLM_TOTAL_BUDGET_S)
     except asyncio.TimeoutError:
         logger.warning("LLM budget of %ss exhausted; using offline fallback", LLM_TOTAL_BUDGET_S)
+        return None
+
+
+async def _gemini_tool_call(system: str, user: str, name: str, description: str, parameters: dict) -> Optional[Dict[str, Any]]:
+    try:
+        client = _gemini()
+        if not client:
+            return None
+        from google.genai import types
+    except Exception as e:
+        logger.warning("Gemini client unavailable: %s", e)
+        return None
+    config = types.GenerateContentConfig(
+        system_instruction=system,
+        tools=[types.Tool(function_declarations=[
+            types.FunctionDeclaration(name=name, description=description, parameters_json_schema=parameters)
+        ])],
+        tool_config=types.ToolConfig(function_calling_config=types.FunctionCallingConfig(
+            mode=types.FunctionCallingConfigMode.ANY, allowed_function_names=[name]
+        )),
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+    )
+    for model in GEMINI_MODELS:
+        try:
+            resp = await asyncio.wait_for(
+                client.aio.models.generate_content(model=model, contents=user, config=config),
+                timeout=LLM_ATTEMPT_TIMEOUT_S,
+            )
+            for call in resp.function_calls or []:
+                if call.name == name:
+                    return dict(call.args or {})
+        except asyncio.TimeoutError:
+            logger.warning("Gemini %s tool call timed out after %ss", model, LLM_ATTEMPT_TIMEOUT_S)
+            break
+        except Exception as e:
+            logger.warning("Gemini %s tool call failed: %s", model, e)
+    return None
+
+
+async def _claude_tool_call(system: str, user: str, name: str, description: str, parameters: dict) -> Optional[Dict[str, Any]]:
+    try:
+        client = _claude()
+        if not client:
+            return None
+        import anthropic
+    except Exception as e:
+        logger.warning("Claude client unavailable: %s", e)
+        return None
+    try:
+        resp = await client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=1024,
+            system=system,
+            tools=[{"name": name, "description": description, "input_schema": parameters}],
+            tool_choice={"type": "tool", "name": name},
+            messages=[{"role": "user", "content": user}],
+        )
+        for block in resp.content:
+            if block.type == "tool_use" and block.name == name:
+                return dict(block.input)
+    except anthropic.APIError as e:
+        logger.warning("Claude tool call failed: %s", e)
+    return None
+
+
+async def _tool_call(system: str, user: str, name: str, description: str, parameters: dict) -> Optional[Tuple[Dict[str, Any], str]]:
+    args = await _gemini_tool_call(system, user, name, description, parameters)
+    if args is not None:
+        return args, "gemini"
+    args = await _claude_tool_call(system, user, name, description, parameters)
+    if args is not None:
+        return args, "claude"
+    return None
+
+
+async def call_tool(system: str, user: str, name: str, description: str, parameters: dict) -> Optional[Tuple[Dict[str, Any], str]]:
+    """Force the model to call one declared function; returns (arguments, provider) or None. Gemini first, Claude fallback."""
+    try:
+        return await asyncio.wait_for(_tool_call(system, user, name, description, parameters), timeout=LLM_TOTAL_BUDGET_S)
+    except asyncio.TimeoutError:
+        logger.warning("LLM tool-call budget of %ss exhausted", LLM_TOTAL_BUDGET_S)
         return None

@@ -186,7 +186,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       } else if (view === 'vision') {
         const btnV = document.getElementById('btnVision');
         if (btnV) btnV.scrollIntoView({ behavior: 'instant', block: 'center' });
-        await runVisionVerification();
       }
     }, 400);
   }
@@ -331,10 +330,10 @@ async function fetchEnvironmental() {
 
     if (data.is_live || (t.source && t.source.includes('Open-Meteo'))) {
       if (bannerTitle) bannerTitle.innerHTML = `<span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-300 animate-ping"></span><span>${t.corridor || 'Regional Corridor'}</span> <span class="text-[10px] bg-emerald-500/40 text-emerald-100 border border-emerald-300/50 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">Live Sensor Feed</span></span>`;
-      if (bannerDesc) bannerDesc.textContent = `Live Telemetry (Open-Meteo & CAAQMS) • AQI ${t.aqi} • PM2.5: ${t.pm25} µg/m³ • Temp: ${t.temperature_c}°C • Humidity: ${t.humidity_pct || 75}% • Wind: ${t.wind_speed_kmh || 10} km/h`;
+      if (bannerDesc) bannerDesc.textContent = `Live Telemetry (Open-Meteo · Copernicus CAMS) • AQI ${t.aqi} • PM2.5: ${t.pm25} µg/m³ • Temp: ${t.temperature_c}°C • Humidity: ${t.humidity_pct || 75}% • Wind: ${t.wind_speed_kmh || 10} km/h`;
     } else if (t.smog_episode) {
       if (bannerTitle) bannerTitle.textContent = `${t.corridor || 'Regional Corridor'} Smog Inversion Active`;
-      if (bannerDesc) bannerDesc.textContent = `AQI ${t.aqi} • PM2.5: ${t.pm25} µg/m³ • +${Math.round(((mults['AQI / Smog'] || 1.62) - 1) * 100)}% Acute Respiratory Demand • 42h Lag Onset`;
+      if (bannerDesc) bannerDesc.textContent = `AQI ${t.aqi} • PM2.5: ${t.pm25} µg/m³ • +${Math.round(((mults['AQI / Smog'] || 1.62) - 1) * 100)}% Acute Respiratory Demand • ${t.forecast_peak_aqi_72h ? `72h AQI peak ${t.forecast_peak_aqi_72h} in ~${t.forecast_peak_in_hours}h` : 'Admissions lag PM2.5 peaks by 1–3 days'}`;
     } else if (t.heatwave_alert) {
       if (bannerTitle) bannerTitle.textContent = `${t.corridor || 'Regional Corridor'} Heatwave Alert Active`;
       if (bannerDesc) bannerDesc.textContent = `Temp: ${t.temperature_c}°C • +${Math.round(((mults['Heatwave / Drought'] || 1.85) - 1) * 100)}% Dehydration / ORS Demand`;
@@ -1449,7 +1448,7 @@ function fitMapBounds() {
   }
 }
 
-// Multi-Agent Pipeline Runner with Google ADK Orchestration
+// Multi-Agent Pipeline Runner
 async function runAgentPipeline(targetFacId = null) {
   const btn = document.getElementById('btnRunAgents');
   const term = document.getElementById('agentTerminalBody');
@@ -1461,11 +1460,11 @@ async function runAgentPipeline(targetFacId = null) {
 
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Orchestrating ADK Multi-Agent System...</span>`;
+    btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Running multi-agent pipeline...</span>`;
     lucide.createIcons();
   }
 
-  term.innerHTML = '<div class="text-indigo-400 animate-pulse">// Initializing Google ADK Multi-Agent Context &middot; Loading Vertex AI Grounding Store...</div>';
+  term.innerHTML = '<div class="text-indigo-400 animate-pulse">// Fetching live telemetry &middot; calling Gemini agents...</div>';
 
   try {
     const res = await fetch('/api/agents/run-resilience-pipeline', {
@@ -1509,67 +1508,62 @@ async function runAgentPipeline(targetFacId = null) {
       if (step.type === 'TOOL_CALL') {
         const payload = step.payload || {};
         const toolName = payload.tool || 'calculate_optimal_transfer';
-        const args = payload.arguments || (payload.target_facility_id ? {
-          target_facility_id: payload.target_facility_id,
-          medicine_id: payload.medicine_id,
-          max_distance_km: payload.max_distance_km,
-          donor_safety_buffer_days: payload.donor_safety_buffer_days
-        } : {
-          target_facility_id: facId,
-          medicine_id: "MED-001",
-          max_distance_km: 35.0,
-          donor_safety_buffer_days: 14.0
-        });
+        const args = payload.arguments || {};
+        const header = payload.called_by === 'gemini' ? '// GEMINI FUNCTION CALL'
+          : payload.called_by === 'claude' ? '// CLAUDE TOOL CALL (GEMINI FALLBACK)'
+          : '// DEFAULT SOLVER ARGUMENTS (LLM UNAVAILABLE)';
         extraContent = `
           <div class="mt-2 bg-[#0d121c] p-3.5 rounded-xl border border-amber-500/40 text-xs font-mono text-amber-300 shadow-inner">
             <div class="flex items-center space-x-2 text-slate-400 text-xs uppercase font-mono font-bold mb-1.5">
               <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
-              <span>// GEMINI FUNCTION CALLING INVOKED</span>
+              <span>${header}</span>
             </div>
-            <div class="text-amber-200 font-bold">&gt; tool: <strong>${toolName}()</strong></div>
-            <div class="mt-1 text-slate-300 font-mono text-xs leading-relaxed">&gt; args: <span class="text-amber-100 font-semibold">${JSON.stringify(args)}</span></div>
+            <div class="text-amber-200 font-bold">&gt; tool: <strong>${escapeHtml(toolName)}()</strong></div>
+            <div class="mt-1 text-slate-300 font-mono text-xs leading-relaxed">&gt; args: <span class="text-amber-100 font-semibold">${escapeHtml(JSON.stringify(args))}</span></div>
           </div>
         `;
       } else if (step.type === 'GROUNDING_MATCH') {
-        const entity = (step.payload && step.payload.grounded_entity) || {
-          standard_name: "Salbutamol Respirator Solution (Respules 2.5mg)",
-          code: "MED-001",
-          category: "Schedule H - Bronchodilator"
-        };
+        const entity = (step.payload && step.payload.grounded_entity) || {};
         extraContent = `
           <div class="mt-2 bg-[#0d121c] p-3.5 rounded-xl border border-purple-500/40 text-xs font-mono text-purple-300 shadow-inner">
             <div class="flex items-center space-x-2 text-slate-400 text-xs uppercase font-mono font-bold mb-1.5">
               <span class="w-2 h-2 rounded-full bg-purple-400 animate-ping"></span>
-              <span>// VERTEX AI GROUNDING (EDL-UP-2026)</span>
+              <span>// EDL GROUNDING (EDL-UP-2026)</span>
             </div>
-            <div>&gt; verified entity: <strong class="text-purple-200">${entity.standard_name}</strong> (${entity.code})</div>
-            <div class="mt-1 text-slate-300">&gt; clinical class: <span class="text-purple-100 font-semibold">${entity.category}</span></div>
+            <div>&gt; verified entity: <strong class="text-purple-200">${escapeHtml(entity.standard_name || '')}</strong> (${escapeHtml(entity.code || '')})</div>
+            <div class="mt-1 text-slate-300">&gt; clinical class: <span class="text-purple-100 font-semibold">${escapeHtml(entity.category || '')}</span></div>
           </div>
         `;
       } else if (step.type === 'TOOL_RESULT') {
         const payload = step.payload || {};
-        const units = payload.units_to_transfer || 50;
-        const donor = payload.donor_facility_name || payload.donor_name || 'CHC Nawabganj';
-        const dist = payload.distance_km || payload.transit_distance_km || 18.2;
-        const expiry = payload.batch_expiry_days || 72;
+        const body = payload.no_feasible_donor
+          ? `<div>&gt; no feasible donor &rarr; <strong class="text-amber-300">escalated to district requisition</strong></div>`
+            + (payload.drug_substitution ? `<div class="mt-1">&gt; substitute option: <strong class="text-emerald-200">${escapeHtml(payload.drug_substitution.substitute_name)}</strong> (CMO sign-off required)</div>` : '')
+          : `<div>&gt; transfer: <strong class="text-emerald-300 font-bold">${Number(payload.units_to_transfer) || 0} units</strong> from <strong class="text-emerald-200 font-bold">${escapeHtml(payload.donor_facility_name || '')}</strong></div>
+            <div class="mt-1">&gt; distance: <strong class="text-emerald-200">${Number(payload.distance_km) || 0} km</strong> | batch expiry: <strong class="text-emerald-200">${Number(payload.batch_expiry_days) || 0}d left</strong></div>`;
         extraContent = `
           <div class="mt-2 bg-[#0d121c] p-3.5 rounded-xl border border-emerald-500/40 text-xs font-mono text-emerald-300 shadow-inner">
             <div class="flex items-center space-x-2 text-slate-400 text-xs uppercase font-mono font-bold mb-1.5">
               <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              <span>// DETERMINISTIC OR SOLVER RESULT</span>
+              <span>// DETERMINISTIC SOLVER RESULT</span>
             </div>
-            <div>&gt; transfer: <strong class="text-emerald-300 font-bold">${units} units</strong> from <strong class="text-emerald-200 font-bold">${donor}</strong></div>
-            <div class="mt-1">&gt; distance: <strong class="text-emerald-200">${dist} km</strong> | expiry salvaged: <strong class="text-emerald-200">${expiry}d left</strong></div>
+            ${body}
           </div>
         `;
       } else if (step.agent === 'EnvironmentalSentinelAgent' && step.type === 'DISPATCH' && step.payload && step.payload.aqi) {
+        const p = step.payload;
+        const fmt = (v, suffix = '') => (v === null || v === undefined) ? 'n/a' : `${escapeHtml(String(v))}${suffix}`;
+        const sigma = (p.aod_anomaly_sigma === null || p.aod_anomaly_sigma === undefined) ? 'n/a' : `${p.aod_anomaly_sigma > 0 ? '+' : ''}${Number(p.aod_anomaly_sigma)}σ`;
         extraContent = `
           <div class="mt-2 bg-[#0d121c] p-3 rounded-xl border border-blue-500/40 text-xs font-mono text-blue-300 shadow-inner flex flex-wrap gap-x-4 gap-y-1">
-            <span>Surface AQI: <strong class="text-red-400">${step.payload.aqi}</strong></span>
-            <span>PM2.5: <strong class="text-red-400">${step.payload.pm25} µg/m³</strong></span>
-            <span>Wind: <strong class="text-slate-200">${step.payload.wind_speed_kmh} km/h</strong></span>
-            <span>FIRMS Hotspots: <strong class="text-amber-400">${step.payload.firms_hotspots}</strong></span>
-            <span>AOD Anomaly: <strong class="text-purple-300">+${step.payload.sentinel5p_aod_sigma}σ</strong></span>
+            <span>${p.is_live ? 'LIVE' : 'SCENARIO'}</span>
+            <span>AQI: <strong class="text-red-400">${fmt(p.aqi)}</strong></span>
+            <span>PM2.5: <strong class="text-red-400">${fmt(p.pm25, ' µg/m³')}</strong></span>
+            <span>Wind: <strong class="text-slate-200">${fmt(p.wind_speed_kmh, ' km/h')}</strong></span>
+            <span>Boundary layer: <strong class="text-slate-200">${fmt(p.boundary_layer_m, ' m')}</strong></span>
+            <span>72h AQI peak: <strong class="text-red-300">${fmt(p.forecast_peak_aqi_72h)}</strong></span>
+            <span>AOD vs 30d: <strong class="text-purple-300">${sigma}</strong></span>
+            <span>FIRMS fires: <strong class="text-amber-400">${fmt(p.firms_hotspots)}</strong></span>
           </div>
         `;
       }
@@ -1580,7 +1574,7 @@ async function runAgentPipeline(targetFacId = null) {
           <strong class="text-white font-bold">${step.agent}</strong>
           ${typeBadge}
         </div>
-        <p class="text-slate-200 text-xs sm:text-sm leading-relaxed font-sans">${step.message}</p>
+        <p class="text-slate-200 text-xs sm:text-sm leading-relaxed font-sans">${escapeHtml(step.message)}</p>
         ${extraContent}
       `;
 
@@ -1596,13 +1590,13 @@ async function runAgentPipeline(targetFacId = null) {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = `<i data-lucide="play" class="w-4 h-4 fill-current"></i><span>Run ADK Pipeline (Live Demo)</span>`;
+      btn.innerHTML = `<i data-lucide="play" class="w-4 h-4 fill-current"></i><span>Run Agent Pipeline (Live)</span>`;
       lucide.createIcons();
     }
   }
 }
 
-// Facility Action: Solve with ADK Pipeline
+// Facility Action: Solve with the agent pipeline
 function runTransferFor(facId) {
   const fac = facilities.find(f => f.id === facId);
   if (fac && map && facilityMarkers[facId]) {
@@ -1675,7 +1669,7 @@ async function submitCmoQuery() {
     } else if (data.substitution_details) {
       document.getElementById('cmoMetaBox').textContent = `Clinical Guidance: ${data.substitution_details.name} (Equivalence: ${data.substitution_details.equivalence_ratio * 100}%)`;
     } else if (data.metrics) {
-      document.getElementById('cmoMetaBox').textContent = `MP Summary: ${data.metrics.population_served.toLocaleString()} constituents protected | ${data.metrics.stockouts_prevented} stockouts averted`;
+      document.getElementById('cmoMetaBox').textContent = `MP Summary: ${data.metrics.population_served.toLocaleString()} people served | ${data.metrics.stockout_risks_addressed} stockout risks with a proposed transfer`;
     }
 
     // Unhide Speech synthesis read-aloud button
@@ -1749,43 +1743,68 @@ function speakCurrentCmoBriefing() {
   window.speechSynthesis.speak(utterance);
 }
 
-// Gemini Vision Shelf Verification
-async function runVisionVerification() {
+// Downscale a photo to a JPEG data URL so uploads stay well under the serverless body limit
+function shrinkImage(file, maxSide = 1280) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read image')); };
+    img.src = url;
+  });
+}
+
+// Gemini Vision Shelf Verification (real photo)
+async function runVisionVerification(file) {
+  if (!file) return;
   const btn = document.getElementById('btnVision');
   const box = document.getElementById('visionResultBox');
   btn.disabled = true;
-  btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Scanning...</span>`;
+  btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Reading photo with Gemini...</span>`;
   lucide.createIcons();
 
   try {
+    const dataUrl = await shrinkImage(file);
     const res = await fetch('/api/vision/verify-shelf-photo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        image_name: currentRegion === 'bhubaneswar' ? "phc_mendhasal_cupboard_01.jpg" : "phc_kakori_cupboard_01.jpg",
-        facility_id: currentClinicFacilityId || (facilities.length > 0 ? facilities[0].id : (currentRegion === 'bhubaneswar' ? 'PHC-BBS-01' : 'PHC-LKO-01')),
-        reported_count: currentRegion === 'bhubaneswar' ? 18 : 15
+        image_base64: dataUrl,
+        facility_id: currentClinicFacilityId || (facilities.length > 0 ? facilities[0].id : (currentRegion === 'bhubaneswar' ? 'PHC-BBS-01' : 'PHC-LKO-01'))
       })
     });
-
     const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Vision scan failed');
+
     box.classList.remove('hidden');
-    let summary = data.verification_summary || "";
-    if (data.is_simulated) {
-      summary += " [Simulated Evidence Mode: Physical pharmacist count required prior to ledger commitment]";
-    }
-    document.getElementById('visionSummaryText').textContent = summary;
+    const labels = {
+      VERIFIED_MATCH: 'Matches register',
+      DISCREPANCY_FLAGGED: 'Discrepancy flagged',
+      NOT_A_SHELF_PHOTO: 'Not a medicine shelf',
+      NO_ITEMS_DETECTED: 'No items detected',
+      NO_CATALOGUE_MATCH: 'Not in this clinic\'s catalogue'
+    };
+    document.getElementById('visionStatusLabel').textContent = labels[data.status] || data.status;
+    const items = data.detected_items || [];
+    document.getElementById('visionCountLabel').textContent = items.length ? `${items.length} item${items.length > 1 ? 's' : ''} read` : '';
+    document.getElementById('visionSummaryText').textContent = data.verification_summary || '';
 
     btn.disabled = false;
-    btn.innerHTML = `<span>Scan Verified &radic;</span>`;
-
-    // Refresh audit log to show the vision verification event
+    btn.innerHTML = `<span>Scan Another Photo</span>`;
     await fetchAuditLog();
   } catch (err) {
     console.error(err);
     btn.disabled = false;
-    btn.innerHTML = `<span>Scan with Vision</span>`;
-    alert("Vision scanning failed");
+    btn.innerHTML = `<span>Upload / Snap Shelf Photo</span>`;
+    alert(`Vision scan failed: ${err.message}`);
   }
 }
 
@@ -1986,7 +2005,8 @@ function switchTab(tab) {
   } else if (tab === 'vision') {
     const btnV = document.getElementById('btnVision');
     if (btnV) btnV.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    runVisionVerification();
+    const picker = document.getElementById('visionFileInput');
+    if (picker) picker.click();
   } else if (tab === 'ledger') {
     openLedgerModal();
   } else if (tab === 'news') {

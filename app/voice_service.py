@@ -79,10 +79,14 @@ class VoiceIntakeService:
         )
         # A transcript without a stock count goes to the heuristic path (which asks for clarification)
         if result and result[0].reported_stock is not None:
-            extracted, _provider = result
-            return self._build_response(extracted.model_dump(), text, lang_code, request.facility_id)
+            extracted, provider = result
+            response = self._build_response(extracted.model_dump(), text, lang_code, request.facility_id)
+            response.parsed_by = provider
+            return response
 
-        return self._heuristic_extraction(text, request.facility_id)
+        response = self._heuristic_extraction(text, request.facility_id)
+        response.parsed_by = "heuristic"
+        return response
 
     def _detect_language(self, text: str) -> str:
         if re.search(r'[଀-୿]', text):

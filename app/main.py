@@ -1,5 +1,6 @@
 import os
 import sys
+import asyncio
 import json
 import copy
 import time
@@ -32,7 +33,8 @@ from app.audit_ledger import AuditLedger
 from app.agent_orchestrator import MultiAgentResilienceOrchestrator
 from app.news_service import news_service
 from app.telemetry_service import telemetry_service
-from app.llm import provider_status
+from app.llm import provider_status, GEMINI_MODELS, CLAUDE_MODEL
+from app.vision_service import decode_image, scan_shelf, compare_with_register
 
 app = FastAPI(
     title="Aarogya-Vāyu API",
@@ -163,6 +165,10 @@ current_env_by_region: Dict[str, EnvironmentalReading] = {
 }
 current_env = current_env_by_region[active_region_id]
 
+# "live" regions track Open-Meteo/CAMS telemetry; a scenario preset switches a region to "scenario" until Live is re-selected
+LIVE_BY_DEFAULT = os.getenv("LIVE_TELEMETRY_DEFAULT", "0" if is_pytest else "1") == "1"
+env_mode_by_region: Dict[str, str] = {reg: ("live" if LIVE_BY_DEFAULT else "scenario") for reg in REGIONS_CONFIG}
+
 # Active recommendations and unmet demands caches per region
 active_recommendations_by_region: Dict[str, Dict[str, TransferRecommendation]] = {
     "bhubaneswar": {},
@@ -207,6 +213,23 @@ def recompute_recommendations(target_region: Optional[str] = None):
 
 # Initial computation across both regions
 recompute_recommendations()
+
+async def sync_live_env(reg: str, force: bool = False) -> None:
+    """Refresh a live-mode region from telemetry (cached 5 min); recompute only when the surge inputs change."""
+    if reg not in REGIONS_CONFIG or (env_mode_by_region.get(reg) != "live" and not force):
+        return
+    global current_env
+    reading = await asyncio.to_thread(telemetry_service.fetch_live_reading, reg)
+    previous = current_env_by_region.get(reg)
+    if reading is previous:
+        return
+    current_env_by_region[reg] = reading
+    if reg == active_region_id:
+        current_env = reading
+    # Recommendation IDs are regenerated on recompute, so skip it when nothing that drives demand changed
+    if previous is None or surge_engine.calculate_surge_multipliers(previous) != surge_engine.calculate_surge_multipliers(reading) \
+            or (previous.heatwave_alert, previous.smog_episode) != (reading.heatwave_alert, reading.smog_episode):
+        recompute_recommendations(reg)
 
 # Static files mount
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -320,26 +343,36 @@ async def get_system_capabilities():
         "concurrency_engine": "google.cloud.firestore.transactional (cross-instance)" if is_firestore else "process-level threading.RLock (single-instance isolated)",
         "version": "2.0.0",
         "environment": "production" if os.environ.get("VERCEL") else "development",
-        "ai_providers": provider_status()
+        "ai_providers": provider_status(),
+        "data_provenance": {
+            "weather_and_air_quality": "LIVE: Open-Meteo forecast API + Copernicus CAMS air quality (current, 30-day history, 72h forecast)",
+            "fire_hotspots": "LIVE: NASA FIRMS VIIRS" if os.getenv("FIRMS_MAP_KEY") else "NOT CONFIGURED: set FIRMS_MAP_KEY for NASA FIRMS",
+            "news": "LIVE: Google News RSS; items prefixed [Sample advisory] are illustrative",
+            "voice_intake_parsing": "LIVE LLM: Gemini primary, Claude fallback, offline rule-based parser last",
+            "cmo_strategic_chat": "LIVE LLM: Gemini primary, Claude fallback, template answers last",
+            "logistics_tool_selection": "LIVE LLM function calling (Gemini primary, Claude fallback); allocation by deterministic solver",
+            "shelf_photo_vision": "LIVE LLM vision on the uploaded photo (Gemini primary, Claude fallback)",
+            "speech_to_text": "Browser Web Speech API (on-device/browser vendor), not Google Cloud STT",
+            "demand_forecast": "Rule-based lag-curve forecaster driven by live surge multipliers (not a trained ML model)",
+            "facilities": "Named after real PHC/CHC sites; coordinates, population and staffing are demo values, not an official registry",
+            "inventory": "SYNTHETIC demo stock register (no public API exposes PHC stock)",
+            "scenario_presets": "SIMULATED: Smog/Heatwave/Baseline buttons override live telemetry until Live is reselected",
+        }
     }
 
 @app.get("/api/environmental")
 async def get_environmental(region: Optional[str] = None, live: bool = False):
     reg = (region or active_region_id).lower()
-    if live:
-        reg_env = telemetry_service.fetch_live_reading(region=reg)
-        current_env_by_region[reg] = reg_env
-        if reg == active_region_id:
-            global current_env
-            current_env = reg_env
-        recompute_recommendations(reg)
-    else:
-        reg_env = current_env_by_region.get(reg, current_env)
+    if live and reg in env_mode_by_region:
+        env_mode_by_region[reg] = "live"
+    await sync_live_env(reg)
+    reg_env = current_env_by_region.get(reg, current_env)
 
     multipliers = surge_engine.calculate_surge_multipliers(reg_env)
     return {
         "region": reg,
         "is_live": "Open-Meteo" in (reg_env.source or ""),
+        "mode": env_mode_by_region.get(reg, "scenario"),
         "telemetry": reg_env.model_dump(),
         "surge_multipliers": multipliers
     }
@@ -347,26 +380,24 @@ async def get_environmental(region: Optional[str] = None, live: bool = False):
 @app.get("/api/environmental/live")
 async def get_live_environmental(region: Optional[str] = None):
     reg = (region or active_region_id).lower()
-    reading = telemetry_service.fetch_live_reading(region=reg)
+    reading = await asyncio.to_thread(telemetry_service.fetch_live_reading, reg)
     multipliers = surge_engine.calculate_surge_multipliers(reading)
     return {
         "region": reg,
-        "is_live": True,
+        "is_live": "Open-Meteo" in (reading.source or ""),
         "telemetry": reading.model_dump(),
         "surge_multipliers": multipliers
     }
 
 @app.post("/api/environmental/live/activate")
 async def activate_live_environmental(region: Optional[str] = None):
-    global current_env
     reg = (region or active_region_id).lower()
-    reading = telemetry_service.fetch_live_reading(region=reg)
-    current_env_by_region[reg] = reading
-    if reg == active_region_id:
-        current_env = reading
-    recompute_recommendations(reg)
+    if reg in env_mode_by_region:
+        env_mode_by_region[reg] = "live"
+    await sync_live_env(reg, force=True)
+    reading = current_env_by_region.get(reg, current_env)
     audit_ledger.record_entry(
-        event_type="LIVE_CAAQMS_TELEMETRY_ACTIVATED",
+        event_type="LIVE_CAMS_TELEMETRY_ACTIVATED",
         details={
             "region": reg,
             "aqi": reading.aqi,
@@ -376,13 +407,13 @@ async def activate_live_environmental(region: Optional[str] = None):
             "wind_speed_kmh": reading.wind_speed_kmh,
             "source": reading.source
         },
-        approved_by="OPEN_METEO_CAAQMS_GATEWAY"
+        approved_by="OPEN_METEO_CAMS_GATEWAY"
     )
     multipliers = surge_engine.calculate_surge_multipliers(reading)
     return {
         "status": "activated",
         "region": reg,
-        "is_live": True,
+        "is_live": "Open-Meteo" in (reading.source or ""),
         "telemetry": reading.model_dump(),
         "surge_multipliers": multipliers
     }
@@ -401,6 +432,8 @@ async def update_environmental(env: EnvironmentalReading, region: Optional[str] 
         reg = active_region_id
 
     current_env_by_region[reg] = env
+    if reg in env_mode_by_region:
+        env_mode_by_region[reg] = "scenario"
     if reg == active_region_id:
         current_env = env
     recompute_recommendations(reg)
@@ -413,13 +446,14 @@ async def update_environmental(env: EnvironmentalReading, region: Optional[str] 
             "heatwave_alert": env.heatwave_alert,
             "corridor": env.corridor
         },
-        approved_by="SATELLITE_FEED_AGENT"
+        approved_by="SCENARIO_SIMULATOR"
     )
     return {"status": "updated", "region": reg, "telemetry": env}
 
 @app.get("/api/risks")
 async def get_risks(region: Optional[str] = None):
     reg = (region or active_region_id).lower()
+    await sync_live_env(reg)
     inv, _, _, _ = storage.load_all(region=reg)
     reg_env = current_env_by_region.get(reg, current_env)
     risks = surge_engine.assess_facility_risks(inv, reg_env)
@@ -428,6 +462,7 @@ async def get_risks(region: Optional[str] = None):
 @app.get("/api/recommendations")
 async def get_recommendations(region: Optional[str] = None):
     reg = (region or active_region_id).lower()
+    await sync_live_env(reg)
     recs_dict = active_recommendations_by_region.get(reg, active_recommendations)
     return [r.model_dump() for r in recs_dict.values()]
 
@@ -439,6 +474,7 @@ async def get_unmet_demands(region: Optional[str] = None):
     Escalated to District Replenishment Requisition Queue.
     """
     reg = (region or active_region_id).lower()
+    await sync_live_env(reg)
     unmet_list = active_unmet_demands_by_region.get(reg, active_unmet_demands)
     return [u.model_dump() for u in unmet_list]
 
@@ -658,12 +694,22 @@ async def verify_audit_ledger():
     return audit_ledger.verify_chain_integrity()
 
 @app.post("/api/agents/run-resilience-pipeline")
-async def run_resilience_pipeline(payload: Dict[str, Any] = Body(default={})):
-    target_phc = payload.get("target_facility_id", REGIONS_CONFIG[active_region_id]["default_facility_id"])
-    snippet = payload.get("voice_snippet", None)
+async def run_resilience_pipeline(http_request: Request, payload: Dict[str, Any] = Body(default={})):
+    target_phc = payload.get("target_facility_id") or REGIONS_CONFIG[active_region_id]["default_facility_id"]
+    if target_phc not in facilities_dict:
+        raise HTTPException(status_code=400, detail="Unknown target_facility_id")
+    snippet = str(payload.get("voice_snippet") or "").strip()
+    if len(snippet) > MAX_LLM_INPUT_CHARS:
+        raise HTTPException(status_code=400, detail=f"voice_snippet exceeds {MAX_LLM_INPUT_CHARS} characters")
+    enforce_llm_rate_limit(http_request)
+    await sync_live_env(active_region_id)
+    intake = None
+    if snippet:
+        parsed = await voice_service.parse_and_validate(VoiceIntakeRequest(transcript_text=snippet, facility_id=target_phc))
+        intake = parsed.model_dump()
     inv, _, _, _ = storage.load_all(region=active_region_id)
     reg_env = current_env_by_region[active_region_id]
-    result = agent_orchestrator.run_pipeline(reg_env, inv, target_phc, snippet)
+    result = await agent_orchestrator.run_pipeline(reg_env, inv, target_phc, intake)
     recompute_recommendations(active_region_id)
     audit_ledger.record_entry(
         event_type="MULTI_AGENT_PIPELINE_RUN",
@@ -671,13 +717,13 @@ async def run_resilience_pipeline(payload: Dict[str, Any] = Body(default={})):
             "target_facility": target_phc,
             "status": result.get("status")
         },
-        approved_by="GOOGLE_ADK_ORCHESTRATOR"
+        approved_by="MULTI_AGENT_ORCHESTRATOR"
     )
     return result
 
 @app.post("/api/agents/run")
-async def run_agents_alias(payload: Dict[str, Any] = Body(default={})):
-    return await run_resilience_pipeline(payload)
+async def run_agents_alias(http_request: Request, payload: Dict[str, Any] = Body(default={})):
+    return await run_resilience_pipeline(http_request, payload)
 
 @app.post("/api/cmo/chat")
 async def cmo_chat(http_request: Request, payload: Dict[str, Any] = Body(...)):
@@ -688,6 +734,7 @@ async def cmo_chat(http_request: Request, payload: Dict[str, Any] = Body(...)):
         raise HTTPException(status_code=400, detail=f"Question exceeds {MAX_LLM_INPUT_CHARS} characters")
     enforce_llm_rate_limit(http_request)
     reg = (payload.get("region") or active_region_id).lower()
+    await sync_live_env(reg)
     inv, _, _, _ = storage.load_all(region=reg)
     reg_env = current_env_by_region.get(reg, current_env)
     try:
@@ -707,73 +754,66 @@ async def cmo_chat(http_request: Request, payload: Dict[str, Any] = Body(...)):
     return response
 
 @app.post("/api/vision/verify-shelf-photo")
-async def verify_shelf_photo(payload: Dict[str, Any] = Body(...)):
+async def verify_shelf_photo(http_request: Request, payload: Dict[str, Any] = Body(...)):
     """
-    Gemini Multimodal Vision Simulation for medicine shelf inspection.
-    EXPLICIT STATUS: Simulated computer vision evidence for demo purposes.
-    It does not certify physical stock counts nor authorize automatic stock writes.
+    Reads an uploaded shelf photo with a multimodal LLM (Gemini primary, Claude fallback) and
+    compares visible counts with the facility's stock register. Advisory evidence only: it never
+    writes stock, and a pharmacist must confirm any discrepancy.
     """
-    image_name = payload.get("image_name", "phc_kakori_shelf_01.jpg")
-    facility_id = payload.get("facility_id", "PHC-LKO-01")
-    reported_count = payload.get("reported_count", 15)
+    facility_id = payload.get("facility_id") or REGIONS_CONFIG[active_region_id]["default_facility_id"]
+    if facility_id not in facilities_dict:
+        raise HTTPException(status_code=400, detail="Unknown facility_id")
+    try:
+        image = decode_image(str(payload.get("image_base64") or ""), payload.get("mime_type"))
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex))
+    enforce_llm_rate_limit(http_request)
 
-    detected_medicines = [
-        {
-            "brand": "Asthalin Respirator Solution (Salbutamol 2.5mg)",
-            "batch_number": "BAT-842-26",
-            "expiry_ocr": "NOV 2026",
-            "days_to_expiry": 74,
-            "visual_unit_estimate": 16,
-            "packaging_condition": "Sealed ampoule strips",
-            "confidence": 0.96
-        },
-        {
-            "brand": "Electral ORS (WHO Formula)",
-            "batch_number": "BAT-ORS-19",
-            "expiry_ocr": "AUG 2027",
-            "days_to_expiry": 340,
-            "visual_unit_estimate": 120,
-            "packaging_condition": "Intact foil sachets",
-            "confidence": 0.98
-        }
-    ]
-
-    target_item = detected_medicines[0]
-    discrepancy = abs(target_item["visual_unit_estimate"] - reported_count)
-    discrepancy_pct = round((discrepancy / reported_count) * 100, 1) if reported_count > 0 else 0
-    verification_status = "VERIFIED_MATCH" if discrepancy <= 3 else "DISCREPANCY_FLAGGED"
+    result = await scan_shelf(image, medicines_dict)
+    if not result:
+        raise HTTPException(status_code=503, detail="Vision model unavailable; please count manually.")
+    scan, provider = result
+    region = domain_service.get_region_for_facility(facility_id)
+    inv, _, _, _ = storage.load_all(region=region)
+    items = compare_with_register(scan, facility_id, inv, medicines_dict)
+    flagged = [i for i in items if i["discrepancy_units"] is not None and i["discrepancy_units"] > 3]
+    if not scan.is_medicine_shelf or not items:
+        status = "NOT_A_SHELF_PHOTO" if not scan.is_medicine_shelf else "NO_ITEMS_DETECTED"
+    elif not any(i["register_available"] is not None for i in items):
+        status = "NO_CATALOGUE_MATCH"
+    else:
+        status = "DISCREPANCY_FLAGGED" if flagged else "VERIFIED_MATCH"
 
     audit_ledger.record_entry(
         event_type="SHELF_PHOTO_VISION_VERIFICATION",
         details={
             "facility_id": facility_id,
-            "visual_count": target_item["visual_unit_estimate"],
-            "reported_count": reported_count,
-            "status": verification_status,
-            "batch_ocr": target_item["batch_number"],
-            "expiry_ocr": target_item["expiry_ocr"],
-            "is_simulated": True
+            "status": status,
+            "items": [{k: i[k] for k in ("matched_medicine_id", "unit_count_estimate", "register_available", "batch_number", "expiry_text")} for i in items],
+            "model_provider": provider,
+            "is_simulated": False
         },
-        approved_by="GEMINI_VISION_AGENT"
+        approved_by="VISION_AGENT"
     )
 
+    parts = [
+        f"{i['medicine_name']}: ~{i['unit_count_estimate']} seen"
+        + (f" vs {i['register_available']} in register" if i["register_available"] is not None else "")
+        + (f", batch {i['batch_number']}" if i["batch_number"] else "")
+        + (f", exp {i['expiry_text']}" if i["expiry_text"] else "")
+        for i in items
+    ]
+    model_label = f"Gemini ({GEMINI_MODELS[0]})" if provider == "gemini" else f"Claude ({CLAUDE_MODEL}, fallback)"
+    summary = f"[{model_label}] " + ("; ".join(parts) if parts else (scan.notes or "No medicine products detected.")) + ". Advisory only: pharmacist confirmation required."
     return {
-        "status": verification_status,
+        "status": status,
         "facility_id": facility_id,
-        "image_analyzed": image_name,
-        "detected_items": detected_medicines,
-        "visual_count": target_item["visual_unit_estimate"],
-        "reported_count": reported_count,
-        "discrepancy_units": discrepancy,
-        "discrepancy_pct": discrepancy_pct,
-        "ocr_batch": target_item["batch_number"],
-        "ocr_expiry": target_item["expiry_ocr"],
-        "is_simulated": True,
+        "detected_items": items,
+        "flagged_items": len(flagged),
+        "model_provider": provider,
+        "notes": scan.notes,
+        "is_simulated": False,
         "certified": False,
         "human_review_required": True,
-        "disclaimer": "Simulated computer vision evidence. Physical verification and confirmation by staff pharmacist required before stock mutation.",
-        "verification_summary": (
-            f"[Simulated Vision Telemetry] Detected approximately {target_item['visual_unit_estimate']} units of Salbutamol (Batch: {target_item['batch_number']}). "
-            f"Advisory evidence only; physical verification required."
-        )
+        "verification_summary": summary
     }

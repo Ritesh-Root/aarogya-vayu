@@ -22,7 +22,7 @@
 In rural India, Primary Health Centre (PHC) medicine availability hovers between **17% and 51%**, with stockouts lasting **4 to 14 weeks**. When winter smog blankets agricultural corridors or summer heatwaves strike, acute respiratory illnesses and heatstroke surge by **30% to 50% within 48 to 72 hours**. Existing government systems (e-Aushadhi / DVDMS) rely on backward-looking 30-day paper procurement cycles and offer zero horizontal inter-facility coordination. As a result, one clinic turns away breathless children while a neighboring clinic 18 km away sits on 300 surplus medicine units expiring into bio-waste.
 
 ### The Solution
-Aarogya-Vāyu is a multi-agent decision support system that links **environmental satellite telemetry** (Google Earth Engine, Sentinel-5P, Google Maps AQ API) with **frontline multilingual voice reporting** (Google Cloud STT + Google Gemini 2.5 Flash). It predicts impending stockouts with a 48–72 hour lead time and uses a **deterministic Operations Research solver** to orchestrate surplus-to-deficit redistributions within a 35 km radius, saving near-expiry medicines and preventing stockouts with human-in-the-loop CMO sign-off.
+Aarogya-Vāyu is a multi-agent decision support system that links **environmental satellite telemetry** (Google Earth Engine, Sentinel-5P, Google Maps AQ API) with **frontline multilingual voice reporting** (Google Cloud STT + Google Gemini 3.8 Flash). It predicts impending stockouts with a 48–72 hour lead time and uses a **deterministic Operations Research solver** to orchestrate surplus-to-deficit redistributions within a 35 km radius, saving near-expiry medicines and preventing stockouts with human-in-the-loop CMO sign-off.
 
 ---
 
@@ -61,7 +61,7 @@ Aarogya-Vāyu is a multi-agent decision support system that links **environmenta
   - *Environmental Sentinel:* Earth Engine Sentinel-5P + INSAT-3DR.
   - *Frontline Intake:* Google Cloud STT v2 + Vertex AI EDL Grounding.
   - *Demand Forecaster:* Vertex AI AutoML Tabular Forecaster (P10/P50/P90 quantiles).
-  - *Logistics Agent:* Gemini 2.5 Flash Tool Calling + Deterministic Constrained Allocator.
+  - *Logistics Agent:* Gemini 3.8 Flash Tool Calling + Deterministic Constrained Allocator.
   - *Governance Agent:* Cryptographic SHA-256 Audit Trail + Bilingual Action Cards.
 
 ### Slide 5: The Interactive Dashboard (Live Demonstration)

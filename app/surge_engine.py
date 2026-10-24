@@ -26,24 +26,28 @@ class SurgeEngine:
         Calculates category-specific consumption surge multipliers based on
         environmental readings (Air Quality, PM2.5, Temperature).
         """
+        # Plan against the worse of now and the 72h forecast peak (live telemetry only)
+        aqi = max(env.aqi, env.forecast_peak_aqi_72h or 0)
+        temperature_c = max(env.temperature_c, env.forecast_max_temp_72h if env.forecast_max_temp_72h is not None else env.temperature_c)
+
         # Respiratory multiplier based on AQI
-        if env.aqi <= 100:
+        if aqi <= 100:
             resp_mult = 1.0
-        elif env.aqi <= 200:
+        elif aqi <= 200:
             resp_mult = 1.18
-        elif env.aqi <= 300:
+        elif aqi <= 300:
             resp_mult = 1.35
-        elif env.aqi <= 400:
+        elif aqi <= 400:
             resp_mult = 1.62
         else:
             resp_mult = 1.90
 
         # Heat/Dehydration multiplier
-        if env.temperature_c <= 35.0:
+        if temperature_c <= 35.0:
             heat_mult = 1.0
-        elif env.temperature_c <= 40.0:
+        elif temperature_c <= 40.0:
             heat_mult = 1.32
-        elif env.temperature_c <= 44.0:
+        elif temperature_c <= 44.0:
             heat_mult = 1.68
         else:
             heat_mult = 2.10
