@@ -35,9 +35,24 @@ _gemini_client = None
 _claude_client = None
 
 
+def _gemini_key() -> Optional[str]:
+    return os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_GENAI_API_KEY")
+
+
+def provider_status() -> dict:
+    """Which providers have credentials configured (booleans only, never key material)."""
+    return {
+        "gemini": bool(_gemini_key()),
+        "claude": bool(os.getenv("ANTHROPIC_API_KEY")),
+        "primary": "gemini",
+        "gemini_model": GEMINI_MODELS[0],
+        "claude_model": CLAUDE_MODEL,
+    }
+
+
 def _gemini():
     global _gemini_client
-    key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_GENAI_API_KEY")
+    key = _gemini_key()
     if _gemini_client is None and key:
         from google import genai
         _gemini_client = genai.Client(api_key=key)

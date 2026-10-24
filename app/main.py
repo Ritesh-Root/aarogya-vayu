@@ -32,6 +32,7 @@ from app.audit_ledger import AuditLedger
 from app.agent_orchestrator import MultiAgentResilienceOrchestrator
 from app.news_service import news_service
 from app.telemetry_service import telemetry_service
+from app.llm import provider_status
 
 app = FastAPI(
     title="Aarogya-Vāyu API",
@@ -318,7 +319,8 @@ async def get_system_capabilities():
         "audit_integrity": "append-only through application operations with hash-linked SHA-256 tamper-evident verification",
         "concurrency_engine": "google.cloud.firestore.transactional (cross-instance)" if is_firestore else "process-level threading.RLock (single-instance isolated)",
         "version": "2.0.0",
-        "environment": "production" if os.environ.get("VERCEL") else "development"
+        "environment": "production" if os.environ.get("VERCEL") else "development",
+        "ai_providers": provider_status()
     }
 
 @app.get("/api/environmental")
