@@ -777,3 +777,105 @@ def test_live_environmental_telemetry():
 
 
 
+
+
+# ==============================================================================
+# LLM provider fallback, voice ID validation and AI endpoint guards
+# ==============================================================================
+import asyncio
+import app.llm as llm
+import app.main as main_module
+import app.voice_service as voice_module
+import app.agent_orchestrator as orchestrator_module
+from app.voice_service import VoiceExtraction
+
+
+def test_llm_falls_back_to_claude_only_when_gemini_fails(monkeypatch):
+    calls = []
+
+    async def gemini_down(system, user, schema):
+        calls.append("gemini")
+        return None
+
+    async def claude_ok(system, user, schema):
+        calls.append("claude")
+        return schema(reported_stock=12)
+
+    monkeypatch.setattr(llm, "_call_gemini", gemini_down)
+    monkeypatch.setattr(llm, "_call_claude", claude_ok)
+    parsed, provider = asyncio.run(llm.generate_json("sys", "user", VoiceExtraction))
+    assert provider == "claude" and parsed.reported_stock == 12
+    assert calls == ["gemini", "claude"]
+
+    async def gemini_ok(system, user, schema):
+        calls.append("gemini")
+        return schema(reported_stock=7)
+
+    calls.clear()
+    monkeypatch.setattr(llm, "_call_gemini", gemini_ok)
+    parsed, provider = asyncio.run(llm.generate_json("sys", "user", VoiceExtraction))
+    assert provider == "gemini" and calls == ["gemini"]
+
+
+def test_voice_intake_rejects_unknown_llm_ids_and_keeps_selected_facility(monkeypatch):
+    async def injected_ids(system, user, schema):
+        return schema(facility_id="x');alert(1);('", medicine_id="MED-999", reported_stock=20), "gemini"
+
+    monkeypatch.setattr(voice_module, "generate_json", injected_ids)
+    monkeypatch.setattr(main_module, "_llm_hits", {})
+    res = client.post("/api/voice-intake", json={"transcript_text": "ORS 20 bache hain", "facility_id": "CHC-BBS-02"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["facility_id"] == "CHC-BBS-02"
+    assert data["medicine_id"] == "MED-001"
+    # A guessed medicine must not look like a confident extraction
+    assert data["confidence_score"] <= 0.5
+
+
+def test_voice_intake_without_stock_count_uses_heuristic_path(monkeypatch):
+    async def no_count(system, user, schema):
+        return schema(facility_id="CHC-BBS-02", medicine_id="MED-002", reported_stock=None), "gemini"
+
+    monkeypatch.setattr(voice_module, "generate_json", no_count)
+    monkeypatch.setattr(main_module, "_llm_hits", {})
+    monkeypatch.setattr(voice_module.VoiceIntakeService, "_heuristic_extraction",
+                        lambda self, text, hint: (_ for _ in ()).throw(RuntimeError("heuristic used")))
+    with pytest.raises(RuntimeError, match="heuristic used"):
+        asyncio.run(main_module.voice_service.parse_and_validate(
+            VoiceIntakeRequest(transcript_text="ORS khatam ho raha hai", facility_id="CHC-BBS-02")))
+
+
+def test_llm_total_budget_returns_none_instead_of_hanging(monkeypatch):
+    async def hangs(system, user, schema):
+        await asyncio.sleep(5)
+
+    monkeypatch.setattr(llm, "_generate_json", hangs)
+    monkeypatch.setattr(llm, "LLM_TOTAL_BUDGET_S", 0.05)
+    assert asyncio.run(llm.generate_json("sys", "user", VoiceExtraction)) is None
+
+
+def test_ai_endpoints_enforce_size_cap_and_rate_limit(monkeypatch):
+    async def no_llm(system, user, schema):
+        return None
+
+    monkeypatch.setattr(orchestrator_module, "generate_json", no_llm)
+    monkeypatch.setattr(main_module, "_llm_hits", {})
+    monkeypatch.setattr(main_module, "LLM_RATE_LIMIT_PER_MIN", 2)
+
+    oversized = client.post("/api/cmo/chat", json={"question": "x" * 1001})
+    assert oversized.status_code == 400
+
+    codes = [client.post("/api/cmo/chat", json={"question": "status report"}).status_code for _ in range(3)]
+    assert codes == [200, 200, 429]
+
+
+def test_cmo_what_if_fallback_lists_each_facility_once(monkeypatch):
+    async def no_llm(system, user, schema):
+        return None
+
+    monkeypatch.setattr(orchestrator_module, "generate_json", no_llm)
+    monkeypatch.setattr(main_module, "_llm_hits", {})
+    res = client.post("/api/cmo/chat", json={"question": "If smog lasts 5 more days, who runs out first?", "region": "bhubaneswar"})
+    assert res.status_code == 200
+    names = [f["facility"] for f in res.json()["affected_facilities"]]
+    assert names and len(names) == len(set(names))

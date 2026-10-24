@@ -55,7 +55,7 @@ class InventoryDomainService:
             idempotency_cache[idempotency_key] = {
                 "payload_hash": _compute_hash(payload),
                 "response": response,
-                "created_at": datetime.now(timezone.utc).isoformat() + "Z"
+                "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             }
 
     def _find_item(self, inventory: List[dict], facility_id: str, medicine_id: str, batch_number: Optional[str] = None) -> Optional[dict]:
@@ -358,7 +358,7 @@ class InventoryDomainService:
 
         consignment_id = f"CONSIGN-{uuid.uuid4().hex[:8].upper()}"
         challan_id = f"CHALLAN-UP-{datetime.now().strftime('%Y%m%d')}-{consignment_id[-6:]}"
-        now_iso = datetime.now(timezone.utc).isoformat() + "Z"
+        now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
         audit_entry = self.audit_ledger.record_entry(
             event_type="STOCK_TRANSFER_RESERVED",
@@ -510,7 +510,7 @@ class InventoryDomainService:
         donor_item["version"] = donor_item.get("version", 1) + 1
         donor_item["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        now_iso = datetime.now(timezone.utc).isoformat() + "Z"
+        now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         c_data["status"] = "DISPATCHED"
         c_data["units_dispatched"] = units
         c_data["dispatched_by"] = req.operator_name
@@ -616,7 +616,7 @@ class InventoryDomainService:
         rec_item["last_verified_at"] = now_str
         rec_item["verified_by"] = req.operator_name
 
-        now_iso = datetime.now(timezone.utc).isoformat() + "Z"
+        now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         c_data["status"] = "RECEIVED"
         c_data["units_accepted"] = accepted
         c_data["units_quarantined"] = quarantined
@@ -1030,7 +1030,7 @@ class InventoryDomainService:
             opening_oh = item.get("on_hand", 0)
             opening_avail = item.get("available", 0)
 
-        now_iso = datetime.now(timezone.utc).isoformat() + "Z"
+        now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
         return StockMovementRegister(
             facility_id=facility_id,

@@ -4,13 +4,26 @@ import math
 import uuid
 import re
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Literal
 from dotenv import load_dotenv
 load_dotenv()
+
+from pydantic import BaseModel
 
 from app.models import EnvironmentalReading, StockoutRiskAssessment, TransferRecommendation
 from app.surge_engine import SurgeEngine
 from app.optimizer import RedistributionOptimizer
+from app.llm import generate_json
+
+
+class CmoInsight(BaseModel):
+    query_type: Literal[
+        "WHAT_IF_SURGE_SIMULATION", "DRUG_SUBSTITUTION_EVALUATION",
+        "PARLIAMENTARY_IMPACT_BRIEF", "STRATEGIC_LOGISTICS_ADVISORY",
+    ]
+    answer_en: str
+    answer_hi: str
+    recommended_action: str
 
 # -------------------------------------------------------------
 # Knowledge Base: Drug Substitution Graph (Therapeutic Equivalence)
@@ -107,14 +120,6 @@ class MultiAgentResilienceOrchestrator:
         self.medicines = medicines
         self.surge_engine = surge_engine
         self.optimizer = optimizer
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_GENAI_API_KEY")
-        self.gemini_client = None
-        if self.gemini_api_key:
-            try:
-                from google import genai
-                self.gemini_client = genai.Client(api_key=self.gemini_api_key)
-            except Exception as e:
-                print(f"Notice: google.genai Client init in orchestrator: {e}")
 
     # =========================================================================
     # AGENT 1: Environmental Sentinel Agent (Compound Reasoning)
@@ -316,7 +321,7 @@ class MultiAgentResilienceOrchestrator:
     # =========================================================================
     # AGENT 5: Governance & Strategic Decision Agent (CMO Chat & Policy Advisory)
     # =========================================================================
-    def query_strategic_insight(
+    async def query_strategic_insight(
         self,
         question: str,
         env: EnvironmentalReading,
@@ -336,63 +341,41 @@ class MultiAgentResilienceOrchestrator:
         donors_title = "Capital Hospital Unit-6 and CHC Jatni" if is_bbs else "Nawabganj and Malihabad"
         mp_constituency = "Bhubaneswar & Cuttack Parliamentary Constituencies" if is_bbs else "Lucknow & Mohanlalganj Parliamentary Constituencies"
 
-        # Real-time Gemini Generation when API key is active
-        if self.gemini_client:
-            try:
-                crit_list = [f"{r.facility_name}: {r.days_of_coverage}d cover" for r in risks if r.status == 'CRITICAL'][:5]
-                crit_summary = ", ".join(crit_list) if crit_list else "All facilities currently above critical threshold"
-                cmo_system_prompt = (
-                    f"You are the Strategic Insight Agent for Aarogya-Vayu, an autonomous climate-resilient rural health logistics platform for {state_title}, India. "
-                    f"You provide clinical, logistical, and policy guidance to Chief Medical Officers (CMO) in the {corridor_title}.\n"
-                    f"Current Telemetry: AQI {env.aqi}, PM2.5 {env.pm25} µg/m³, Temp {env.temperature_c}°C, Corridor: '{env.corridor}', Smog Inversion: {env.smog_episode}, Heatwave: {env.heatwave_alert}.\n"
-                    f"Critical Facilities: {crit_summary}.\n\n"
-                    "Output strictly valid JSON with keys:\n"
-                    "{\n"
-                    '  "query_type": "WHAT_IF_SURGE_SIMULATION" or "DRUG_SUBSTITUTION_EVALUATION" or "PARLIAMENTARY_IMPACT_BRIEF" or "STRATEGIC_LOGISTICS_ADVISORY",\n'
-                    '  "answer_en": "Authoritative, concise strategic briefing in English",\n'
-                    '  "answer_hi": "Professional Hindi translation of the response",\n'
-                    '  "recommended_action": "Clear operational action item for CMO or ambulance logistics team"\n'
-                    "}"
-                )
-                models_to_try = [
-                    os.getenv("DEFAULT_MODEL", "gemini-2.5-flash"),
-                    os.getenv("FALLBACK_MODEL", "gemini-2.5-flash-lite"),
-                    "gemini-2.0-flash",
-                    "gemini-1.5-flash"
-                ]
-                for model_choice in models_to_try:
-                    try:
-                        resp = self.gemini_client.models.generate_content(
-                            model=model_choice,
-                            contents=[cmo_system_prompt, f"Question from CMO: {question}"]
-                        )
-                        raw = resp.text.strip()
-                        if raw.startswith("```json"):
-                            raw = raw[7:]
-                        if raw.startswith("```"):
-                            raw = raw[3:]
-                        if raw.endswith("```"):
-                            raw = raw[:-3]
-                        parsed = json.loads(raw.strip())
-                        if "answer_en" in parsed and "answer_hi" in parsed:
-                            return parsed
-                    except Exception as me:
-                        print(f"Notice: Model {model_choice} query attempt: {me}")
-                        continue
-            except Exception as e:
-                print(f"Notice: Live Gemini query fallback: {e}")
+        # Live LLM generation (Gemini primary, Claude fallback) when a key is configured
+        crit_list = [f"{r.facility_name}: {r.days_of_coverage}d cover" for r in risks if r.status == 'CRITICAL'][:5]
+        crit_summary = ", ".join(crit_list) if crit_list else "All facilities currently above critical threshold"
+        cmo_system_prompt = (
+            f"You are the Strategic Insight Agent for Aarogya-Vayu, an autonomous climate-resilient rural health logistics platform for {state_title}, India. "
+            f"You provide clinical, logistical, and policy guidance to Chief Medical Officers (CMO) in the {corridor_title}.\n"
+            f"Current Telemetry: AQI {env.aqi}, PM2.5 {env.pm25} µg/m³, Temp {env.temperature_c}°C, Corridor: '{env.corridor}', Smog Inversion: {env.smog_episode}, Heatwave: {env.heatwave_alert}.\n"
+            f"Critical Facilities: {crit_summary}.\n\n"
+            "Respond in plain text fields (no HTML or markdown). query_type is one of WHAT_IF_SURGE_SIMULATION, "
+            "DRUG_SUBSTITUTION_EVALUATION, PARLIAMENTARY_IMPACT_BRIEF, STRATEGIC_LOGISTICS_ADVISORY. answer_en is a concise "
+            "strategic briefing in English, answer_hi a professional Hindi translation, and recommended_action one clear "
+            "operational action for the CMO or ambulance logistics team."
+        )
+        result = await generate_json(cmo_system_prompt, f"Question from CMO: {question}", CmoInsight)
+        if result:
+            insight, _provider = result
+            return insight.model_dump()
 
         # Fallback Scenario 1: Extended Smog Duration What-If ("5 din aur", "5 more days", "what-if")
         if any(w in q for w in ["5", "स्मॉग", "din", "duration", "what if", "stock out", "first", "surge"]):
-            extended_critical = [
-                {
+            # One row per facility (its earliest-depleting medicine), soonest stockout first
+            at_risk = sorted((r for r in risks if r.status in ["CRITICAL", "WARNING"]), key=lambda r: r.days_of_coverage)
+            seen_facilities = set()
+            extended_critical = []
+            for r in at_risk:
+                if r.facility_id in seen_facilities:
+                    continue
+                seen_facilities.add(r.facility_id)
+                extended_critical.append({
                     "facility": r.facility_name,
                     "medicine": r.medicine_name.split("(")[0].strip(),
                     "current_days_cover": round(r.days_of_coverage, 1),
                     "projected_stockout_day": f"Day {max(1, int(r.days_of_coverage))}"
-                }
-                for r in risks if r.status in ["CRITICAL", "WARNING"]
-            ][:4]
+                })
+            extended_critical = extended_critical[:4]
 
             if not extended_critical and risks:
                 extended_critical = [

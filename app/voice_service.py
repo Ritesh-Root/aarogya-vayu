@@ -1,9 +1,8 @@
 import re
-import os
-import json
-import httpx
 from typing import Dict, Any, Optional, Tuple
+from pydantic import BaseModel
 from app.models import VoiceIntakeRequest, VoiceIntakeResponse
+from app.llm import generate_json
 
 MEDICINE_CLINICAL_SPECS = {
     "MED-001": {
@@ -50,155 +49,78 @@ MEDICINE_CLINICAL_SPECS = {
     }
 }
 
+class VoiceExtraction(BaseModel):
+    facility_id: Optional[str] = None
+    medicine_id: Optional[str] = None
+    reported_stock: Optional[int] = None
+    dispensed_yesterday: Optional[int] = None
+    confidence: float = 0.9
+
+
 class VoiceIntakeService:
     def __init__(self, facilities: Dict[str, dict], medicines: Dict[str, dict]):
         self.facilities = facilities
         self.medicines = medicines
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
-        # Experiential gateway for gpt-6-astra (OpenAI Chat Completions)
-        # Base URL: https://api.experientiallabs.ai/v1  | Model: gpt-6-astra
-        # Auth via EXPLABS_API_KEY. See app/experiential_client.py
-        self.experiential_api_key = os.getenv("EXPLABS_API_KEY", "")
-        self.experiential_base_url = "https://api.experientiallabs.ai/v1"
-        self.experiential_model = "gpt-6-astra"  # exact - do not change
-
-    def _require_experiential_key(self) -> str:
-        """Return EXPLABS_API_KEY or raise with Settings -> API keys instructions."""
-        key = self.experiential_api_key or os.getenv("EXPLABS_API_KEY", "")
-        if not key:
-            raise RuntimeError(
-                "EXPLABS_API_KEY is not set. Create one under Settings -> API keys "
-                "at https://api.experientiallabs.ai and export it: "
-                "export EXPLABS_API_KEY='xpl_...' (refusing to call gpt-6-astra without key)"
-            )
-        return key
 
     async def parse_and_validate(self, request: VoiceIntakeRequest) -> VoiceIntakeResponse:
         """
         Parses frontline speech/text input into structured inventory updates.
         Priority:
-          1) gpt-6-astra via Experiential gateway (https://api.experientiallabs.ai/v1)
-             if EXPLABS_API_KEY is set — uses OpenAI Chat Completions, preserves
-             streaming and tool_calls passthrough.
-          2) Gemini LLM extraction if GEMINI_API_KEY is present
-          3) Intelligent regex-based multilingual fallback
+          1) Gemini structured extraction (Claude fallback) via app.llm
+          2) Intelligent regex-based multilingual fallback
         """
         text = request.transcript_text.strip()
         lang_code = self._detect_language(text)
 
-        # 1) Try gpt-6-astra via Experiential first (if key present)
-        if os.getenv("EXPLABS_API_KEY"):
-            try:
-                extracted = await self._call_experiential_gpt6_astra(text, request.facility_id)
-                if extracted:
-                    return self._build_response(extracted, text, lang_code)
-            except RuntimeError as e:
-                # Missing key already handled — propagate message, don't fallback silently
-                print(f"Experiential gating: {e}")
-                raise
-            except Exception as e:
-                print(f"Experiential gpt-6-astra fallback triggered: {e}")
+        result = await generate_json(
+            self._extraction_system_prompt(request.facility_id),
+            f"Input text: {text}",
+            VoiceExtraction,
+        )
+        # A transcript without a stock count goes to the heuristic path (which asks for clarification)
+        if result and result[0].reported_stock is not None:
+            extracted, _provider = result
+            return self._build_response(extracted.model_dump(), text, lang_code, request.facility_id)
 
-        # 2) Try Gemini API if key is set
-        if self.gemini_api_key:
-            try:
-                extracted = await self._call_gemini(text, request.facility_id)
-                if extracted:
-                    return self._build_response(extracted, text, lang_code)
-            except Exception as e:
-                print(f"Gemini API fallback triggered: {e}")
-
-        # 3) Intelligent Multilingual Heuristic Fallback
         return self._heuristic_extraction(text, request.facility_id)
 
     def _detect_language(self, text: str) -> str:
-        if re.search(r'[\u0B00-\u0B7F]', text):
+        if re.search(r'[଀-୿]', text):
             return "or"
-        elif re.search(r'[\u0900-\u097F]', text):
+        elif re.search(r'[ऀ-ॿ]', text):
             return "hi"
         return "en"
 
-    async def _call_experiential_gpt6_astra(self, text: str, hint_facility_id: Optional[str]) -> Optional[Dict[str, Any]]:
-        """
-        Calls gpt-6-astra via Experiential gateway (OpenAI Chat Completions).
-        Base URL: https://api.experientiallabs.ai/v1
-        Auth:     EXPLABS_API_KEY (Bearer)
-        Model:    gpt-6-astra (exact)
-        Preserves streaming and tool_calls params (passed through when needed).
-        """
-        api_key = self._require_experiential_key()
-        url = f"{self.experiential_base_url}/chat/completions"
-
-        system_prompt = (
-            "You are an expert AI clinical data parser for rural Indian Primary Health Centres (PHCs). "
-            "Extract the following fields from frontline staff messages in Hindi, Hinglish, or English:\n"
-            "- facility_id: (match from available facilities or return best match)\n"
-            "- medicine_id: (match from MED-001 to MED-006)\n"
-            "- reported_stock: integer\n"
-            "- dispensed_yesterday: integer or null\n"
-            "Output strictly valid JSON with keys: facility_id, medicine_id, reported_stock, dispensed_yesterday, confidence."
+    def _extraction_system_prompt(self, hint_facility_id: Optional[str]) -> str:
+        facilities = ", ".join(f"{fid} ({f.get('name', fid)})" for fid, f in self.facilities.items())
+        medicines = ", ".join(f"{mid} ({m.get('name', mid)})" for mid, m in self.medicines.items())
+        hint = (
+            f"The reporting staff selected facility {hint_facility_id}; use it unless the message clearly names another listed facility.\n"
+            if hint_facility_id else ""
         )
-        prompt = f"Available facilities: {list(self.facilities.keys())}\nAvailable medicines: {list(self.medicines.keys())}\nInput text: {text}"
-
-        payload: Dict[str, Any] = {
-            "model": self.experiential_model,  # gpt-6-astra exactly
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt},
-            ],
-            # temperature omitted - gpt-6-astra route returns 400 for temperature
-            "response_format": {"type": "json_object"},
-            # streaming and tool_calls are preserved - callers can add:
-            # "stream": False, "tools": [...], "tool_choice": "auto"
-        }
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-
-        async with httpx.AsyncClient(timeout=12.0) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            # OpenAI Chat Completions shape
-            content = data["choices"][0]["message"]["content"]
-            # content is JSON string per response_format
-            return json.loads(content)
-
-
-    async def _call_gemini(self, text: str, hint_facility_id: Optional[str]) -> Optional[Dict[str, Any]]:
-        model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.gemini_api_key}"
-        
-        system_prompt = (
-            "You are an expert AI clinical data parser for rural Indian Primary Health Centres (PHCs). "
-            "Extract the following fields from frontline staff messages in Hindi, Hinglish, or English:\n"
-            "- facility_id: (match from available facilities or return best match)\n"
-            "- medicine_id: (match from MED-001 to MED-006)\n"
-            "- reported_stock: integer\n"
-            "- dispensed_yesterday: integer or null\n"
-            "Output strictly valid JSON with keys: facility_id, medicine_id, reported_stock, dispensed_yesterday, confidence."
+        return (
+            "You are an expert clinical data parser for rural Indian Primary Health Centres (PHCs). "
+            "Extract stock fields from frontline staff messages in Hindi, Odia, Hinglish, or English. "
+            "Map colloquial medicine terms (e.g. 'सांस की दवाई' = salbutamol) to the listed IDs.\n"
+            f"Available facilities: {facilities}\n"
+            f"Available medicines: {medicines}\n"
+            f"{hint}"
+            "facility_id and medicine_id must be one of the listed IDs, or null if unknown. "
+            "reported_stock is the units remaining, or null if no count is stated; dispensed_yesterday is units used yesterday, or null. "
+            "confidence is 0 to 1."
         )
 
-        prompt = f"Available facilities: {list(self.facilities.keys())}\nAvailable medicines: {list(self.medicines.keys())}\nInput text: {text}"
-        payload = {
-            "contents": [{"parts": [{"text": system_prompt + "\n" + prompt}]}],
-            "generationConfig": {"response_mime_type": "application/json"}
-        }
-
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            resp = await client.post(url, json=payload)
-            if resp.status_code == 200:
-                data = resp.json()
-                raw_json = data["candidates"][0]["content"]["parts"][0]["text"]
-                return json.loads(raw_json)
-        return None
-
-    def _build_response(self, extracted: Dict[str, Any], raw_text: str, lang_hint: str) -> VoiceIntakeResponse:
-        """Build VoiceIntakeResponse from LLM-extracted JSON (shared by Gemini and gpt-6-astra paths)."""
-        fac_id = extracted.get("facility_id") or "PHC-LKO-01"
-        med_id = extracted.get("medicine_id") or "MED-001"
+    def _build_response(
+        self, extracted: Dict[str, Any], raw_text: str, lang_hint: str, hint_facility_id: Optional[str] = None
+    ) -> VoiceIntakeResponse:
+        """Build VoiceIntakeResponse from LLM-extracted JSON, accepting only known facility/medicine IDs."""
+        fac_id = extracted.get("facility_id")
+        med_id = extracted.get("medicine_id")
+        ids_substituted = med_id not in self.medicines or (fac_id not in self.facilities and hint_facility_id not in self.facilities)
+        if fac_id not in self.facilities:
+            fac_id = hint_facility_id if hint_facility_id in self.facilities else "PHC-LKO-01"
+        if med_id not in self.medicines:
+            med_id = "MED-001"
         reported = int(extracted.get("reported_stock", 15))
         dispensed = extracted.get("dispensed_yesterday")
         if dispensed is not None:
@@ -206,7 +128,10 @@ class VoiceIntakeService:
                 dispensed = int(dispensed)
             except Exception:
                 dispensed = None
-        confidence = float(extracted.get("confidence", 0.92))
+        confidence = min(1.0, max(0.0, float(extracted.get("confidence", 0.92))))
+        if ids_substituted:
+            # Guessed IDs must go through human confirmation
+            confidence = min(confidence, 0.5)
         fac_meta = self.facilities.get(fac_id, {"name": f"Facility {fac_id}"})
         med_meta = self.medicines.get(med_id, {"name": f"Medicine {med_id}"})
         specs = MEDICINE_CLINICAL_SPECS.get(med_id, {

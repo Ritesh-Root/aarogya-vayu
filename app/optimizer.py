@@ -272,7 +272,7 @@ class RedistributionOptimizer:
                         "unit": "units",
                         "pack_size": 10
                     })
-                    now_iso = datetime.now(timezone.utc).isoformat() + "Z"
+                    now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
                     unmet = UnmetDemandReport(
                         facility_id=recipient.facility_id,
                         facility_name=recipient.facility_name,

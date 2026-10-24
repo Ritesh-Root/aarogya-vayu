@@ -5,7 +5,6 @@ __pycache__/
 *.pyo
 screenshots/
 generate_deck.py
-test_experiential_gpt6.py
 .env
 .env.example
 service_account.json

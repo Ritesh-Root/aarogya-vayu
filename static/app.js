@@ -1294,7 +1294,7 @@ async function submitVoiceIntake() {
         actionEl.innerHTML += `
           <div class="mt-2 pt-2 border-t border-emerald-200 flex items-center justify-between">
             <span class="text-[11px] text-amber-900 font-bold">⚠️ Draft only. Master ledger unchanged.</span>
-            <button onclick="openClinicDeskForVoiceDraft('${result.facility_id}', '${result.medicine_id}', ${result.reported_stock})" class="px-3 py-1 bg-clay-terracotta hover:bg-clay-terracottaDark text-white font-black text-xs rounded-lg shadow-sm transition">
+            <button onclick="openClinicDeskForVoiceDraft('${safeId(result.facility_id)}', '${safeId(result.medicine_id)}', ${Number(result.reported_stock) || 0})" class="px-3 py-1 bg-clay-terracotta hover:bg-clay-terracottaDark text-white font-black text-xs rounded-lg shadow-sm transition">
               Review &amp; Commit in Clinic Desk &rarr;
             </button>
           </div>
@@ -1664,8 +1664,8 @@ async function submitCmoQuery() {
     // Display English primary response with Hindi translation below
     const answer = `
       <div class="space-y-2">
-        <div class="text-clay-dark font-medium leading-relaxed">${data.answer_en}</div>
-        <div class="text-clay-muted italic border-t border-clay-salmon/20 pt-1.5 text-[11px] font-sans">${data.answer_hi}</div>
+        <div class="text-clay-dark font-medium leading-relaxed">${escapeHtml(data.answer_en)}</div>
+        <div class="text-clay-muted italic border-t border-clay-salmon/20 pt-1.5 text-[11px] font-sans">${escapeHtml(data.answer_hi)}</div>
       </div>
     `;
     document.getElementById('cmoAnswerText').innerHTML = answer;
@@ -2104,7 +2104,12 @@ function setupEventListeners() {
 
 function escapeHtml(str) {
   if (!str) return '';
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// IDs interpolated into inline JS handlers: allow only ID characters
+function safeId(id) {
+  return String(id || '').replace(/[^A-Za-z0-9_-]/g, '');
 }
 
 // ==============================================================================

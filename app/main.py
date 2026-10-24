@@ -2,12 +2,14 @@ import os
 import sys
 import json
 import copy
+import time
+from collections import deque
 from dotenv import load_dotenv
 load_dotenv()
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,8 +41,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[o.strip() for o in os.getenv("ALLOWED_ORIGINS", "https://aarogya-vayu.vercel.app,http://localhost:8000").split(",")],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -438,13 +440,35 @@ async def get_unmet_demands(region: Optional[str] = None):
     unmet_list = active_unmet_demands_by_region.get(reg, active_unmet_demands)
     return [u.model_dump() for u in unmet_list]
 
+# Per-client throttle for endpoints that spend paid LLM calls (per serverless instance)
+LLM_RATE_LIMIT_PER_MIN = int(os.getenv("LLM_RATE_LIMIT_PER_MIN", "20"))
+MAX_LLM_INPUT_CHARS = 1000
+_llm_hits: Dict[str, deque] = {}
+
+def enforce_llm_rate_limit(http_request: Request):
+    # Vercel's edge sets x-real-ip itself; a client-supplied X-Forwarded-For is not trusted
+    client_ip = http_request.headers.get("x-real-ip") or (http_request.client.host if http_request.client else "unknown")
+    now = time.monotonic()
+    if len(_llm_hits) > 10000:
+        for ip in [ip for ip, h in _llm_hits.items() if not h or now - h[-1] > 60]:
+            del _llm_hits[ip]
+    hits = _llm_hits.setdefault(client_ip, deque())
+    while hits and now - hits[0] > 60:
+        hits.popleft()
+    if len(hits) >= LLM_RATE_LIMIT_PER_MIN:
+        raise HTTPException(status_code=429, detail="Too many AI requests. Please wait a minute and try again.")
+    hits.append(now)
+
 @app.post("/api/voice-intake")
-async def process_voice_intake(request: VoiceIntakeRequest):
+async def process_voice_intake(request: VoiceIntakeRequest, http_request: Request):
     """
     Frontline voice intake: Parses and validates clinical speech grounded to EDL-UP-2026.
     STRICT AUTHORITY BOUNDARY: Generates a DRAFT report only. Master stock is never
     mutated without explicit Pharmacist/Storekeeper confirmation on the Clinic Daily Desk.
     """
+    if len(request.transcript_text) > MAX_LLM_INPUT_CHARS:
+        raise HTTPException(status_code=400, detail=f"Transcript exceeds {MAX_LLM_INPUT_CHARS} characters")
+    enforce_llm_rate_limit(http_request)
     result = await voice_service.parse_and_validate(request)
     result.is_draft = True
     result.action_taken = "DRAFT_CREATED_AWAITING_CONFIRMATION"
@@ -529,7 +553,7 @@ async def get_clinic_desk(facility_id: str):
     actions = domain_service.get_facility_action_items(facility_id)
     inv = domain_service.get_facility_inventory(facility_id)
     
-    _, consignments, _, _ = storage.load_all()
+    _, consignments, _, _ = storage.load_all(region=domain_service.get_region_for_facility(facility_id))
     inbound = [c for c in consignments.values() if c.get("recipient_facility_id") == facility_id]
     outbound = [c for c in consignments.values() if c.get("donor_facility_id") == facility_id]
     recon_exceptions = [i for i in inv if i.get("is_frozen", False)]
@@ -654,15 +678,18 @@ async def run_agents_alias(payload: Dict[str, Any] = Body(default={})):
     return await run_resilience_pipeline(payload)
 
 @app.post("/api/cmo/chat")
-async def cmo_chat(payload: Dict[str, Any] = Body(...)):
-    question = payload.get("question", "")
+async def cmo_chat(http_request: Request, payload: Dict[str, Any] = Body(...)):
+    question = str(payload.get("question") or "")
     if not question:
         raise HTTPException(status_code=400, detail="Question is required")
+    if len(question) > MAX_LLM_INPUT_CHARS:
+        raise HTTPException(status_code=400, detail=f"Question exceeds {MAX_LLM_INPUT_CHARS} characters")
+    enforce_llm_rate_limit(http_request)
     reg = (payload.get("region") or active_region_id).lower()
     inv, _, _, _ = storage.load_all(region=reg)
     reg_env = current_env_by_region.get(reg, current_env)
     try:
-        response = agent_orchestrator.query_strategic_insight(question, reg_env, inv)
+        response = await agent_orchestrator.query_strategic_insight(question, reg_env, inv)
     except Exception as ex:
         response = {
             "query_type": "STRATEGIC_LOGISTICS_ADVISORY",
