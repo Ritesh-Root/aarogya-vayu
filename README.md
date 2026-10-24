@@ -3,7 +3,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Gemini](https://img.shields.io/badge/Google%20Gemini-2.5%20Flash-4285F4.svg?logo=google&logoColor=white)](https://deepmind.google/technologies/gemini/)
+[![Gemini](https://img.shields.io/badge/Google%20Gemini-3.8%20Flash-4285F4.svg?logo=google&logoColor=white)](https://deepmind.google/technologies/gemini/)
 [![Google ADK](https://img.shields.io/badge/Google%20ADK-Multi--Agent%20Mesh-34A853.svg)](https://cloud.google.com/)
 [![Vercel Live](https://img.shields.io/badge/Vercel-Live%20Production-black?logo=vercel&logoColor=white)](https://aarogya-vayu.vercel.app)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -25,11 +25,11 @@ To ensure total transparency for technical judges, the table below delineates wh
 | Capability / Subsystem | Live Production Code (Implemented) | Calibrated Scientific Models | Demonstration Simulation |
 | :--- | :--- | :--- | :--- |
 | **Logistics Redistribution** | **Pure-Python Deterministic Constrained Optimizer** (<2ms latency, serverless-ready, 0 cold start). Enforces strict stock conservation ($\\Delta \\text{donor} + \\Delta \\text{rec} = 0$), donor surge reserves ($\\ge 14$d), and batch expiry salvage. | Winding road penalty (1.25× Haversine great-circle distance) for rural roads. | N/A |
-| **Frontline Voice Intake** | Multilingual entity extraction (Hindi / Odia / Hinglish / English), numeric normalization (Devanagari numerals), quality checks, and **Essential Drug List (EDL) Grounding**. Powered by **Google Gemini 2.5 Flash** with offline edge regex fallback. | Phonetic dialect mapping for 14 rural UP blocks & coastal Odisha facilities (e.g. *"सांस की दवाई"* / *"ନିଶ୍ୱାସ ଔଷଧ"* $\\to$ `MED-001 Salbutamol 2.5mg`). | Synthetic 10s audio clip for reproducible judging evaluations. |
+| **Frontline Voice Intake** | Multilingual entity extraction (Hindi / Odia / Hinglish / English), numeric normalization (Devanagari numerals), quality checks, and **Essential Drug List (EDL) Grounding**. Powered by **Google Gemini 3.8 Flash** with offline edge regex fallback. | Phonetic dialect mapping for 14 rural UP blocks & coastal Odisha facilities (e.g. *"सांस की दवाई"* / *"ନିଶ୍ୱାସ ଔଷଧ"* $\\to$ `MED-001 Salbutamol 2.5mg`). | Synthetic 10s audio clip for reproducible judging evaluations. |
 | **Environmental Early Warning** | Dynamic Category Surge Engine: translates environmental readings into forward consumption multipliers (1.0× to 2.1×). Ingests **Live Open-Meteo Satellite & Sensor Telemetry** in real-time. | Epidemiological lag curves (42h lag between inversion trap and peak respiratory admissions) calibrated from Indo-Gangetic health studies. | Scenario toggles (AQI 385 Winter Smog Inversion, 43.5°C Pre-Monsoon Heatwave, Clean Baseline). |
 | **Dual-Corridor GIS Command Center** | Interactive **Leaflet.js** map with 20 geo-tagged PHCs & CHCs across **Bhubaneswar–Cuttack (Odisha, Default)** and **Lucknow–Unnao (UP)** with instant regional toggle, color-coded risk envelopes, and real-time inventory inspection. | Geo-coordinates and catchment populations (~1.8M residents) from Odisha Health & Family Welfare and UP Health Department open data. | Cold-chain courier transit path and 4.2°C temperature sensor stream. |
 | **Regional Health & Climate News Bureau** | Live asynchronous Google News RSS parser with geo-topic filters + verified regulatory alerts from official state portals (IMD, OSPCB, OSMCL, UPPCB, KGMU, AIIMS). Direct outbound citation links to original dispatches. | Clinical category mapping (Respiratory, Vector-Borne, Heatwave) tying public events to immediate facility-level medicine impact. | Real-time ticker & modal reader in UI. |
-| **CMO Strategic AI Studio** | Multi-scenario conversational decision support powered by **Google Gemini 2.5 Flash** with corridor context injection and actionable mitigation protocols. | Epidemic escalation response policies and buffer reallocation guidelines. | Interactive Q&A chat for District Health Leadership. |
+| **CMO Strategic AI Studio** | Multi-scenario conversational decision support powered by **Google Gemini 3.8 Flash** with corridor context injection and actionable mitigation protocols. | Epidemic escalation response policies and buffer reallocation guidelines. | Interactive Q&A chat for District Health Leadership. |
 | **Audit & Governance** | **Tamper-evident SHA-256 chained hash ledger** (`data/audit_log.json`) with an active cryptographic integrity validator endpoint (`/api/audit-log/verify`). Official Challan generation with idempotency keys. | Clinical Establishments Act and DPDP Act 2023 compliance workflow. | Digital challan signature stamp. |
 
 ---
@@ -55,7 +55,7 @@ When acute climate shocks strike—such as post-harvest winter smog inversions a
 ```mermaid
 graph TD
     A["🛰️ 1. Environmental Sentinel<br/>(Monitors AQI 385, PM2.5 plumes & Thermal Inversions)"] --> B["📈 2. Demand Intelligence Agent<br/>(Projects 1.62× Surge with 42h Epidemiological Lag)"]
-    C["🎙️ 3. Frontline Voice Intake<br/>(Gemini 2.5 Flash + EDL-UP-2026 Clinical Grounding)"] --> B
+    C["🎙️ 3. Frontline Voice Intake<br/>(Gemini 3.8 Flash + EDL-UP-2026 Clinical Grounding)"] --> B
     B --> D["⚖️ 4. Logistics Redistribution Agent<br/>(Deterministic Constrained Optimizer: 35km, Expiry Salvage)"]
     D --> E["🏛️ 5. Governance & Human Gate<br/>(CMO Approval + Tamper-Evident SHA-256 Ledger)"]
     E --> F["🚑 6. Green Corridor Transit<br/>(Cold Chain Dispatch & Invariant-Preserved Inventory)"]
@@ -63,7 +63,7 @@ graph TD
 
 1. **Environmental Early-Warning Catalyst:** Detects atmospheric inversion traps, PM2.5 plumes, and extreme heat before outpatient surges hit rural clinics.
 2. **Surge-to-Morbidity Translation:** Translates environmental spikes into forward-looking disease demand (*AQI 385 $\\to$ 1.62× surge in bronchodilator demand with a 42-hour lead time*).
-3. **Frontline Dialect Voice Intake:** Staff record a 10-second voice note in Hindi or regional dialects. **Google Gemini 2.5 Flash** grounds colloquial terms (e.g. *"सांस की दवाई"*) directly to the **Uttar Pradesh Essential Drug List (EDL-UP-2026)**.
+3. **Frontline Dialect Voice Intake:** Staff record a 10-second voice note in Hindi or regional dialects. **Google Gemini 3.8 Flash** grounds colloquial terms (e.g. *"सांस की दवाई"*) directly to the **Uttar Pradesh Essential Drug List (EDL-UP-2026)**.
 4. **Deterministic Mathematical Optimization:** Avoids LLM numerical hallucinations by using a pure-Python constrained optimization solver. It balances inventories within a 35 km radius while prioritizing near-expiry batches to eliminate medicine wastage.
 5. **Human-in-the-Loop Governance:** Chief Medical Officers (CMOs) review bilingual Action Cards and authorize dispatches with one click, minting cryptographically sealed (SHA-256) digital challans with idempotency protection.
 
@@ -94,10 +94,10 @@ sequenceDiagram
 | Agent Role | Implemented Engine | Core Responsibility |
 | :--- | :--- | :--- |
 | **1. Atmospheric Sentinel Agent** | OpenAQ / IMD calibrated feeds, Google Maps AQ API | Continuously evaluates air quality, aerosol optical depth, and thermal inversion risk. |
-| **2. Frontline Intake Agent** | **Google Gemini 2.5 Flash** + Devanagari normalizer + EDL Grounding | Transcribes Hindi/dialects, normalizes stock counts, and matches colloquial terms to EDL-UP-2026 codes. |
+| **2. Frontline Intake Agent** | **Google Gemini 3.8 Flash** + Devanagari normalizer + EDL Grounding | Transcribes Hindi/dialects, normalizes stock counts, and matches colloquial terms to EDL-UP-2026 codes. |
 | **3. Demand Intelligence Agent** | Calibrated Forward Surge Risk Engine | Computes rolling 7-day Poisson-approximated stockout probabilities ($P_{\\text{stockout}}$) incorporating climate multipliers. |
 | **4. Logistics Redistribution Agent** | Deterministic Constrained Optimizer (Pure Python, zero-overhead) | Matches deficit PHCs to surplus donor facilities within 35 km, enforcing donor safety reserves ($\\ge 14$d) and prioritizing expiring stock. |
-| **5. Governance & Strategic Decision Agent** | **Google Gemini 2.5 Flash** + SHA-256 Chained Hash Ledger | Formulates bilingual Action Cards, enforces human CMO sign-off, provides natural language what-if scenario simulations, and seals records in the audit chain. |
+| **5. Governance & Strategic Decision Agent** | **Google Gemini 3.8 Flash** + SHA-256 Chained Hash Ledger | Formulates bilingual Action Cards, enforces human CMO sign-off, provides natural language what-if scenario simulations, and seals records in the audit chain. |
 
 ---
 
@@ -145,7 +145,7 @@ Aarogya-Vāyu covers **20 real, geo-tagged public healthcare facilities** along 
 
 ## 💻 6. Technology Stack
 
-- **AI & Reasoning:** Google Gemini 2.5 Flash, Google Cloud Speech-to-Text v2, Google GenAI SDK.
+- **AI & Reasoning:** Google Gemini 3.8 Flash, Google Cloud Speech-to-Text v2, Google GenAI SDK.
 - **Optimization Solver:** Pure-Python Deterministic Constrained Optimizer (sub-2ms, zero serverless cold-start overhead).
 - **Backend API:** FastAPI, Pydantic v2, Uvicorn, ASGI Middleware (Vercel Serverless Function).
 - **GIS & Frontend UI:** Single-Page Application (HTML5, Tailwind CSS, Leaflet.js, Lucide Icons).

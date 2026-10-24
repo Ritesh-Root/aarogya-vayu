@@ -23,7 +23,7 @@ T = TypeVar("T", bound=BaseModel)
 
 # `or` (not a getenv default) so an env var that exists but is empty still gets the default
 GEMINI_MODELS = [
-    os.getenv("DEFAULT_MODEL") or "gemini-3.5-flash",
+    os.getenv("DEFAULT_MODEL") or "gemini-3.8-flash",
     os.getenv("FALLBACK_MODEL") or "gemini-3.5-flash-lite",
 ]
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL") or "claude-haiku-5-5"

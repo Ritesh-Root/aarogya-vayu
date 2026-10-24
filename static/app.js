@@ -1239,7 +1239,7 @@ async function submitVoiceIntake() {
   const facId = facSelect ? (facSelect.value || null) : null;
   const btn = document.getElementById('btnSubmitVoice');
   btn.disabled = true;
-  btn.innerHTML = `<span>Processing Audio with Gemini 2.5 Flash / EDL Grounding...</span>`;
+  btn.innerHTML = `<span>Processing Audio with Gemini 3.8 Flash / EDL Grounding...</span>`;
 
   try {
     const res = await fetch('/api/voice-intake', {
@@ -1648,7 +1648,7 @@ async function submitCmoQuery() {
 
   const box = document.getElementById('cmoResponseBox');
   box.classList.remove('hidden');
-  document.getElementById('cmoAnswerText').innerHTML = '<span class="text-indigo-400 animate-pulse">// Strategic Insight Agent (Gemini 2.5 Flash) evaluating scenario...</span>';
+  document.getElementById('cmoAnswerText').innerHTML = '<span class="text-indigo-400 animate-pulse">// Strategic Insight Agent (Gemini 3.8 Flash) evaluating scenario...</span>';
   document.getElementById('cmoMetaBox').textContent = '';
 
   try {
