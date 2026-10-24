@@ -1,7 +1,7 @@
 import math
 import uuid
 from datetime import datetime, timezone
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Optional, Set, Tuple, Any
 from app.models import (
     StockoutRiskAssessment, TransferRecommendation, Facility,
     UnmetDemandReport, EDL_PRODUCT_SPEC
@@ -25,6 +25,34 @@ def get_batch_available(b: dict) -> int:
     quarantined = b.get("quarantined", 0)
     return max(0, on_hand - reserved - quarantined)
 
+# Fixed namespace so every instance derives the same recommendation ID for the same proposed transfer
+REC_ID_NAMESPACE = uuid.UUID("6f1c2a52-3d0e-4b8f-9a51-7a1e0c9d2b44")
+ACTIVE_CONSIGNMENT_STATUSES = ("APPROVED_RESERVED", "DISPATCHED")
+
+
+def recommendation_id(donor_id: str, recipient_id: str, medicine_id: str, batch_number: str) -> str:
+    key = f"{donor_id}|{recipient_id}|{medicine_id}|{batch_number}"
+    return f"REC-{uuid.uuid5(REC_ID_NAMESPACE, key).hex[:8].upper()}"
+
+
+def committed_transfers(consignments: Dict[str, dict]) -> Tuple[Dict[Tuple[str, str], int], Set[str]]:
+    """
+    From a region's consignments: units already approved or dispatched to each (recipient, medicine),
+    and the recommendation IDs those consignments came from.
+    """
+    inbound: Dict[Tuple[str, str], int] = {}
+    active_ids: Set[str] = set()
+    for c in consignments.values():
+        if c.get("status") not in ACTIVE_CONSIGNMENT_STATUSES:
+            continue
+        units = c.get("units_dispatched") if c.get("status") == "DISPATCHED" else c.get("units_requested")
+        key = (c.get("recipient_facility_id"), c.get("medicine_id"))
+        inbound[key] = inbound.get(key, 0) + (units or 0)
+        if c.get("recommendation_id"):
+            active_ids.add(c["recommendation_id"])
+    return inbound, active_ids
+
+
 class RedistributionOptimizer:
     def __init__(self, facilities: Dict[str, dict], max_distance_km: float = 35.0):
         self.facilities = facilities
@@ -32,7 +60,8 @@ class RedistributionOptimizer:
         self.unmet_demands: List[UnmetDemandReport] = []
 
     def get_unmet_demands(self) -> List[UnmetDemandReport]:
-        return self.unmet_demands
+        # A copy, so each region keeps its own list when the optimizer runs for another region
+        return list(self.unmet_demands)
 
     def validate_transfer_invariants(
         self,
@@ -64,7 +93,8 @@ class RedistributionOptimizer:
     def optimize(
         self,
         risk_assessments: List[StockoutRiskAssessment],
-        raw_inventory: List[dict]
+        raw_inventory: List[dict],
+        active_recommendation_ids: Optional[Set[str]] = None
     ) -> List[TransferRecommendation]:
         """
         Solves the constrained redistribution problem to match surplus facilities
@@ -75,8 +105,12 @@ class RedistributionOptimizer:
         2. Prioritize near-expiry batches (30-90 days) to prevent pharmaceutical waste.
         3. Minimize transit distance within maximum service radius (<= 35 km).
         4. Guarantee donor facility retains >= 14 days of surge-adjusted safety stock.
+
+        Transfers whose ID is in `active_recommendation_ids` (already approved or dispatched) are not
+        proposed again.
         """
-        self.unmet_demands.clear()
+        active_recommendation_ids = active_recommendation_ids or set()
+        self.unmet_demands = []
 
         # Group inventory by (facility_id, medicine_id) to handle multi-batch holdings
         facility_med_batches: Dict[Tuple[str, str], List[dict]] = {}
@@ -227,7 +261,9 @@ class RedistributionOptimizer:
                         f"दाता केंद्र के पास {donor_rem_days} दिन का सुरक्षित बफर उपलब्ध रहेगा।"
                     )
 
-                    rec_id = f"REC-{uuid.uuid4().hex[:8].upper()}"
+                    rec_id = recommendation_id(donor.facility_id, recipient.facility_id, med_id, selected_batch.get("batch_number", "BAT-GEN-01"))
+                    if rec_id in active_recommendation_ids:
+                        continue
                     rec = TransferRecommendation(
                         id=rec_id,
                         donor_facility_id=donor.facility_id,
@@ -288,7 +324,7 @@ class RedistributionOptimizer:
                         shortage_severity=recipient.status,
                         unmet_units_needed=units_needed,
                         infeasibility_reason=(
-                            f"MACRO_DEFICIT_NO_SAFE_PEER_DONOR: 0 of {len(self.facilities) - 1} peer facilities in corridor "
+                            f"MACRO_DEFICIT_NO_SAFE_PEER_DONOR: 0 of {len(rejections)} peer facilities in corridor "
                             f"can donate without breaching their own 14-day clinical safety reserve under acute surge."
                         ),
                         rejection_breakdown=rejections,

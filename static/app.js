@@ -140,6 +140,7 @@ let courierMarkersLayer = null;
 let sensorMarkersLayer = null;
 let atmosphericPlumeLayer = null;
 let activeCouriers = [];
+let regionConsignments = [];
 let courierTransitInterval = null;
 let activeMapFilter = 'all';
 let currentInspectFacilityId = null;
@@ -153,7 +154,7 @@ let activeNewsSearch = '';
 
 document.addEventListener('DOMContentLoaded', async () => {
   initMap();
-  await loadInitialData();
+  await loadInitialData(true);
   setupEventListeners();
   lucide.createIcons();
 
@@ -177,7 +178,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       } else if (view === 'map') {
         const mapEl = document.getElementById('map');
         if (mapEl) mapEl.scrollIntoView({ behavior: 'instant', block: 'start' });
-        useVoiceTemplate(1);
+        loadSampleVoice(1);
         setTimeout(() => submitVoiceIntake(), 200);
       } else if (view === 'agents') {
         const term = document.getElementById('agentTerminalBody');
@@ -237,18 +238,20 @@ function updateRegionButtons(regId) {
 
 async function switchRegion(regionId) {
   if (!REGIONS[regionId]) return;
-  currentRegion = regionId;
-  updateRegionButtons(regionId);
-
   try {
-    await fetch('/api/region/switch', {
+    const res = await fetch('/api/region/switch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ region: regionId })
     });
+    if (!res.ok) throw new Error(await apiErrorMessage(res, 'Region switch failed'));
   } catch (e) {
     console.error("switchRegion error:", e);
+    alert(e.message || 'Region switch failed');
+    return;
   }
+  currentRegion = regionId;
+  updateRegionButtons(regionId);
 
   if (map && REGIONS[regionId]) {
     map.setView(REGIONS[regionId].center, REGIONS[regionId].zoom);
@@ -265,9 +268,11 @@ async function switchRegion(regionId) {
   await loadClinicDesk(currentClinicFacilityId);
 }
 
-async function loadInitialData() {
+// The region the user picked is the source of truth; the server's per-instance active region is
+// only adopted on first page load
+async function loadInitialData(adoptServerRegion = false) {
   try {
-    try {
+    if (adoptServerRegion) try {
       const regRes = await fetch('/api/regions');
       if (regRes.ok) {
         const regData = await regRes.json();
@@ -289,7 +294,7 @@ async function loadInitialData() {
     await fetchRisks();
     await fetchRecommendations();
     await fetchAuditLog();
-    await fetchNews();
+    await fetchNews(currentRegion);
     await loadClinicDesk(currentClinicFacilityId);
   } catch (err) {
     console.error("Initialization error:", err);
@@ -299,12 +304,13 @@ async function loadInitialData() {
 async function fetchEnvironmental() {
   try {
     const res = await fetch(`/api/environmental?region=${encodeURIComponent(currentRegion)}`);
+    if (!res.ok) throw new Error(`environmental HTTP ${res.status}`);
     const data = await res.json();
     const t = data.telemetry;
     currentTelemetry = t;
 
     const valAqi = document.getElementById('valAqi');
-    if (valAqi) valAqi.textContent = `${t.aqi} (${t.aqi > 300 ? 'Severe' : t.aqi > 200 ? 'Poor' : (t.aqi > 100 ? 'Moderate' : 'Good')})`;
+    if (valAqi) valAqi.textContent = `${t.aqi} (${aqiCategory(t.aqi)})`;
 
     const valPm25 = document.getElementById('valPm25');
     if (valPm25) valPm25.textContent = `${t.pm25} µg/m³`;
@@ -319,26 +325,26 @@ async function fetchEnvironmental() {
     const bannerDesc = document.getElementById('bannerDesc');
     const mults = data.surge_multipliers || {};
 
-    const btnLive = document.getElementById('scenarioLive');
-    if (btnLive) {
-      if (data.is_live || (t.source && t.source.includes('Open-Meteo'))) {
-        btnLive.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-emerald-600 text-white shadow-clay-btn transition flex items-center space-x-1.5 cursor-pointer';
-      } else {
-        btnLive.className = 'px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition flex items-center space-x-1.5 cursor-pointer';
-      }
-    }
+    // Exactly one surge-mode button is highlighted, matching the server's mode for this region
+    const isLiveMode = data.mode === 'live';
+    const activeScenario = isLiveMode ? 'live' : (t.smog_episode ? 'smog' : (t.heatwave_alert ? 'heat' : 'normal'));
+    highlightScenarioButton(activeScenario);
 
-    if (data.is_live || (t.source && t.source.includes('Open-Meteo'))) {
-      if (bannerTitle) bannerTitle.innerHTML = `<span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-300 animate-ping"></span><span>${t.corridor || 'Regional Corridor'}</span> <span class="text-[10px] bg-emerald-500/40 text-emerald-100 border border-emerald-300/50 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">Live Sensor Feed</span></span>`;
-      if (bannerDesc) bannerDesc.textContent = `Live Telemetry (Open-Meteo · Copernicus CAMS) • AQI ${t.aqi} • PM2.5: ${t.pm25} µg/m³ • Temp: ${t.temperature_c}°C • Humidity: ${t.humidity_pct || 75}% • Wind: ${t.wind_speed_kmh || 10} km/h`;
+    const corridorName = escapeHtml(t.corridor || 'Regional Corridor');
+    if (isLiveMode && data.is_live) {
+      if (bannerTitle) bannerTitle.innerHTML = `<span class="inline-flex flex-wrap items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-300 animate-ping flex-shrink-0"></span><span>${corridorName}</span> <span class="whitespace-nowrap flex-shrink-0 text-[10px] leading-none bg-emerald-500/40 text-emerald-100 border border-emerald-300/50 px-2 py-1 rounded-full uppercase tracking-wider font-mono">Live Data Feed</span></span>`;
+      if (bannerDesc) bannerDesc.textContent = `Live Telemetry (Open-Meteo · Copernicus CAMS) • AQI ${t.aqi} (${aqiCategory(t.aqi)}) • PM2.5: ${t.pm25} µg/m³ • Temp: ${t.temperature_c}°C • Humidity: ${t.humidity_pct ?? 'n/a'}% • Wind: ${t.wind_speed_kmh ?? 'n/a'} km/h`;
+    } else if (isLiveMode) {
+      if (bannerTitle) bannerTitle.textContent = `${t.corridor || 'Regional Corridor'}: live feed unavailable`;
+      if (bannerDesc) bannerDesc.textContent = `Showing an offline baseline, not live data • AQI ${t.aqi} • Temp: ${t.temperature_c}°C`;
     } else if (t.smog_episode) {
-      if (bannerTitle) bannerTitle.textContent = `${t.corridor || 'Regional Corridor'} Smog Inversion Active`;
-      if (bannerDesc) bannerDesc.textContent = `AQI ${t.aqi} • PM2.5: ${t.pm25} µg/m³ • +${Math.round(((mults['AQI / Smog'] || 1.62) - 1) * 100)}% Acute Respiratory Demand • ${t.forecast_peak_aqi_72h ? `72h AQI peak ${t.forecast_peak_aqi_72h} in ~${t.forecast_peak_in_hours}h` : 'Admissions lag PM2.5 peaks by 1–3 days'}`;
+      if (bannerTitle) bannerTitle.textContent = `SIMULATED SCENARIO: ${t.corridor || 'Regional Corridor'} Smog Inversion`;
+      if (bannerDesc) bannerDesc.textContent = `AQI ${t.aqi} • PM2.5: ${t.pm25} µg/m³ • +${Math.round(((mults['AQI / Smog'] || 1) - 1) * 100)}% Acute Respiratory Demand • Admissions lag PM2.5 peaks by 1–3 days`;
     } else if (t.heatwave_alert) {
-      if (bannerTitle) bannerTitle.textContent = `${t.corridor || 'Regional Corridor'} Heatwave Alert Active`;
-      if (bannerDesc) bannerDesc.textContent = `Temp: ${t.temperature_c}°C • +${Math.round(((mults['Heatwave / Drought'] || 1.85) - 1) * 100)}% Dehydration / ORS Demand`;
+      if (bannerTitle) bannerTitle.textContent = `SIMULATED SCENARIO: ${t.corridor || 'Regional Corridor'} Heatwave`;
+      if (bannerDesc) bannerDesc.textContent = `Temp: ${t.temperature_c}°C • +${Math.round(((mults['Heatwave / Drought'] || 1) - 1) * 100)}% Dehydration / ORS Demand`;
     } else {
-      if (bannerTitle) bannerTitle.textContent = `${t.corridor || 'Regional Corridor'} Baseline Normal Operations`;
+      if (bannerTitle) bannerTitle.textContent = `SIMULATED SCENARIO: ${t.corridor || 'Regional Corridor'} Baseline Operations`;
       if (bannerDesc) bannerDesc.textContent = `AQI ${t.aqi} • Temp: ${t.temperature_c}°C • Baseline Normal Consumption`;
     }
 
@@ -356,27 +362,33 @@ function updateAtmosphericPlume(t) {
   }
 
   const reg = REGIONS[currentRegion] || REGIONS['bhubaneswar'];
+  const corridorName = escapeHtml(t.corridor || reg.name);
+  // Boundary layer height and wind come from Open-Meteo; ventilation index = mixing height × wind speed
+  const blh = (typeof t.boundary_layer_m === 'number') ? Math.round(t.boundary_layer_m) : null;
+  const ventIndex = (blh !== null && typeof t.wind_speed_kmh === 'number') ? Math.round(blh * t.wind_speed_kmh / 3.6) : null;
+  const blhText = blh !== null ? `${blh.toLocaleString()} m AGL` : 'n/a (scenario)';
+  const ventText = ventIndex !== null ? `${ventIndex.toLocaleString()} m²/s${ventIndex < 2000 ? ' (Stagnant)' : (ventIndex < 6000 ? ' (Moderate)' : ' (Good)')}` : 'n/a (scenario)';
 
   let strokeColor = '#DE6B48';
   let fillColor = '#DE6B48';
   let fillOpacity = 0.22;
-  let label = `🌫️ ${t.corridor || reg.name} Inversion Corridor (AQI ${t.aqi})`;
+  let label = `🌫️ ${corridorName} Inversion Corridor (AQI ${t.aqi})`;
 
   if (t.smog_episode) {
     strokeColor = '#C25433';
     fillColor = '#DE6B48';
     fillOpacity = 0.32;
-    label = `🌫️ ${t.corridor || reg.name} Smog Inversion Corridor • Inversion Base: 320m • AQI ${t.aqi} • PM2.5: ${t.pm25} µg/m³`;
+    label = `🌫️ ${corridorName} Smog Inversion Corridor • Mixing Height: ${blhText} • AQI ${t.aqi} • PM2.5: ${t.pm25} µg/m³`;
   } else if (t.heatwave_alert) {
     strokeColor = '#DC2626';
     fillColor = '#F97316';
     fillOpacity = 0.28;
-    label = `🔥 ${t.corridor || reg.name} Heatwave Zone • Max Temp: ${t.temperature_c}°C • Extreme Dehydration Risk`;
+    label = `🔥 ${corridorName} Heatwave Zone • Max Temp: ${t.temperature_c}°C • Extreme Dehydration Risk`;
   } else {
     fillOpacity = 0.08;
     strokeColor = '#0284C7';
     fillColor = '#38BDF8';
-    label = `🍃 ${t.corridor || reg.name} Baseline Atmospheric Zone • AQI ${t.aqi} • Normal Ventilation`;
+    label = `🍃 ${corridorName} Baseline Atmospheric Zone • AQI ${t.aqi} • Mixing Height: ${blhText}`;
   }
 
   atmosphericPlumeLayer = L.polygon(reg.polygon, {
@@ -400,10 +412,10 @@ function updateAtmosphericPlume(t) {
         <strong class="text-slate-900">${t.smog_episode ? 'Atmospheric Inversion Trap' : (t.heatwave_alert ? 'Heatwave Corridor' : 'Baseline Corridor')}</strong>
       </div>
       <div class="text-slate-600 space-y-0.5 text-[11px]">
-        <div>Corridor: <strong class="text-slate-900">${t.corridor || reg.name}</strong></div>
+        <div>Corridor: <strong class="text-slate-900">${corridorName}</strong></div>
         <div>Active AQI: <strong class="text-[#DE6B48]">${t.aqi}</strong> (PM2.5: ${t.pm25} µg/m³)</div>
-        <div>Inversion Ceiling: <strong>${t.smog_episode ? '320m AGL (Severe Trap)' : '1,200m AGL'}</strong></div>
-        <div>Ventilation Index: <strong>${t.smog_episode ? '1,850 m²/s (Stagnant)' : '6,400 m²/s (Good)'}</strong></div>
+        <div>Boundary Layer (mixing height): <strong>${blhText}</strong></div>
+        <div>Ventilation Index: <strong>${ventText}</strong></div>
       </div>
     </div>
   `);
@@ -417,9 +429,17 @@ function updateAtmosphericPlume(t) {
   if (hudCorridor) {
     hudCorridor.textContent = t.corridor || (currentRegion === 'bhubaneswar' ? 'Bhubaneswar-Cuttack' : 'Lucknow-Unnao');
   }
+  const hudWind = document.getElementById('hudWind');
+  if (hudWind) hudWind.textContent = (typeof t.wind_speed_kmh === 'number') ? `${t.wind_speed_kmh} km/h` : 'n/a';
+  const hudLive = document.getElementById('hudLiveBadge');
+  if (hudLive) hudLive.textContent = (t.source && t.source.includes('Open-Meteo')) ? 'LIVE' : 'SCENARIO';
   const hudInversion = document.getElementById('hudInversion');
   if (hudInversion) {
-    hudInversion.textContent = t.smog_episode ? "320m AGL (Trapping High)" : (t.heatwave_alert ? "Thermal Dome Active" : "Normal Dispersion");
+    if (blh !== null) {
+      hudInversion.textContent = `${blh.toLocaleString()} m AGL (${blh < 300 ? 'Trapping' : (blh < 800 ? 'Limited Dispersion' : 'Normal Dispersion')})`;
+    } else {
+      hudInversion.textContent = t.smog_episode ? "Smog scenario" : (t.heatwave_alert ? "Heatwave scenario" : "Normal Dispersion");
+    }
   }
 }
 
@@ -430,11 +450,10 @@ function updateSensorStations(t) {
   const reg = REGIONS[currentRegion] || REGIONS['bhubaneswar'];
   const sensorConfigs = reg.sensors || REGIONS['bhubaneswar'].sensors;
 
-  const sensorData = sensorConfigs.map((cfg, idx) => {
-    const offsetAqi = (idx === 0 ? 25 : (idx === 1 ? -15 : (idx === 2 ? 10 : (idx === 3 ? -30 : -10))));
-    const aqiVal = Math.max(20, (t.aqi || 200) + offsetAqi);
-    const pmOffset = (idx === 0 ? 30 : (idx === 1 ? -20 : (idx === 2 ? 15 : -15)));
-    const pmVal = Math.max(10, (t.pm25 || 100) + pmOffset);
+  // These are monitoring sites in the corridor; no per-station feed is wired in, so each pin shows
+  // the corridor-level CAMS value rather than an invented station reading
+  const sensorData = sensorConfigs.map((cfg) => {
+    const aqiVal = t.aqi;
     return {
       id: cfg.id,
       name: cfg.name,
@@ -442,9 +461,9 @@ function updateSensorStations(t) {
       lat: cfg.lat,
       lng: cfg.lng,
       aqi: Math.round(aqiVal),
-      pm25: parseFloat(pmVal.toFixed(1)),
-      temp: parseFloat(((t.temperature_c || 30) + (idx % 2 === 0 ? 0.4 : -0.4)).toFixed(1)),
-      status: aqiVal > 300 ? "Hazardous" : (aqiVal > 200 ? "Very Poor" : (aqiVal > 100 ? "Moderate" : "Good"))
+      pm25: t.pm25,
+      temp: t.temperature_c,
+      status: aqiCategory(aqiVal)
     };
   });
 
@@ -470,13 +489,14 @@ function updateSensorStations(t) {
       <div class="p-1.5 font-sans text-xs sm:text-sm space-y-1.5">
         <div class="flex items-center space-x-2 pb-1.5 border-b border-slate-200">
           <span class="text-sm">📡</span>
-          <span class="font-black text-slate-900 text-sm">${s.name}</span>
+          <span class="font-black text-slate-900 text-sm">${escapeHtml(s.name)}</span>
         </div>
         <div class="text-slate-600 text-xs space-y-1 font-medium">
-          <div>Station Type: <strong class="text-slate-800">${s.type}</strong></div>
-          <div>Real-Time AQI: <strong class="${isSevere ? 'text-red-600 font-black' : 'text-slate-900 font-black'}">${s.aqi} (${s.status})</strong></div>
-          <div>PM2.5 Sensor: <strong class="text-slate-800">${s.pm25} µg/m³</strong></div>
+          <div>Site Type: <strong class="text-slate-800">${escapeHtml(s.type)}</strong></div>
+          <div>Corridor AQI: <strong class="${isSevere ? 'text-red-600 font-black' : 'text-slate-900 font-black'}">${s.aqi} (${s.status})</strong></div>
+          <div>Corridor PM2.5: <strong class="text-slate-800">${s.pm25} µg/m³</strong></div>
           <div>Ambient Temp: <strong class="text-slate-800">${s.temp}°C</strong></div>
+          <div class="text-[10px] text-slate-500 pt-0.5">Corridor-level CAMS value; this site's own station feed is not connected.</div>
         </div>
       </div>
     `);
@@ -485,9 +505,11 @@ function updateSensorStations(t) {
 
 async function fetchFacilities() {
   try {
-    const res = await fetch('/api/facilities');
+    const res = await fetch(`/api/facilities?region=${encodeURIComponent(currentRegion)}`);
+    if (!res.ok) throw new Error(`facilities HTTP ${res.status}`);
     facilities = await res.json();
     
+    renderVoiceSamples();
     const select = document.getElementById('voiceFacilitySelect');
     if (select) {
       select.innerHTML = '<option value="">Auto-Detect from Voice Transcript</option>';
@@ -497,6 +519,20 @@ async function fetchFacilities() {
         opt.textContent = `${fac.name} (${fac.district} - ${fac.type})`;
         select.appendChild(opt);
       });
+    }
+
+    const visionSelect = document.getElementById('visionFacilitySelect');
+    if (visionSelect) {
+      const keep = visionSelect.value;
+      visionSelect.innerHTML = '';
+      facilities.forEach(fac => {
+        const opt = document.createElement('option');
+        opt.value = fac.id;
+        opt.textContent = `Compare with: ${fac.name}`;
+        visionSelect.appendChild(opt);
+      });
+      visionSelect.value = facilities.some(f => f.id === keep) ? keep
+        : (facilities.some(f => f.id === currentClinicFacilityId) ? currentClinicFacilityId : (facilities[0] ? facilities[0].id : ''));
     }
 
     const clinicSelect = document.getElementById('clinicFacilitySelect');
@@ -523,7 +559,8 @@ async function fetchFacilities() {
 
 async function fetchRisks() {
   try {
-    const res = await fetch('/api/risks');
+    const res = await fetch(`/api/risks?region=${encodeURIComponent(currentRegion)}`);
+    if (!res.ok) throw new Error(`risks HTTP ${res.status}`);
     allRisks = await res.json();
 
     // Aggregate risk per facility
@@ -574,7 +611,7 @@ async function fetchRisks() {
       const pinIcon = L.divIcon({
         className: 'facility-pin-wrapper',
         html: `
-          <div class="facility-pin cursor-pointer" onclick="openFacilityDetail('${fac.id}')">
+          <div class="facility-pin cursor-pointer" onclick="openFacilityDetail('${safeId(fac.id)}')">
             ${isCritical ? '<div class="pin-pulse-ring"></div>' : ''}
             <div class="pin-bubble ${bubbleColor} text-white font-black text-xs shadow-lg flex items-center justify-center space-x-0.5">
               <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M19 10.5h-4.5V6h-5v4.5H5v5h4.5V20h5v-4.5H19v-5z"/></svg>
@@ -594,10 +631,10 @@ async function fetchRisks() {
       let popupContent = `
         <div class="text-xs sm:text-sm p-1.5 font-sans space-y-1.5">
           <div class="flex items-center justify-between border-b border-slate-200 pb-1.5">
-            <strong class="text-slate-900 block text-sm sm:text-base font-black">${fac.name}</strong>
+            <strong class="text-slate-900 block text-sm sm:text-base font-black">${escapeHtml(fac.name)}</strong>
             <span class="text-xs font-black ${isCritical ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'} px-2.5 py-0.5 rounded-full">${fac.type}</span>
           </div>
-          <div class="text-slate-600 text-xs font-medium py-0.5">${fac.district} &bull; ${fac.doctor}</div>
+          <div class="text-slate-600 text-xs font-medium py-0.5">${escapeHtml(fac.district)} &bull; ${escapeHtml(fac.doctor)} (demo)</div>
           <div class="mt-1 space-y-1">
       `;
 
@@ -605,7 +642,7 @@ async function fetchRisks() {
         const badgeColor = item.status === 'CRITICAL' ? 'text-red-600 font-black' : item.status === 'WARNING' ? 'text-amber-600 font-bold' : 'text-emerald-600 font-bold';
         popupContent += `
           <div class="flex justify-between border-b border-slate-100 pb-1 text-xs">
-            <span class="font-medium text-slate-700">${item.medicine_name.split('(')[0]}</span>
+            <span class="font-medium text-slate-700">${escapeHtml(item.medicine_name.split('(')[0])}</span>
             <span class="${badgeColor}">${item.days_of_coverage}d cover (${item.current_stock}u)</span>
           </div>
         `;
@@ -614,10 +651,10 @@ async function fetchRisks() {
       popupContent += `
           </div>
           <div class="mt-2.5 pt-2 border-t border-slate-200 grid grid-cols-2 gap-2">
-            <button onclick="openFacilityDetail('${fac.id}')" class="text-xs sm:text-sm bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-full font-bold shadow-sm transition text-center cursor-pointer">
+            <button onclick="openFacilityDetail('${safeId(fac.id)}')" class="text-xs sm:text-sm bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-full font-bold shadow-sm transition text-center cursor-pointer">
               Inspect Stock
             </button>
-            <button onclick="runTransferFor('${fac.id}')" class="text-xs sm:text-sm bg-clay-terracotta hover:bg-clay-terracottaDark text-white px-3 py-1.5 rounded-full font-black shadow-sm transition text-center cursor-pointer">
+            <button onclick="runTransferFor('${safeId(fac.id)}')" class="text-xs sm:text-sm bg-clay-terracotta hover:bg-clay-terracottaDark text-white px-3 py-1.5 rounded-full font-black shadow-sm transition text-center cursor-pointer">
               Solve AI
             </button>
           </div>
@@ -670,18 +707,18 @@ function renderWatchlist(searchQuery = '') {
     const isCritical = item.status === 'CRITICAL';
     const facType = item.facility_name.startsWith('CHC') ? 'CHC' : 'PHC';
     row.innerHTML = `
-      <div class="flex items-center space-x-3">
+      <div class="flex items-center space-x-3 min-w-0">
         <div class="w-11 h-11 rounded-xl ${isCritical ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-700'} flex items-center justify-center font-black text-sm flex-shrink-0">
           ${facType}
         </div>
-        <div>
-          <h4 class="text-sm font-black text-clay-dark">${item.facility_name}</h4>
-          <p class="text-xs ${isCritical ? 'text-red-500 font-bold' : 'text-amber-600 font-bold'}">${item.medicine_name.split('(')[0]} &bull; ${item.days_of_coverage}d Cover</p>
+        <div class="min-w-0">
+          <h4 class="text-sm font-black text-clay-dark truncate">${escapeHtml(item.facility_name)}</h4>
+          <p class="text-xs ${isCritical ? 'text-red-500 font-bold' : 'text-amber-600 font-bold'}">${escapeHtml(item.medicine_name.split('(')[0])} &bull; ${item.days_of_coverage}d Cover</p>
         </div>
       </div>
-      <div class="text-right flex items-center space-x-2">
+      <div class="text-right flex items-center space-x-2 flex-shrink-0 pl-2">
         <span class="text-sm font-black text-clay-dark whitespace-nowrap">${item.current_stock} Units</span>
-        <button onclick="runTransferFor('${item.facility_id}')" class="text-xs ${isCritical ? 'bg-clay-terracotta hover:bg-clay-terracottaDark text-white' : 'bg-clay-terracotta/10 text-clay-terracotta hover:bg-clay-terracotta hover:text-white'} px-3.5 py-1.5 rounded-full font-bold shadow-sm transition cursor-pointer">
+        <button onclick="${isCritical ? 'runTransferFor' : 'openFacilityDetail'}('${safeId(item.facility_id)}')" class="text-xs ${isCritical ? 'bg-clay-terracotta hover:bg-clay-terracottaDark text-white' : 'bg-clay-terracotta/10 text-clay-terracotta hover:bg-clay-terracotta hover:text-white'} px-3.5 py-1.5 rounded-full font-bold shadow-sm transition cursor-pointer">
           ${isCritical ? 'Solve' : 'View'}
         </button>
       </div>
@@ -692,7 +729,8 @@ function renderWatchlist(searchQuery = '') {
 
 async function fetchRecommendations() {
   try {
-    const res = await fetch('/api/recommendations');
+    const res = await fetch(`/api/recommendations?region=${encodeURIComponent(currentRegion)}`);
+    if (!res.ok) throw new Error(`recommendations HTTP ${res.status}`);
     activeRecs = await res.json();
 
     const statActiveTransfers = document.getElementById('statActiveTransfers');
@@ -702,7 +740,7 @@ async function fetchRecommendations() {
     let totalDist = 0;
 
     activeRecs.forEach(r => {
-      if (r.expiry_waste_prevented) totalExpiryPrevented += r.units_to_transfer;
+      if (r.expiry_waste_prevented && r.status === 'APPROVED') totalExpiryPrevented += r.units_to_transfer;
       totalDist += r.distance_km;
     });
 
@@ -745,132 +783,79 @@ async function fetchRecommendations() {
   }
 }
 
-function updateCourierFleet() {
+function courierPopupHtml(c) {
+  return `
+    <div class="p-1.5 font-sans text-xs sm:text-sm space-y-1.5">
+      <div class="flex items-center justify-between pb-1.5 border-b border-slate-200">
+        <span class="font-black text-slate-900 text-sm">🚑 ${escapeHtml(c.vehicleId)}</span>
+        <span class="bg-emerald-100 text-emerald-800 text-xs font-black px-2.5 py-0.5 rounded-full">DISPATCHED</span>
+      </div>
+      <div class="text-slate-600 text-xs space-y-1 font-medium">
+        <div>Challan: <strong class="text-slate-900 font-mono">${escapeHtml(c.challanId)}</strong></div>
+        <div>Donor: <strong class="text-slate-900">${escapeHtml(c.donor.name)}</strong></div>
+        <div>Destination: <strong class="text-[#DE6B48]">${escapeHtml(c.recip.name)}</strong></div>
+        <div>Cargo: <strong class="text-slate-900">${escapeHtml(c.units)} Units</strong> (${escapeHtml(c.medicine)})</div>
+        <div class="text-slate-500 text-[11px] pt-0.5">No GPS feed: van position on the route is illustrative.</div>
+      </div>
+    </div>
+  `;
+}
+
+// Vans are drawn only for consignments that were really dispatched; pending recommendations are the dashed lines
+async function updateCourierFleet() {
   if (!courierMarkersLayer) return;
+  let dispatched = [];
+  try {
+    const res = await fetch(`/api/consignments?region=${encodeURIComponent(currentRegion)}`);
+    if (res.ok) {
+      regionConsignments = await res.json();
+      dispatched = regionConsignments.filter(c => c.status === 'DISPATCHED');
+    }
+  } catch (err) {
+    console.error("updateCourierFleet error:", err);
+  }
   courierMarkersLayer.clearLayers();
   activeCouriers = [];
 
-  const defaultLkoTransfers = [
-    {
-      id: "REC-LIVE-01",
-      donor_facility_id: "CHC-LKO-02",
-      recipient_facility_id: "PHC-LKO-01",
-      donor_facility_name: "CHC Malihabad",
-      recipient_facility_name: "PHC Kakori",
-      medicine_name: "Salbutamol Respirator Solution (Respules 2.5mg)",
-      units_to_transfer: 30,
-      distance_km: 14.2,
-      vehicle_id: "UP-32-G-4812"
-    },
-    {
-      id: "REC-LIVE-02",
-      donor_facility_id: "CHC-UNA-09",
-      recipient_facility_id: "CHC-LKO-06",
-      donor_facility_name: "CHC Nawabganj",
-      recipient_facility_name: "CHC Sarojini Nagar",
-      medicine_name: "Oral Rehydration Salts (ORS WHO Formula)",
-      units_to_transfer: 120,
-      distance_km: 26.5,
-      vehicle_id: "UP-35-AH-2041"
-    },
-    {
-      id: "REC-LIVE-03",
-      donor_facility_id: "CHC-LKO-04",
-      recipient_facility_id: "PHC-LKO-03",
-      donor_facility_name: "CHC Gosainganj",
-      recipient_facility_name: "PHC Mohanlalganj",
-      medicine_name: "Amoxicillin + Clavulanate 625mg",
-      units_to_transfer: 50,
-      distance_km: 18.0,
-      vehicle_id: "UP-32-BG-9014"
-    }
-  ];
-
-  const defaultBbsTransfers = [
-    {
-      id: "REC-LIVE-BBS-01",
-      donor_facility_id: "CHC-CTC-01",
-      recipient_facility_id: "PHC-BBS-01",
-      donor_facility_name: "CHC Choudwar",
-      recipient_facility_name: "PHC Mendhasal",
-      medicine_name: "Salbutamol Respirator Solution (Respules 2.5mg)",
-      units_to_transfer: 35,
-      distance_km: 24.5,
-      vehicle_id: "OD-02-AX-3190"
-    },
-    {
-      id: "REC-LIVE-BBS-02",
-      donor_facility_id: "CHC-CTC-03",
-      recipient_facility_id: "PHC-BBS-03",
-      donor_facility_name: "CHC Athagarh",
-      recipient_facility_name: "PHC Jatni",
-      medicine_name: "Oral Rehydration Salts (ORS WHO Formula)",
-      units_to_transfer: 140,
-      distance_km: 28.2,
-      vehicle_id: "OD-05-BG-7741"
-    }
-  ];
-
-  const baseTransfers = activeRecs.length > 0 ? activeRecs : (currentRegion === 'bhubaneswar' ? defaultBbsTransfers : defaultLkoTransfers);
-
-  baseTransfers.forEach((rec, idx) => {
-    const donor = facilities.find(f => f.id === rec.donor_facility_id);
-    const recip = facilities.find(f => f.id === rec.recipient_facility_id);
+  dispatched.forEach((c, idx) => {
+    const donor = facilities.find(f => f.id === c.donor_facility_id);
+    const recip = facilities.find(f => f.id === c.recipient_facility_id);
     if (!donor || !recip) return;
 
-    const initialProgress = (0.22 + idx * 0.32) % 0.9;
-    const currentLat = donor.lat + (recip.lat - donor.lat) * initialProgress;
-    const currentLng = donor.lng + (recip.lng - donor.lng) * initialProgress;
-
-    const defaultPlatePrefix = currentRegion === 'bhubaneswar' ? 'OD-02-BB' : 'UP-32-BG';
-    const vehicleId = rec.vehicle_id || `${defaultPlatePrefix}-${3200 + idx * 142}`;
-    const medicineShort = rec.medicine_name.split('(')[0];
+    const progress = (0.22 + idx * 0.32) % 0.9;
+    const courier = {
+      id: c.id,
+      challanId: c.challan_id,
+      vehicleId: c.vehicle_number || 'Vehicle n/a',
+      donor,
+      recip,
+      units: c.units_dispatched,
+      medicine: (c.medicine_name || '').split('(')[0],
+      progress,
+      marker: null
+    };
 
     const vanIcon = L.divIcon({
       className: 'courier-van-marker',
       html: `
         <div class="flex items-center space-x-1.5 bg-slate-950 text-white font-black text-xs px-3 py-1 rounded-full shadow-xl border border-emerald-400 cursor-pointer hover:scale-105 transition">
           <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
-          <span>🚑 ${vehicleId}</span>
+          <span>🚑 ${escapeHtml(courier.vehicleId)}</span>
         </div>
       `,
       iconSize: [135, 28],
       iconAnchor: [67, 14]
     });
 
-    const marker = L.marker([currentLat, currentLng], { icon: vanIcon }).addTo(courierMarkersLayer);
-
-    marker.bindPopup(`
-      <div class="p-1.5 font-sans text-xs sm:text-sm space-y-1.5">
-        <div class="flex items-center justify-between pb-1.5 border-b border-slate-200">
-          <span class="font-black text-slate-900 text-sm">🚑 ${vehicleId}</span>
-          <span class="bg-emerald-100 text-emerald-800 text-xs font-black px-2.5 py-0.5 rounded-full">TRANSIT ACTIVE</span>
-        </div>
-        <div class="text-slate-600 text-xs space-y-1 font-medium">
-          <div>Donor: <strong class="text-slate-900">${donor.name}</strong></div>
-          <div>Destination: <strong class="text-[#DE6B48]">${recip.name}</strong></div>
-          <div>Cargo: <strong class="text-slate-900">${rec.units_to_transfer} Units</strong> (${medicineShort})</div>
-          <div>Transit: <strong class="text-slate-900">${Math.round(initialProgress * 100)}% Complete</strong> &bull; ETA ${Math.max(4, Math.round((1 - initialProgress) * 25))} mins</div>
-          <div class="text-emerald-700 text-xs font-bold pt-0.5">Green Corridor Logistics Active &bull; Cold Chain: 4.2°C</div>
-        </div>
-      </div>
-    `);
-
-    activeCouriers.push({
-      id: rec.id,
-      vehicleId,
-      donor,
-      recip,
-      units: rec.units_to_transfer,
-      medicine: medicineShort,
-      progress: initialProgress,
-      marker
-    });
+    courier.marker = L.marker([donor.lat + (recip.lat - donor.lat) * progress, donor.lng + (recip.lng - donor.lng) * progress], { icon: vanIcon }).addTo(courierMarkersLayer);
+    courier.marker.bindPopup(courierPopupHtml(courier));
+    activeCouriers.push(courier);
   });
 
   const hudCouriers = document.getElementById('hudCouriers');
   if (hudCouriers) {
-    hudCouriers.textContent = `${activeCouriers.length} Active Fleet Units`;
+    const pending = activeRecs.filter(r => r.status === 'PENDING_APPROVAL').length;
+    hudCouriers.textContent = `${activeCouriers.length} dispatched · ${pending} pending`;
   }
 }
 
@@ -882,7 +867,7 @@ function startCourierAnimationLoop() {
 }
 
 function simulateCourierTransitStep(userTriggered = true) {
-  if (!activeCouriers || activeCouriers.length === 0) return;
+  if (!userTriggered && activeCouriers.length === 0) return;
 
   activeCouriers.forEach(c => {
     c.progress += 0.04;
@@ -895,28 +880,14 @@ function simulateCourierTransitStep(userTriggered = true) {
 
     if (c.marker) {
       c.marker.setLatLng([curLat, curLng]);
-      c.marker.setPopupContent(`
-        <div class="p-1.5 font-sans text-xs sm:text-sm space-y-1.5">
-          <div class="flex items-center justify-between pb-1.5 border-b border-slate-200">
-            <span class="font-black text-slate-900 text-sm">🚑 ${c.vehicleId}</span>
-            <span class="bg-emerald-100 text-emerald-800 text-xs font-black px-2.5 py-0.5 rounded-full">TRANSIT ACTIVE</span>
-          </div>
-          <div class="text-slate-600 text-xs space-y-1 font-medium">
-            <div>Donor: <strong class="text-slate-900">${c.donor.name}</strong></div>
-            <div>Destination: <strong class="text-[#DE6B48]">${c.recip.name}</strong></div>
-            <div>Cargo: <strong class="text-slate-900">${c.units} Units</strong> (${c.medicine})</div>
-            <div>Transit: <strong class="text-slate-900">${Math.round(c.progress * 100)}% Complete</strong> &bull; ETA ${Math.max(3, Math.round((1 - c.progress) * 25))} mins</div>
-            <div class="text-emerald-700 text-xs font-bold pt-0.5">Green Corridor Logistics Active &bull; Cold Chain: 4.2°C</div>
-          </div>
-        </div>
-      `);
+      c.marker.setPopupContent(courierPopupHtml(c));
     }
   });
 
   if (userTriggered) {
     const toast = document.createElement('div');
     toast.className = 'fixed bottom-6 right-6 bg-slate-950 text-white text-xs px-4 py-2.5 rounded-2xl shadow-2xl border border-emerald-400 z-50 transition transform flex items-center space-x-2 animate-bounce';
-    toast.innerHTML = '<span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span><span>GPS Pulse: All active couriers advanced +4% along priority corridor</span>';
+    toast.innerHTML = activeCouriers.length ? '<span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span><span>Simulated step: dispatched vans moved along their routes (no GPS feed)</span>' : '<span>No dispatched consignments in transit right now</span>';
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 2600);
   }
@@ -1000,7 +971,7 @@ function renderRecommendations(searchQuery = '') {
     card.className = `bg-white border ${rec.status === 'APPROVED' ? 'border-emerald-300 bg-emerald-50/40' : 'border-clay-salmon/30'} rounded-2xl p-4 sm:p-5 flex flex-col justify-between space-y-3 shadow-sm transition hover:shadow-md`;
 
     const statusBadge = rec.status === 'APPROVED'
-      ? `<span class="bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs px-3 py-1 rounded-full font-black">APPROVED &amp; DISPATCHED</span>`
+      ? `<span class="bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs px-3 py-1 rounded-full font-black">APPROVED &bull; STOCK RESERVED</span>`
       : `<span class="bg-[#FFF1EB] text-clay-terracotta border border-clay-salmon/40 text-xs px-3 py-1 rounded-full font-black">AWAITING CMO SIGN-OFF</span>`;
 
     const expiryBadge = rec.expiry_waste_prevented
@@ -1010,14 +981,14 @@ function renderRecommendations(searchQuery = '') {
     card.innerHTML = `
       <div>
         <div class="flex items-center justify-between">
-          <span class="text-xs font-mono text-clay-muted font-bold">${rec.id}</span>
+          <span class="text-xs font-mono text-clay-muted font-bold">${escapeHtml(rec.id)}</span>
           ${statusBadge}
         </div>
 
         <div class="mt-2.5 flex items-center justify-between bg-clay-inner p-3 rounded-xl border border-clay-salmon/20">
           <div>
             <span class="text-[10px] text-clay-muted uppercase font-extrabold tracking-wider block">Donor (Surplus)</span>
-            <strong class="text-sm font-black text-clay-dark">${rec.donor_facility_name}</strong>
+            <strong class="text-sm font-black text-clay-dark">${escapeHtml(rec.donor_facility_name)}</strong>
           </div>
           <div class="text-clay-muted text-xs px-2 flex flex-col items-center">
             <span>&rarr;</span>
@@ -1025,13 +996,13 @@ function renderRecommendations(searchQuery = '') {
           </div>
           <div class="text-right">
             <span class="text-[10px] text-clay-muted uppercase font-extrabold tracking-wider block">Recipient (Deficit)</span>
-            <strong class="text-sm font-black text-red-600">${rec.recipient_facility_name}</strong>
+            <strong class="text-sm font-black text-red-600">${escapeHtml(rec.recipient_facility_name)}</strong>
           </div>
         </div>
 
         <div class="mt-2.5">
           <div class="flex justify-between items-center text-sm">
-            <span class="font-black text-clay-dark sm:text-base">${rec.medicine_name.split('(')[0]}</span>
+            <span class="font-black text-clay-dark sm:text-base">${escapeHtml(rec.medicine_name.split('(')[0])}</span>
             <span class="font-black text-clay-terracotta text-base sm:text-lg">${rec.units_to_transfer} Units</span>
           </div>
           <div class="text-xs sm:text-sm text-clay-muted mt-0.5 font-medium">
@@ -1046,8 +1017,8 @@ function renderRecommendations(searchQuery = '') {
 
       <div class="pt-2.5 border-t border-clay-salmon/20">
         ${rec.status === 'APPROVED' 
-          ? `<button onclick="showChallanModal('${rec.id}')" class="w-full bg-clay-inner hover:bg-clay-bg text-clay-dark text-xs sm:text-sm py-2.5 rounded-full font-bold border border-clay-salmon/30 transition cursor-pointer">View Official Challan</button>`
-          : `<button onclick="approveTransfer('${rec.id}')" class="w-full bg-clay-terracotta hover:bg-clay-terracottaDark text-white text-xs sm:text-sm py-2.5 rounded-full font-black shadow-clay-btn transition cursor-pointer">Approve &amp; Dispatch</button>`
+          ? `<button onclick="showChallanModal('${safeId(rec.id)}')" class="w-full bg-clay-inner hover:bg-clay-bg text-clay-dark text-xs sm:text-sm py-2.5 rounded-full font-bold border border-clay-salmon/30 transition cursor-pointer">View Official Challan</button>`
+          : `<button onclick="approveTransfer('${safeId(rec.id)}')" class="w-full bg-clay-terracotta hover:bg-clay-terracottaDark text-white text-xs sm:text-sm py-2.5 rounded-full font-black shadow-clay-btn transition cursor-pointer">Approve &amp; Reserve Stock</button>`
         }
       </div>
     `;
@@ -1056,77 +1027,87 @@ function renderRecommendations(searchQuery = '') {
   });
 }
 
+let approvingRecId = null;
+
 async function approveTransfer(recId) {
+  if (approvingRecId === recId) return;  // ignore a double click while the first request is in flight
+  approvingRecId = recId;
   try {
     const res = await fetch('/api/approve-transfer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         recommendation_id: recId,
-        officer_name: "Dr. S. K. Saxena (Chief Medical Officer, District Health Society)",
+        officer_name: "Demo CMO (District Health Society)",
         comments: "Approved for immediate district ambulance/van courier transfer under Climate Surge Protocol."
       })
     });
 
-    const data = await res.json();
     if (res.ok) {
+      const data = await res.json();
       await loadInitialData();
       showChallanModal(recId, data);
     } else {
-      alert("Transfer approval failed: " + (data.detail || "Server error"));
+      alert("Transfer approval failed: " + await apiErrorMessage(res, "Server error"));
     }
   } catch (err) {
     console.error(err);
     alert("Network error while approving transfer");
+  } finally {
+    approvingRecId = null;
   }
 }
 
 function showChallanModal(recId, approvalData = null) {
-  let rec = activeRecs ? activeRecs.find(r => r.id === recId) : null;
-  let consignment = null;
-
-  if (activeClinicDeskData) {
-    if (activeClinicDeskData.inbound_consignments) {
-      consignment = activeClinicDeskData.inbound_consignments.find(c => c.id === recId || c.challan_id === recId);
-    }
-    if (!consignment && activeClinicDeskData.outbound_consignments) {
-      consignment = activeClinicDeskData.outbound_consignments.find(c => c.id === recId || c.challan_id === recId);
-    }
+  const rec = activeRecs ? activeRecs.find(r => r.id === recId) : null;
+  let consignment = (approvalData && approvalData.consignment) || null;
+  if (!consignment) {
+    const desk = activeClinicDeskData || {};
+    const pool = [...regionConsignments, ...(desk.inbound_consignments || []), ...(desk.outbound_consignments || [])];
+    consignment = pool.find(c => c.recommendation_id === recId || c.id === recId || c.challan_id === recId) || null;
   }
-
-  if (!rec && !consignment && approvalData && approvalData.consignment) {
-    consignment = approvalData.consignment;
-  }
-
   if (!rec && !consignment) return;
 
+  const fmtDate = (iso) => new Date(iso || Date.now()).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const regionId = consignment ? regionForFacility(consignment.donor_facility_id) : currentRegion;
+  const isOdisha = regionId === 'bhubaneswar';
+  document.getElementById('challanStateBadge').textContent = isOdisha ? 'OD' : 'UP';
+  document.getElementById('challanStateTitle').innerHTML = `${isOdisha ? 'Khordha–Cuttack (Odisha)' : 'Lucknow–Unnao (Uttar Pradesh)'} &bull; District Health Society`;
+
+  const hashRow = document.getElementById('modalHashRow');
   if (consignment) {
-    document.getElementById('modalChallanId').textContent = consignment.challan_id || `CHALLAN-UP-20260908-${consignment.id.substring(0, 6)}`;
-    document.getElementById('modalDate').textContent = consignment.approved_at ? 
-      new Date(consignment.approved_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) :
-      new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    document.getElementById('modalChallanId').textContent = consignment.challan_id;
+    document.getElementById('modalDate').textContent = fmtDate(consignment.approved_at);
     document.getElementById('modalDonor').textContent = consignment.donor_facility_name;
     document.getElementById('modalRecipient').textContent = consignment.recipient_facility_name;
     document.getElementById('modalMed').textContent = consignment.medicine_name;
-    document.getElementById('modalUnits').textContent = `${consignment.units_dispatched || consignment.allocated_quantity} Units`;
+    const units = consignment.units_dispatched > 0 ? consignment.units_dispatched : consignment.units_requested;
+    document.getElementById('modalUnits').textContent = `${units} Units${consignment.units_dispatched > 0 ? '' : ' (reserved, not yet dispatched)'}`;
     document.getElementById('modalBatch').textContent = consignment.batch_number;
-    document.getElementById('modalDist').textContent = `${consignment.distance_km || 18.2} km`;
-    document.getElementById('modalRationale').textContent = consignment.condition_notes || consignment.discrepancy_reason || "Emergency Climate-Resilience Transfer Order authorized by CMO.";
-    document.getElementById('modalHash').textContent = consignment.cryptographic_hash || (approvalData ? approvalData.cryptographic_hash : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    document.getElementById('modalDist').textContent = consignment.distance_km != null ? `${consignment.distance_km} km` : 'n/a';
+    document.getElementById('modalRationale').textContent = consignment.condition_notes || consignment.discrepancy_reason || (rec && rec.rationale_en) || 'Inter-facility transfer authorized by the CMO.';
+    const hash = consignment.cryptographic_hash || (approvalData && approvalData.cryptographic_hash);
+    document.getElementById('modalHash').textContent = hash || '';
+    if (hashRow) hashRow.classList.toggle('hidden', !hash);
   } else {
-    document.getElementById('modalChallanId').textContent = approvalData ? approvalData.dispatch_challan_id : `CHALLAN-UP-20260905-${rec.id}`;
-    document.getElementById('modalDate').textContent = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    document.getElementById('modalChallanId').textContent = 'Not issued yet (awaiting approval)';
+    document.getElementById('modalDate').textContent = fmtDate();
     document.getElementById('modalDonor').textContent = rec.donor_facility_name;
     document.getElementById('modalRecipient').textContent = rec.recipient_facility_name;
     document.getElementById('modalMed').textContent = rec.medicine_name;
     document.getElementById('modalUnits').textContent = `${rec.units_to_transfer} Units`;
-    document.getElementById('modalBatch').textContent = rec.batch_number;
+    document.getElementById('modalBatch').textContent = rec.batch_number || 'n/a';
     document.getElementById('modalDist').textContent = `${rec.distance_km} km`;
     document.getElementById('modalRationale').textContent = rec.rationale_en;
-    document.getElementById('modalHash').textContent = approvalData ? approvalData.cryptographic_hash : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    document.getElementById('modalHash').textContent = '';
+    if (hashRow) hashRow.classList.add('hidden');
   }
 
   document.getElementById('challanModal').classList.remove('hidden');
+}
+
+function regionForFacility(facId) {
+  return /BBS|CTC|OD/.test(String(facId || '')) ? 'bhubaneswar' : 'lucknow';
 }
 
 function closeModal() {
@@ -1136,6 +1117,7 @@ function closeModal() {
 async function fetchAuditLog() {
   try {
     const res = await fetch('/api/audit-log');
+    if (!res.ok) throw new Error(`audit log HTTP ${res.status}`);
     allLogs = await res.json();
 
     const tbody = document.getElementById('auditTableBody');
@@ -1146,16 +1128,16 @@ async function fetchAuditLog() {
       const tr = document.createElement('tr');
       tr.className = 'hover:bg-clay-inner/80 transition';
 
-      let detailsPreview = JSON.stringify(e.details);
+      let detailsPreview = JSON.stringify(e.details) || '';
       if (detailsPreview.length > 60) detailsPreview = detailsPreview.substring(0, 60) + '...';
 
       tr.innerHTML = `
-        <td class="py-3 px-3.5 text-clay-muted font-mono font-bold text-xs sm:text-sm">#${e.index}</td>
-        <td class="py-3 px-3.5 text-clay-dark font-semibold text-xs sm:text-sm">${e.timestamp.substring(11, 19)}</td>
-        <td class="py-3 px-3.5 font-bold text-clay-terracotta text-xs sm:text-sm">${e.event_type}</td>
-        <td class="py-3 px-3.5 text-clay-dark font-medium text-xs sm:text-sm">${e.approved_by}</td>
-        <td class="py-3 px-3.5 text-clay-muted font-mono text-xs sm:text-sm" title='${JSON.stringify(e.details)}'>${detailsPreview}</td>
-        <td class="py-3 px-3.5 text-slate-500 font-mono text-xs font-semibold">${e.current_hash.substring(0, 16)}...</td>
+        <td class="py-3 px-3.5 text-clay-muted font-mono font-bold text-xs sm:text-sm">#${escapeHtml(e.index)}</td>
+        <td class="py-3 px-3.5 text-clay-dark font-semibold text-xs sm:text-sm">${escapeHtml(String(e.timestamp || '').substring(11, 19))}</td>
+        <td class="py-3 px-3.5 font-bold text-clay-terracotta text-xs sm:text-sm">${escapeHtml(e.event_type)}</td>
+        <td class="py-3 px-3.5 text-clay-dark font-medium text-xs sm:text-sm">${escapeHtml(e.approved_by)}</td>
+        <td class="py-3 px-3.5 text-clay-muted font-mono text-xs sm:text-sm" title="${escapeHtml(JSON.stringify(e.details))}">${escapeHtml(detailsPreview)}</td>
+        <td class="py-3 px-3.5 text-slate-500 font-mono text-xs font-semibold">${escapeHtml(String(e.current_hash || '').substring(0, 16))}...</td>
       `;
       tbody.appendChild(tr);
     });
@@ -1171,22 +1153,24 @@ async function verifyAuditLedgerLive() {
   }
   try {
     const res = await fetch('/api/audit-log/verify');
+    if (!res.ok) throw new Error(await apiErrorMessage(res, 'Verification request failed'));
     const result = await res.json();
     if (result.valid) {
       if (statusEl) {
         statusEl.innerHTML = `
           <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-          <span class="text-emerald-700 font-extrabold">Chain Certified (100% Intact) &bull; ${result.total_blocks} Blocks &bull; Head: <code class="font-mono text-emerald-900 bg-emerald-100 px-1 py-0.5 rounded">${result.head_hash ? result.head_hash.substring(0, 10) + '...' : 'Genesis'}</code></span>
+          <span class="text-emerald-700 font-extrabold">Chain Verified (Intact) &bull; ${escapeHtml(result.total_blocks)} Blocks &bull; Head: <code class="font-mono text-emerald-900 bg-emerald-100 px-1 py-0.5 rounded">${result.head_hash ? escapeHtml(result.head_hash.substring(0, 10)) + '...' : 'Genesis'}</code></span>
         `;
       }
     } else {
       if (statusEl) {
-        statusEl.innerHTML = `<span class="text-red-600 font-bold">⚠️ Tampering Detected: ${result.error}</span>`;
+        statusEl.innerHTML = `<span class="text-red-600 font-bold">⚠️ Tampering Detected: ${escapeHtml(result.error)}</span>`;
       }
     }
     if (window.lucide) lucide.createIcons();
   } catch (err) {
     console.error("verifyAuditLedgerLive error:", err);
+    if (statusEl) statusEl.innerHTML = `<span class="text-red-600 font-bold">Could not verify the ledger: ${escapeHtml(err.message || 'network error')}</span>`;
   }
 }
 
@@ -1202,23 +1186,41 @@ function showWaveformBriefly(ms = 2400) {
   }
 }
 
+// Sample field reports per region, so the facility always exists in the region's dropdown
+const VOICE_SAMPLES = {
+  lucknow: [
+    { label: '🔴 "Kakori: 15 Salbutamol respules..."', facility: 'PHC-LKO-01',
+      text: "This is PHC Kakori reporting. We only have 15 respules of Salbutamol left and treated 40 acute respiratory patients yesterday." },
+    { label: '🟡 "Sarojini Nagar: 120 ORS sachets..."', facility: 'CHC-LKO-06',
+      text: "Sarojini Nagar CHC reporting: 120 packets of ORS oral rehydration salt remain, with 35 new acute dehydration cases." },
+    { label: '🟢 Hindi: "इटौंजा: पैरासिटामोल 12..."', facility: 'PHC-LKO-08',
+      text: "PHC इटौंजा से रिपोर्ट: पैरासिटामोल के सिर्फ 12 बोतल बचे हैं, कल 30 बच्चों को बुखार की दवा दी।" }
+  ],
+  bhubaneswar: [
+    { label: '🔴 "Jatni: 60 ORS packets..."', facility: 'CHC-BBS-03',
+      text: "This is CHC Jatni reporting. Only 60 ORS packets are left and we treated 25 dehydration cases yesterday." },
+    { label: '🟡 Hinglish: "Unit-6: Salbutamol 20..."', facility: 'CHC-BBS-02',
+      text: "Capital Hospital Unit-6 se report: Salbutamol respules sirf 20 bache hain, kal 35 asthma patients aaye the." },
+    { label: '🟢 Odia: "Mendhasal ୧୮ Salbutamol..."', facility: 'PHC-BBS-01',
+      text: "ଏହା PHC Mendhasal ରିପୋର୍ଟ। ଆମ ପାଖରେ ମାତ୍ର ୧୮ ଟି ସାଲବୁଟାମଲ୍ (Salbutamol) ବାକି ଅଛି ଏବଂ ଗତକାଲି ୪୨ ଜଣ ଶ୍ୱାସରୋଗୀଙ୍କୁ ଚିକିତ୍ସା କରିଛୁ।" }
+  ]
+};
+
+function renderVoiceSamples() {
+  (VOICE_SAMPLES[currentRegion] || []).forEach((sample, i) => {
+    const btn = document.getElementById(`voiceSample${i + 1}`);
+    if (btn) btn.textContent = sample.label;
+  });
+}
+
 function loadSampleVoice(idx) {
+  const sample = (VOICE_SAMPLES[currentRegion] || [])[idx - 1];
+  if (!sample) return;
   showWaveformBriefly(2500);
   const txt = document.getElementById('voiceTranscript');
   const facSelect = document.getElementById('voiceFacilitySelect');
-  if (idx === 1) {
-    txt.value = "This is PHC Kakori reporting. We only have 15 respules of Salbutamol left and treated 40 acute respiratory patients yesterday.";
-    if (facSelect) facSelect.value = "PHC-LKO-01";
-  } else if (idx === 2) {
-    txt.value = "Sarojini Nagar CHC reporting: 120 packets of ORS oral rehydration salt remain, with 35 new acute dehydration cases.";
-    if (facSelect) facSelect.value = "CHC-LKO-06";
-  } else if (idx === 3) {
-    txt.value = "PHC Itaunja reporting: Paracetamol syrup stock is depleted, urgently require 50 bottles for pediatric cases.";
-    if (facSelect) facSelect.value = "PHC-LKO-08";
-  } else if (idx === 4) {
-    txt.value = "ଏହା PHC Mendhasal ରିପୋର୍ଟ। ଆମ ପାଖରେ ମାତ୍ର ୧୮ ଟି ସାଲବୁଟାମଲ୍ (Salbutamol) ବାକି ଅଛି ଏବଂ ଗତକାଲି ୪୨ ଜଣ ଶ୍ୱାସରୋଗୀଙ୍କୁ ଚିକିତ୍ସା କରିଛୁ।";
-    if (facSelect) facSelect.value = "PHC-BBS-01";
-  }
+  if (txt) txt.value = sample.text;
+  if (facSelect) facSelect.value = sample.facility;
 }
 
 async function submitVoiceIntake() {
@@ -1238,7 +1240,7 @@ async function submitVoiceIntake() {
   const facId = facSelect ? (facSelect.value || null) : null;
   const btn = document.getElementById('btnSubmitVoice');
   btn.disabled = true;
-  btn.innerHTML = `<span>Processing Audio with Gemini 3.8 Flash / EDL Grounding...</span>`;
+  btn.innerHTML = `<span>Parsing report...</span>`;
 
   try {
     const res = await fetch('/api/voice-intake', {
@@ -1251,9 +1253,13 @@ async function submitVoiceIntake() {
       })
     });
 
-    const result = await res.json();
     btn.disabled = false;
     btn.innerHTML = `<span>Process &amp; Commit Record</span>`;
+    if (!res.ok) {
+      alert("Could not process the report: " + await apiErrorMessage(res, "Server error"));
+      return;
+    }
+    const result = await res.json();
 
     const box = document.getElementById('voiceResultBox');
     if (box) box.classList.remove('hidden');
@@ -1273,22 +1279,31 @@ async function submitVoiceIntake() {
     }
 
     const conf = document.getElementById('voiceConfidence');
-    if (conf) conf.textContent = `Confidence: ${Math.round(result.confidence_score * 100)}%`;
+    if (conf) {
+      const parser = { gemini: 'Gemini 3.8 Flash', claude: 'Claude Haiku 5.5 (fallback)', heuristic: 'Offline keyword parser' }[result.parsed_by] || '';
+      conf.textContent = `Confidence: ${Math.round((Number(result.confidence_score) || 0) * 100)}%${parser ? ` · ${parser}` : ''}`;
+    }
     const facNameEl = document.getElementById('voiceFacName');
     if (facNameEl) facNameEl.textContent = result.facility_name;
     const medNameEl = document.getElementById('voiceMedName');
     if (medNameEl) medNameEl.textContent = result.medicine_name;
     const stockEl = document.getElementById('voiceStockQty');
-    if (stockEl) stockEl.textContent = `${result.reported_stock} units`;
+    if (stockEl) stockEl.textContent = result.reported_stock != null ? `${result.reported_stock} units` : 'Not stated';
     const dispEl = document.getElementById('voiceDispQty');
-    if (dispEl) dispEl.textContent = result.dispensed_yesterday !== null ? `${result.dispensed_yesterday} units` : 'N/A';
+    if (dispEl) dispEl.textContent = result.dispensed_yesterday != null ? `${result.dispensed_yesterday} units` : 'N/A';
     const edlEl = document.getElementById('voiceEdlCode');
-    if (edlEl) edlEl.textContent = `${result.medicine_code || result.medicine_id} (${result.edl_category ? 'Verified Grounding' : 'EDL-UP-2026'})`;
+    if (edlEl) {
+      const verified = !result.anomaly_flag && Number(result.confidence_score) >= 0.75;
+      edlEl.textContent = `${result.medicine_code || result.medicine_id} (${verified ? 'Verified Grounding' : 'Needs review'})`;
+    }
     const formEl = document.getElementById('voiceFormStrength');
     if (formEl) formEl.textContent = `${result.dosage_form || 'Standard Form'} • ${result.strength || ''}`;
     const actionEl = document.getElementById('voiceActionText');
     if (actionEl) {
-      actionEl.textContent = result.anomaly_flag || result.action_taken;
+      const actionText = {
+        DRAFT_CREATED_AWAITING_CONFIRMATION: 'Draft stock report created. A pharmacist must confirm the count on the Clinic Desk before the register changes.'
+      };
+      actionEl.textContent = result.anomaly_flag || actionText[result.action_taken] || result.action_taken || '';
       if (result.is_draft) {
         actionEl.innerHTML += `
           <div class="mt-2 pt-2 border-t border-emerald-200 flex items-center justify-between">
@@ -1307,7 +1322,7 @@ async function submitVoiceIntake() {
     console.error(err);
     btn.disabled = false;
     btn.innerHTML = `<span>Process &amp; Commit Record</span>`;
-    alert("Error processing voice intake");
+    alert("Network error while processing the report");
   } finally {
     if (wave) {
       wave.classList.add('hidden');
@@ -1317,19 +1332,27 @@ async function submitVoiceIntake() {
 }
 
 const VOICE_MAX_SECONDS = 30;
+// idle -> starting (waiting for mic permission) -> recording -> transcribing -> idle; 'browser' while the fallback recogniser listens
+let voiceState = 'idle';
 let voiceRecorder = null;
 
-function setVoiceRecordingUi(active, placeholder) {
+function setVoiceUi(state, label) {
+  voiceState = state;
   const micBtn = document.getElementById('btnMic');
   const wave = document.getElementById('voiceWaveform');
-  const txt = document.getElementById('voiceTranscript');
-  if (micBtn) micBtn.classList.toggle('bg-red-600', active);
-  if (micBtn) micBtn.classList.toggle('text-white', active);
-  if (wave) {
-    wave.classList.toggle('hidden', !active);
-    wave.classList.toggle('flex', active);
+  const waveLabel = document.getElementById('voiceWaveLabel');
+  const busy = state !== 'idle';
+  if (micBtn) {
+    const live = state === 'recording' || state === 'browser';
+    micBtn.classList.toggle('bg-red-600', live);
+    micBtn.classList.toggle('text-white', live);
+    micBtn.classList.toggle('opacity-50', state === 'starting' || state === 'transcribing');
   }
-  if (txt && placeholder) txt.placeholder = placeholder;
+  if (wave) {
+    wave.classList.toggle('hidden', !busy);
+    wave.classList.toggle('flex', busy);
+  }
+  if (waveLabel) waveLabel.textContent = label || 'Audio Input Active';
 }
 
 // Gemini rejects the Opus/WebM audio MediaRecorder produces, so re-encode as 16 kHz mono 16-bit WAV
@@ -1360,9 +1383,20 @@ async function blobToWav(blob) {
 
 async function transcribeVoiceNote(blob) {
   const txt = document.getElementById('voiceTranscript');
-  setVoiceRecordingUi(false, 'Transcribing with Gemini...');
+  setVoiceUi('transcribing', 'Transcribing with Gemini...');
+  let wav;
   try {
-    const wav = await blobToWav(blob);
+    wav = blob.size ? await blobToWav(blob) : null;
+  } catch (err) {
+    wav = null;
+  }
+  // under 1 s of audio: treat as an accidental tap (models invent text for near-empty clips)
+  if (!wav || wav.size < 44 + 16000 * 2 * 1.0) {
+    setVoiceUi('idle');
+    if (txt) txt.placeholder = 'Recording too short. Tap the mic, speak, then tap again to stop.';
+    return;
+  }
+  try {
     const dataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
@@ -1375,40 +1409,64 @@ async function transcribeVoiceNote(blob) {
       body: JSON.stringify({ audio_base64: dataUrl, mime_type: 'audio/wav' })
     });
     const data = await res.json().catch(() => ({}));
+    setVoiceUi('idle');
+    if (res.status === 503) {
+      // Gemini unavailable: the browser's own recogniser is the remaining option, so ask for a repeat
+      alert('Gemini transcription is unavailable right now. Switching to the browser\'s speech recognition: please speak again.');
+      recordWithBrowserSpeech();
+      return;
+    }
     if (!res.ok) throw new Error(data.detail || `Transcription failed (${res.status})`);
     if (!data.is_speech) {
       if (txt) txt.placeholder = 'No speech detected. Tap the mic and try again.';
       return;
     }
     if (txt) {
-      txt.value = data.transcript;
-      txt.placeholder = '';
+      // add to what the worker already typed instead of overwriting it
+      const existing = txt.value.trim();
+      txt.value = existing ? `${existing}\n${data.transcript}` : data.transcript;
     }
   } catch (err) {
     console.error('transcribeVoiceNote error:', err);
+    setVoiceUi('idle');
     if (txt) txt.placeholder = 'Transcription failed. Type the report or try again.';
     alert(err.message || 'Transcription failed');
   }
 }
 
 async function recordVoiceNote() {
-  if (voiceRecorder && voiceRecorder.state === 'recording') {
+  if (voiceState === 'recording') {
     voiceRecorder.stop();
     return;
   }
+  if (voiceState === 'browser') {
+    if (voiceRecognition) voiceRecognition.stop();
+    return;
+  }
+  if (voiceState !== 'idle') return;  // waiting for mic permission or a transcription
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder || !window.OfflineAudioContext) {
     recordWithBrowserSpeech();
     return;
   }
+  setVoiceUi('starting', 'Waiting for microphone...');
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (err) {
+    setVoiceUi('idle');
     alert('Microphone access was blocked. Allow the microphone or type the report.');
     return;
   }
   const chunks = [];
-  const recorder = new MediaRecorder(stream);
+  let recorder;
+  try {
+    recorder = new MediaRecorder(stream);
+  } catch (err) {
+    stream.getTracks().forEach(t => t.stop());
+    setVoiceUi('idle');
+    recordWithBrowserSpeech();
+    return;
+  }
   voiceRecorder = recorder;
   const stopTimer = setTimeout(() => recorder.state === 'recording' && recorder.stop(), VOICE_MAX_SECONDS * 1000);
   recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
@@ -1419,83 +1477,74 @@ async function recordVoiceNote() {
     transcribeVoiceNote(new Blob(chunks, { type: recorder.mimeType }));
   };
   recorder.start();
-  setVoiceRecordingUi(true, `Recording (English, Hindi or Odia)... tap the mic again to stop (max ${VOICE_MAX_SECONDS} s)`);
+  setVoiceUi('recording', `Recording (English, Hindi or Odia): tap the mic again to stop (max ${VOICE_MAX_SECONDS} s)`);
 }
 
+let voiceRecognition = null;
+
+// Fallback where audio recording is unsupported or Gemini transcription is unavailable
 function recordWithBrowserSpeech() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
     alert("Voice recording is not available in this browser. Please type the report or use a sample scenario button.");
     return;
   }
+  if (voiceState !== 'idle') return;
 
   const recognition = new SpeechRecognition();
-  recognition.lang = 'en-US';
+  recognition.lang = 'en-IN';  // Indian English; browser recognisers take one language per session
   recognition.interimResults = false;
-
-  const micBtn = document.getElementById('btnMic');
-  const wave = document.getElementById('voiceWaveform');
-  if (micBtn) micBtn.classList.add('bg-red-600', 'text-white');
-
-  recognition.onstart = () => {
-    const txt = document.getElementById('voiceTranscript');
-    if (txt) txt.placeholder = "Listening in English (speak now)...";
-    if (wave) {
-      wave.classList.remove('hidden');
-      wave.classList.add('flex');
-    }
-  };
+  voiceRecognition = recognition;
+  setVoiceUi('browser', 'Listening (browser speech recognition, Indian English): tap the mic to stop');
 
   recognition.onresult = (event) => {
     const transcript = event.results[0][0].transcript;
     const txt = document.getElementById('voiceTranscript');
-    if (txt) txt.value = transcript;
-    if (micBtn) micBtn.classList.remove('bg-red-600', 'text-white');
-    if (wave) {
-      wave.classList.add('hidden');
-      wave.classList.remove('flex');
+    if (txt) {
+      const existing = txt.value.trim();
+      txt.value = existing ? `${existing}\n${transcript}` : transcript;
     }
   };
-
-  recognition.onerror = () => {
-    if (micBtn) micBtn.classList.remove('bg-red-600', 'text-white');
-    if (wave) {
-      wave.classList.add('hidden');
-      wave.classList.remove('flex');
-    }
+  recognition.onerror = (event) => {
+    if (event.error === 'not-allowed') alert('Microphone access was blocked. Allow the microphone or type the report.');
+  };
+  // onend fires after a result, an error or silence, so it is the one place to reset the UI
+  recognition.onend = () => {
+    voiceRecognition = null;
+    setVoiceUi('idle');
   };
 
-  recognition.start();
+  try {
+    recognition.start();
+  } catch (err) {
+    voiceRecognition = null;
+    setVoiceUi('idle');
+  }
 }
 
 async function switchScenario(type) {
   let envData = {};
-  const activeClass = 'px-4 py-2 rounded-full font-bold text-xs bg-clay-terracotta text-white shadow-clay-btn transition';
-  const inactiveClass = 'px-4 py-2 rounded-full font-bold text-xs text-clay-muted hover:text-clay-dark hover:bg-white transition';
-
-  const btnLive = document.getElementById('scenarioLive');
-  const btnSmog = document.getElementById('scenarioSmog');
-  const btnHeat = document.getElementById('scenarioHeat');
-  const btnNormal = document.getElementById('scenarioNormal');
+  highlightScenarioButton(type);
 
   if (type === 'live') {
-    if (btnLive) btnLive.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-emerald-600 text-white shadow-clay-btn transition flex items-center space-x-1.5 cursor-pointer';
-    if (btnSmog) btnSmog.className = inactiveClass;
-    if (btnHeat) btnHeat.className = inactiveClass;
-    if (btnNormal) btnNormal.className = inactiveClass;
 
     try {
-      await fetch(`/api/environmental/live/activate?region=${encodeURIComponent(currentRegion)}`, {
+      const res = await fetch(`/api/environmental/live/activate?region=${encodeURIComponent(currentRegion)}`, {
         method: 'POST'
       });
+      if (!res.ok) throw new Error(await apiErrorMessage(res, 'Live telemetry activation failed'));
+      const data = await res.json();
+      if (data.status === 'live_feed_unavailable' || data.is_live === false) {
+        alert('The live Open-Meteo / CAMS feed is unavailable right now, so the dashboard shows an offline baseline (not live data).');
+      }
     } catch (e) {
-      console.warn("Live telemetry activation fallback:", e);
+      console.warn("Live telemetry activation failed:", e);
+      alert(e.message || 'Live telemetry activation failed');
     }
     await loadInitialData();
     return;
   }
 
-  if (btnLive) btnLive.className = 'px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition flex items-center space-x-1.5 cursor-pointer';
 
   if (type === 'smog') {
     envData = {
@@ -1507,9 +1556,6 @@ async function switchScenario(type) {
       smog_episode: true,
       corridor: currentRegion === 'bhubaneswar' ? "Bhubaneswar–Cuttack Inversion Corridor" : "Lucknow-Unnao Indo-Gangetic Smog Corridor (Severe Inversion)"
     };
-    if (btnSmog) btnSmog.className = activeClass;
-    if (btnHeat) btnHeat.className = inactiveClass;
-    if (btnNormal) btnNormal.className = inactiveClass;
   } else if (type === 'heat') {
     envData = {
       aqi: 140,
@@ -1520,9 +1566,6 @@ async function switchScenario(type) {
       smog_episode: false,
       corridor: currentRegion === 'bhubaneswar' ? "Coastal Odisha Heatwave Corridor (Severe Dehydration Risk)" : "Central Awadh Heatwave Corridor (Severe Dehydration Risk)"
     };
-    if (btnHeat) btnHeat.className = activeClass;
-    if (btnSmog) btnSmog.className = inactiveClass;
-    if (btnNormal) btnNormal.className = inactiveClass;
   } else {
     envData = {
       aqi: 75,
@@ -1533,16 +1576,18 @@ async function switchScenario(type) {
       smog_episode: false,
       corridor: currentRegion === 'bhubaneswar' ? "Bhubaneswar Coastal Baseline Operations" : "Baseline Seasonal Conditions"
     };
-    if (btnNormal) btnNormal.className = activeClass;
-    if (btnSmog) btnSmog.className = inactiveClass;
-    if (btnHeat) btnHeat.className = inactiveClass;
   }
 
-  await fetch(`/api/environmental?region=${encodeURIComponent(currentRegion)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(envData)
-  });
+  try {
+    const res = await fetch(`/api/environmental?region=${encodeURIComponent(currentRegion)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(envData)
+    });
+    if (!res.ok) alert('Could not apply the scenario: ' + await apiErrorMessage(res, 'Server error'));
+  } catch (e) {
+    alert('Network error while applying the scenario');
+  }
 
   await loadInitialData();
 }
@@ -1555,10 +1600,10 @@ function fitMapBounds() {
 }
 
 // Multi-Agent Pipeline Runner
-async function runAgentPipeline(targetFacId = null) {
+async function runAgentPipeline(targetFacId = null, includeFieldReport = true) {
   const btn = document.getElementById('btnRunAgents');
   const term = document.getElementById('agentTerminalBody');
-  const snippet = document.getElementById('voiceTranscript').value.trim() || null;
+  const snippet = includeFieldReport ? (document.getElementById('voiceTranscript').value.trim() || null) : null;
   const facSelect = document.getElementById('voiceFacilitySelect');
   
   const facId = targetFacId || (facSelect && facSelect.value ? facSelect.value : (currentClinicFacilityId || (facilities.length > 0 ? facilities[0].id : (currentRegion === 'bhubaneswar' ? 'PHC-BBS-01' : 'PHC-LKO-01'))));
@@ -1572,6 +1617,7 @@ async function runAgentPipeline(targetFacId = null) {
 
   term.innerHTML = '<div class="text-indigo-400 animate-pulse">// Fetching live telemetry &middot; calling Gemini agents...</div>';
 
+  const startedAt = performance.now();
   try {
     const res = await fetch('/api/agents/run-resilience-pipeline', {
       method: 'POST',
@@ -1582,8 +1628,14 @@ async function runAgentPipeline(targetFacId = null) {
       })
     });
 
+    if (!res.ok) {
+      term.innerHTML = `<div class="text-red-400">// Pipeline failed: ${escapeHtml(await apiErrorMessage(res, 'Server error'))}</div>`;
+      return;
+    }
     const data = await res.json();
     term.innerHTML = '';
+    const latencyEl = document.getElementById('agentLatency');
+    if (latencyEl) latencyEl.textContent = `last run: ${((performance.now() - startedAt) / 1000).toFixed(1)} s`;
 
     const traces = data.traces || [];
     for (let i = 0; i < traces.length; i++) {
@@ -1608,7 +1660,7 @@ async function runAgentPipeline(targetFacId = null) {
 
       stepDiv.className += ` ${agentColor}`;
 
-      let typeBadge = `<span class="px-2 py-0.5 rounded text-xs font-bold border ${badgeColor}">${step.type}</span>`;
+      let typeBadge = `<span class="px-2 py-0.5 rounded text-xs font-bold border ${badgeColor}">${escapeHtml(step.type)}</span>`;
       
       let extraContent = '';
       if (step.type === 'TOOL_CALL') {
@@ -1676,8 +1728,8 @@ async function runAgentPipeline(targetFacId = null) {
 
       stepDiv.innerHTML = `
         <div class="flex items-center space-x-2 text-xs">
-          <span class="text-slate-400 font-mono">${step.timestamp}</span>
-          <strong class="text-white font-bold">${step.agent}</strong>
+          <span class="text-slate-400 font-mono">${escapeHtml(step.timestamp)}</span>
+          <strong class="text-white font-bold">${escapeHtml(step.agent)}</strong>
           ${typeBadge}
         </div>
         <p class="text-slate-200 text-xs sm:text-sm leading-relaxed font-sans">${escapeHtml(step.message)}</p>
@@ -1692,7 +1744,7 @@ async function runAgentPipeline(targetFacId = null) {
     await loadInitialData();
   } catch (err) {
     console.error("Agent pipeline error:", err);
-    term.innerHTML = '<div class="text-red-400">// Error executing Multi-Agent Pipeline</div>';
+    term.innerHTML = '<div class="text-red-400">// Network error while running the agent pipeline. Please try again.</div>';
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -1715,17 +1767,13 @@ function runTransferFor(facId) {
     facSelect.value = facId;
   }
 
-  const voiceTxt = document.getElementById('voiceTranscript');
-  if (voiceTxt && fac) {
-    voiceTxt.value = `${fac.name} Emergency Logistics Dispatch: Critical stockout imminent under climate surge. Immediate inter-facility redistribution requested.`;
-  }
-
   const term = document.getElementById('agentTerminalBody');
   if (term) {
     term.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
-  runAgentPipeline(facId);
+  // Run for this facility's highest-risk item; the typed field report (if any) is left untouched
+  runAgentPipeline(facId, false);
 }
 
 // CMO Conversational Studio
@@ -1748,7 +1796,7 @@ async function submitCmoQuery() {
 
   const box = document.getElementById('cmoResponseBox');
   box.classList.remove('hidden');
-  document.getElementById('cmoAnswerText').innerHTML = '<span class="text-indigo-400 animate-pulse">// Strategic Insight Agent (Gemini 3.8 Flash) evaluating scenario...</span>';
+  document.getElementById('cmoAnswerText').innerHTML = '<span class="text-indigo-400 animate-pulse">// Strategic Insight Agent evaluating scenario...</span>';
   document.getElementById('cmoMetaBox').textContent = '';
 
   try {
@@ -1758,6 +1806,11 @@ async function submitCmoQuery() {
       body: JSON.stringify({ question, region: currentRegion })
     });
 
+    if (!res.ok) {
+      document.getElementById('cmoQueryTypeBadge').textContent = "ERROR";
+      document.getElementById('cmoAnswerText').textContent = await apiErrorMessage(res, "The Strategic Insight Agent could not answer");
+      return;
+    }
     const data = await res.json();
     document.getElementById('cmoQueryTypeBadge').textContent = data.query_type || "INSIGHT READY";
     
@@ -1769,6 +1822,8 @@ async function submitCmoQuery() {
       </div>
     `;
     document.getElementById('cmoAnswerText').innerHTML = answer;
+    const grounding = document.getElementById('cmoGroundingBadge');
+    if (grounding) grounding.textContent = `Grounded via District Inventory Store${data.answered_by ? ` · Answered by ${data.answered_by}` : ''}`;
 
     if (data.recommended_action) {
       document.getElementById('cmoMetaBox').textContent = `Action Protocol: ${data.recommended_action}`;
@@ -1789,7 +1844,8 @@ async function submitCmoQuery() {
     await fetchAuditLog();
   } catch (err) {
     console.error(err);
-    document.getElementById('cmoAnswerText').textContent = "Error communicating with Strategic Insight Agent";
+    document.getElementById('cmoQueryTypeBadge').textContent = "ERROR";
+    document.getElementById('cmoAnswerText').textContent = "Network error while contacting the Strategic Insight Agent. Please try again.";
   }
 }
 
@@ -1877,22 +1933,23 @@ async function runVisionVerification(file) {
   btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Reading photo with Gemini...</span>`;
   lucide.createIcons();
 
+  box.classList.add('hidden');  // never leave the previous scan on screen
+  const visionSelect = document.getElementById('visionFacilitySelect');
+  const facilityId = (visionSelect && visionSelect.value) || currentClinicFacilityId || (facilities[0] && facilities[0].id);
   try {
     const dataUrl = await shrinkImage(file);
     const res = await fetch('/api/vision/verify-shelf-photo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        image_base64: dataUrl,
-        facility_id: currentClinicFacilityId || (facilities.length > 0 ? facilities[0].id : (currentRegion === 'bhubaneswar' ? 'PHC-BBS-01' : 'PHC-LKO-01'))
-      })
+      body: JSON.stringify({ image_base64: dataUrl, facility_id: facilityId })
     });
+    if (!res.ok) throw new Error(await apiErrorMessage(res, 'Vision scan failed'));
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Vision scan failed');
 
     box.classList.remove('hidden');
     const labels = {
       VERIFIED_MATCH: 'Matches register',
+      PARTIAL_COUNT: 'Fewer units visible than the register (part of the stock may be out of frame)',
       DISCREPANCY_FLAGGED: 'Discrepancy flagged',
       NOT_A_SHELF_PHOTO: 'Not a medicine shelf',
       NO_ITEMS_DETECTED: 'No items detected',
@@ -1901,6 +1958,8 @@ async function runVisionVerification(file) {
     document.getElementById('visionStatusLabel').textContent = labels[data.status] || data.status;
     const items = data.detected_items || [];
     document.getElementById('visionCountLabel').textContent = items.length ? `${items.length} item${items.length > 1 ? 's' : ''} read` : '';
+    const facName = data.facility_name || (facilities.find(f => f.id === facilityId) || {}).name || facilityId;
+    document.getElementById('visionFacilityText').textContent = `Compared with the stock register of ${facName}`;
     document.getElementById('visionSummaryText').textContent = data.verification_summary || '';
 
     btn.disabled = false;
@@ -1938,7 +1997,7 @@ function openFacilityDetail(facId) {
   if (nameEl) nameEl.textContent = fac.name;
 
   const subEl = document.getElementById('facDetailSub');
-  if (subEl) subEl.textContent = `${fac.district} District • ${fac.type} • In-Charge: ${fac.doctor}`;
+  if (subEl) subEl.textContent = `${fac.district} District • ${fac.type} • In-Charge (demo persona): ${fac.doctor}`;
 
   const popEl = document.getElementById('facDetailPop');
   if (popEl) popEl.textContent = (fac.population_served || 45000).toLocaleString();
@@ -1991,7 +2050,7 @@ function openFacilityDetail(facId) {
       card.innerHTML = `
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-2.5">
-            <strong class="text-sm sm:text-base font-black text-clay-dark">${item.medicine_name.split('(')[0]}</strong>
+            <strong class="text-sm sm:text-base font-black text-clay-dark">${escapeHtml(item.medicine_name.split('(')[0])}</strong>
             <span class="text-xs px-2.5 py-0.5 rounded-full border font-black ${badgeStyle}">${statusText}</span>
           </div>
           <div class="text-right">
@@ -2020,7 +2079,45 @@ function closeFacilityDetail() {
   if (m) m.classList.add('hidden');
 }
 
+function renderNotifications() {
+  const list = document.getElementById('notificationsList');
+  if (!list) return;
+  const cards = [];
+  const card = (tone, title, badge, body) => cards.push(`
+    <div class="p-4 bg-${tone}-50 rounded-2xl border border-${tone}-200 text-xs sm:text-sm space-y-1.5">
+      <div class="flex items-center justify-between gap-2 font-black text-${tone}-800">
+        <span class="text-sm sm:text-base">${title}</span>
+        <span class="text-xs bg-${tone}-200 text-${tone}-900 px-2.5 py-1 rounded-full font-bold whitespace-nowrap">${badge}</span>
+      </div>
+      <p class="text-${tone}-700 text-xs sm:text-sm leading-relaxed font-medium">${body}</p>
+    </div>`);
+
+  const t = currentTelemetry;
+  if (t) {
+    const source = (t.source && t.source.includes('Open-Meteo')) ? 'Live Open-Meteo / CAMS data' : 'Simulated scenario';
+    if (t.smog_episode || t.aqi > 150) {
+      card('red', '🌫️ Poor Air Quality', `AQI ${escapeHtml(t.aqi)} &bull; ${escapeHtml(aqiCategory(t.aqi))}`,
+        `${escapeHtml(source)} for ${escapeHtml(t.corridor || '')}: PM2.5 ${escapeHtml(t.pm25)} µg/m³${t.forecast_peak_aqi_72h ? `, 72h peak AQI ${escapeHtml(t.forecast_peak_aqi_72h)}` : ''}. Respiratory demand is raised in the forecast.`);
+    }
+    if (t.heatwave_alert) {
+      card('red', '☀️ Heatwave Alert', `${escapeHtml(t.temperature_c)}°C`, `${escapeHtml(source)}: heatwave threshold reached; ORS and fluids demand is raised in the forecast.`);
+    }
+  }
+  allRisks.filter(r => r.status === 'CRITICAL').sort((a, b) => a.days_of_coverage - b.days_of_coverage).slice(0, 3).forEach(r => {
+    card('amber', '⚠️ Stockout Risk', `${escapeHtml(r.days_of_coverage)} Days Cover`,
+      `${escapeHtml(r.facility_name)}: ${escapeHtml(r.current_stock)} units of ${escapeHtml(r.medicine_name.split('(')[0])} left, 7-day stockout probability ${Math.round(r.stockout_probability_7d * 100)}%.`);
+  });
+  const pending = activeRecs.filter(r => r.status === 'PENDING_APPROVAL');
+  if (pending.length) {
+    const units = pending.reduce((n, r) => n + r.units_to_transfer, 0);
+    card('emerald', '🚚 Transfers Awaiting Sign-off', `${pending.length} pending`,
+      `${units} units across ${pending.length} proposed transfers are waiting for CMO approval.`);
+  }
+  list.innerHTML = cards.length ? cards.join('') : '<div class="p-4 text-center text-clay-muted text-sm font-medium">No active alerts for this corridor.</div>';
+}
+
 function openNotificationsModal() {
+  renderNotifications();
   const m = document.getElementById('notificationsModal');
   if (m) m.classList.remove('hidden');
 }
@@ -2051,32 +2148,16 @@ function closeLedgerModal() {
   if (m) m.classList.add('hidden');
 }
 
+// Filter the dashboard to one medicine; never touches the typed field report
 function filterMedicine(medId) {
-  const facSelect = document.getElementById('voiceFacilitySelect');
+  const known = allRisks.find(r => r.medicine_id === medId);
+  const term = known ? known.medicine_name.split('(')[0].trim().split(' ')[0] : (MEDICINE_SHORT_NAMES[medId] || medId);
   const searchInput = document.getElementById('searchInput');
-
-  if (medId === 'MED-001') {
-    if (currentRegion === 'bhubaneswar') {
-      document.getElementById('voiceTranscript').value = "PHC Mendhasal: Respiratory medicine (Salbutamol) has only 18 respules remaining.";
-      if (facSelect) facSelect.value = "PHC-BBS-01";
-    } else {
-      document.getElementById('voiceTranscript').value = "PHC Kakori: Respiratory medicine (Salbutamol) has only 15 respules remaining.";
-      if (facSelect) facSelect.value = "PHC-LKO-01";
-    }
-    if (searchInput) searchInput.value = "Salbutamol";
-    filterDashboardBySearch("Salbutamol");
-  } else if (medId === 'MED-002') {
-    if (currentRegion === 'bhubaneswar') {
-      document.getElementById('voiceTranscript').value = "CHC Choudwar: ORS oral rehydration buffer has 110 packets remaining.";
-      if (facSelect) facSelect.value = "CHC-CTC-01";
-    } else {
-      document.getElementById('voiceTranscript').value = "CHC Sarojini Nagar: ORS oral rehydration buffer has 120 packets remaining.";
-      if (facSelect) facSelect.value = "CHC-LKO-06";
-    }
-    if (searchInput) searchInput.value = "ORS";
-    filterDashboardBySearch("ORS");
-  }
+  if (searchInput) searchInput.value = term;
+  filterDashboardBySearch(term);
 }
+
+const MEDICINE_SHORT_NAMES = { 'MED-001': 'Salbutamol', 'MED-002': 'ORS', 'MED-003': 'Dexamethasone', 'MED-004': 'Amoxicillin', 'MED-005': 'Paracetamol', 'MED-006': 'Cetirizine' };
 
 function switchTab(tab) {
   const navItems = {
@@ -2105,9 +2186,10 @@ function switchTab(tab) {
   } else if (tab === 'cmo') {
     openCmoModal();
   } else if (tab === 'agents') {
+    // Navigation only: the paid pipeline runs when the user presses its Run button
+    switchMainView('district');
     const term = document.getElementById('agentTerminalBody');
     if (term) term.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    runAgentPipeline();
   } else if (tab === 'vision') {
     const btnV = document.getElementById('btnVision');
     if (btnV) btnV.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -2228,8 +2310,41 @@ function setupEventListeners() {
   });
 }
 
+// US AQI categories (Open-Meteo / CAMS report the US EPA index)
+function aqiCategory(aqi) {
+  if (aqi == null || isNaN(aqi)) return 'n/a';
+  if (aqi <= 50) return 'Good';
+  if (aqi <= 100) return 'Moderate';
+  if (aqi <= 150) return 'Unhealthy for Sensitive Groups';
+  if (aqi <= 200) return 'Unhealthy';
+  if (aqi <= 300) return 'Very Unhealthy';
+  return 'Hazardous';
+}
+
+function highlightScenarioButton(active) {
+  const inactive = 'px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition cursor-pointer';
+  const ids = { live: 'scenarioLive', smog: 'scenarioSmog', heat: 'scenarioHeat', normal: 'scenarioNormal' };
+  Object.entries(ids).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (key !== active) el.className = inactive + (key === 'live' ? ' flex items-center space-x-1.5' : '');
+    else if (key === 'live') el.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-emerald-600 text-white shadow-clay-btn transition flex items-center space-x-1.5 cursor-pointer';
+    else el.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-clay-terracotta text-white shadow-clay-btn transition cursor-pointer';
+  });
+}
+
+// Best-effort readable error from a failed API response (FastAPI puts it in `detail`)
+async function apiErrorMessage(res, fallback) {
+  try {
+    const data = await res.json();
+    if (typeof data.detail === 'string') return data.detail;
+    if (Array.isArray(data.detail) && data.detail[0] && data.detail[0].msg) return data.detail[0].msg;
+  } catch (e) { /* non-JSON body */ }
+  return `${fallback} (HTTP ${res.status})`;
+}
+
 function escapeHtml(str) {
-  if (!str) return '';
+  if (str === null || str === undefined) return '';
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
@@ -2242,7 +2357,7 @@ function safeId(id) {
 // CLINIC DAILY DESK - FRONTLINE PHARMACIST WORKSPACE
 // ==============================================================================
 
-function switchMainView(view) {
+function switchMainView(view, loadDesk = true) {
   const districtContainer = document.getElementById('districtViewContainer');
   const clinicContainer = document.getElementById('clinicDeskViewContainer');
   const btnDistrict = document.getElementById('btnViewDistrict');
@@ -2265,7 +2380,7 @@ function switchMainView(view) {
     if (navDashboard) navDashboard.className = 'w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105';
     if (navClinic) navClinic.className = 'w-12 h-12 rounded-2xl bg-white text-clay-terracotta shadow-md flex items-center justify-center transition hover:scale-105';
 
-    loadClinicDesk(currentClinicFacilityId);
+    if (loadDesk) loadClinicDesk(currentClinicFacilityId);
   } else {
     if (clinicContainer) {
       clinicContainer.classList.add('hidden');
@@ -2292,9 +2407,13 @@ function onClinicFacilityChange(facilityId) {
   loadClinicDesk(facilityId);
 }
 
+let clinicDeskRequestSeq = 0;
+
 async function loadClinicDesk(facilityId) {
   if (!facilityId) facilityId = currentClinicFacilityId || (currentRegion === 'bhubaneswar' ? "PHC-BBS-01" : "PHC-LKO-01");
   currentClinicFacilityId = facilityId;
+  // Only the latest request may render, so a slow response for another facility can't overwrite it
+  const seq = ++clinicDeskRequestSeq;
 
   const select = document.getElementById('clinicFacilitySelect');
   if (select && select.value !== facilityId) {
@@ -2302,12 +2421,14 @@ async function loadClinicDesk(facilityId) {
   }
 
   try {
-    const res = await fetch(`/api/clinic/${facilityId}/desk`);
+    const res = await fetch(`/api/clinic/${encodeURIComponent(facilityId)}/desk`);
+    if (seq !== clinicDeskRequestSeq) return;
     if (!res.ok) {
-      console.error("Failed to load clinic desk:", res.statusText);
+      console.error("Failed to load clinic desk:", res.status);
       return;
     }
     const data = await res.json();
+    if (seq !== clinicDeskRequestSeq) return;
     activeClinicDeskData = data;
 
     // Facility Badge & Metadata
@@ -2401,14 +2522,18 @@ function renderClinicActionItems(items) {
     }
 
     let onclickStr = '';
+    const medId = safeId(item.target_medicine_id);
+    const batch = safeId(item.target_batch);
     if (item.action_type === 'INBOUND_TRANSFER_PENDING') {
-      onclickStr = `openReceiptModal('${item.target_consignment_id}')`;
+      onclickStr = `openReceiptModal('${safeId(item.target_consignment_id)}')`;
     } else if (item.action_type === 'OUTBOUND_DISPATCH_PENDING') {
-      onclickStr = `openDispatchModal('${item.target_consignment_id}')`;
+      onclickStr = `openDispatchModal('${safeId(item.target_consignment_id)}')`;
     } else if (item.action_type === 'RECONCILIATION_REQUIRED') {
-      onclickStr = `openResolveReconciliationModal('${item.target_medicine_id || ''}', '${item.target_batch || ''}')`;
+      onclickStr = `openResolveReconciliationModal('${medId}', '${batch}')`;
+    } else if (item.action_type === 'IMPENDING_STOCKOUT') {
+      onclickStr = `requestTransferFor('${safeId(currentClinicFacilityId)}', '${medId}')`;
     } else {
-      onclickStr = `openStockActionModal('${item.target_medicine_id || ''}', '${item.target_batch || ''}')`;
+      onclickStr = `openStockActionModal('${medId}', '${batch}')`;
     }
 
     const card = document.createElement('div');
@@ -2418,9 +2543,9 @@ function renderClinicActionItems(items) {
         <div class="flex items-center justify-between gap-2 mb-1.5">
           <span class="inline-flex items-center space-x-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${badgeColor}">
             <i data-lucide="${iconName}" class="w-3 h-3"></i>
-            <span>${item.urgency}</span>
+            <span>${escapeHtml(item.urgency)}</span>
           </span>
-          <span class="text-[10px] font-mono font-bold text-clay-muted">${item.action_type}</span>
+          <span class="text-[10px] font-mono font-bold text-clay-muted">${escapeHtml(item.action_type)}</span>
         </div>
         <h4 class="text-sm font-black text-clay-dark leading-snug">${escapeHtml(item.title)}</h4>
         <p class="text-xs text-clay-muted mt-1 leading-relaxed font-medium">${escapeHtml(item.description)}</p>
@@ -2432,6 +2557,23 @@ function renderClinicActionItems(items) {
     `;
     container.appendChild(card);
   });
+}
+
+// "Request Stock Transfer": show the solver's proposed transfer for this facility and medicine,
+// or run the agent pipeline for the facility when none is proposed yet
+function requestTransferFor(facilityId, medicineId) {
+  switchMainView('district', false);
+  const rec = activeRecs.find(r => r.recipient_facility_id === facilityId && r.medicine_id === medicineId && r.status === 'PENDING_APPROVAL');
+  if (rec) {
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) searchInput.value = rec.recipient_facility_name;
+    filterDashboardBySearch(rec.recipient_facility_name);
+    const list = document.getElementById('recommendationsList');
+    if (list) list.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  alert('No donor transfer is proposed for this item yet. Running the agent pipeline for this facility to search for one.');
+  runTransferFor(facilityId);
 }
 
 function filterClinicInventory(query) {
@@ -2487,7 +2629,7 @@ function renderClinicInventory(inventory) {
           ${deficit > 0 ? `<span class="text-[10px] font-extrabold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md font-mono">Deficit: -${deficit}</span>` : ''}
         </div>
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-clay-muted font-mono">
-          <span>Batch: <strong class="text-clay-dark">${item.batch_number || 'BAT-DEFAULT'}</strong></span>
+          <span>Batch: <strong class="text-clay-dark">${escapeHtml(item.batch_number || 'BAT-DEFAULT')}</strong></span>
           <span>•</span>
           <span>Pack: <strong class="text-clay-dark">${item.pack_size || 10} units</strong></span>
           <span>•</span>
@@ -2525,18 +2667,18 @@ function renderClinicInventory(inventory) {
         ` : ''}
 
         ${isFrozen ? `
-          <button onclick="openResolveReconciliationModal('${item.medicine_id}', '${item.batch_number}')" class="px-3 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow-sm transition flex items-center space-x-1 cursor-pointer" title="Resolve Over-Commitment Exception">
+          <button onclick="openResolveReconciliationModal('${safeId(item.medicine_id)}', '${safeId(item.batch_number)}')" class="px-3 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow-sm transition flex items-center space-x-1 cursor-pointer" title="Resolve Over-Commitment Exception">
             <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i>
             <span>Resolve</span>
           </button>
         ` : ''}
 
-        <button onclick="openStockMovementRegister('${item.medicine_id}', '${item.batch_number}')" class="px-3 py-2 rounded-xl bg-white hover:bg-clay-inner text-clay-dark text-xs font-black border border-clay-salmon/25 shadow-sm transition flex items-center space-x-1 cursor-pointer" title="View Stock Movement Register & Handover Ledger">
+        <button onclick="openStockMovementRegister('${safeId(item.medicine_id)}', '${safeId(item.batch_number)}')" class="px-3 py-2 rounded-xl bg-white hover:bg-clay-inner text-clay-dark text-xs font-black border border-clay-salmon/25 shadow-sm transition flex items-center space-x-1 cursor-pointer" title="View Stock Movement Register & Handover Ledger">
           <i data-lucide="clipboard-list" class="w-3.5 h-3.5 text-clay-terracotta"></i>
           <span>Register</span>
         </button>
 
-        <button onclick="openStockActionModal('${item.medicine_id}', '${item.batch_number}')" class="px-3.5 py-2 rounded-xl bg-clay-inner hover:bg-clay-bg text-clay-dark text-xs font-black border border-clay-salmon/30 shadow-sm transition flex items-center space-x-1 hover:scale-105 cursor-pointer" title="Record Physical Count or Stock Adjustment">
+        <button onclick="openStockActionModal('${safeId(item.medicine_id)}', '${safeId(item.batch_number)}')" class="px-3.5 py-2 rounded-xl bg-clay-inner hover:bg-clay-bg text-clay-dark text-xs font-black border border-clay-salmon/30 shadow-sm transition flex items-center space-x-1 hover:scale-105 cursor-pointer" title="Record Physical Count or Stock Adjustment">
           <i data-lucide="edit" class="w-3.5 h-3.5 text-clay-terracotta"></i>
           <span>Update</span>
         </button>
@@ -2551,7 +2693,7 @@ function renderClinicConsignments(inbound, outbound) {
   const inContainer = document.getElementById('clinicInboundList');
   const inBadge = document.getElementById('clinicInboundCountBadge');
   
-  const activeInbound = inbound.filter(c => c.status === 'DISPATCHED' || c.status === 'APPROVED');
+  const activeInbound = inbound.filter(c => c.status === 'DISPATCHED' || c.status === 'APPROVED_RESERVED');
   if (inBadge) inBadge.textContent = `${activeInbound.length} Incoming`;
 
   if (inContainer) {
@@ -2569,18 +2711,18 @@ function renderClinicConsignments(inbound, outbound) {
         card.className = "p-3.5 rounded-2xl bg-white border border-clay-salmon/20 shadow-sm space-y-2.5";
         card.innerHTML = `
           <div class="flex items-center justify-between">
-            <span class="text-[10px] font-mono font-bold text-clay-muted">${c.challan_id || c.id}</span>
+            <span class="text-[10px] font-mono font-bold text-clay-muted">${escapeHtml(c.challan_id || c.id)}</span>
             <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${isDispatched ? 'bg-cyan-100 text-cyan-800' : 'bg-slate-100 text-slate-700'}">
               ${isDispatched ? '🚚 In Transit' : '⏳ Donor Preparing'}
             </span>
           </div>
           <div>
-            <h5 class="text-xs font-black text-clay-dark">${escapeHtml(c.medicine_name)} (${c.units_dispatched || c.allocated_quantity} Units)</h5>
+            <h5 class="text-xs font-black text-clay-dark">${escapeHtml(c.medicine_name)} (${escapeHtml(isDispatched ? c.units_dispatched : c.units_requested)} Units)</h5>
             <p class="text-[11px] text-clay-muted mt-0.5">From: <strong class="text-clay-dark font-semibold">${escapeHtml(c.donor_facility_name)}</strong></p>
-            <p class="text-[10px] font-mono text-clay-muted">Batch: ${c.batch_number} • Courier: ${c.vehicle_number || 'Standard Fleet'}</p>
+            <p class="text-[10px] font-mono text-clay-muted">Batch: ${escapeHtml(c.batch_number)} • Vehicle: ${escapeHtml(c.vehicle_number || (isDispatched ? 'not recorded' : 'not assigned yet'))}</p>
           </div>
           ${isDispatched ? `
-            <button onclick="openReceiptModal('${c.id}')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs py-2 px-3 rounded-xl transition shadow-sm flex items-center justify-center space-x-1.5 cursor-pointer">
+            <button onclick="openReceiptModal('${safeId(c.id)}')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs py-2 px-3 rounded-xl transition shadow-sm flex items-center justify-center space-x-1.5 cursor-pointer">
               <i data-lucide="package-check" class="w-3.5 h-3.5"></i>
               <span>Inspect & Confirm Receipt</span>
             </button>
@@ -2599,7 +2741,7 @@ function renderClinicConsignments(inbound, outbound) {
   const outContainer = document.getElementById('clinicOutboundList');
   const outBadge = document.getElementById('clinicOutboundCountBadge');
   
-  const activeOutbound = outbound.filter(c => c.status === 'APPROVED' || c.status === 'DISPATCHED');
+  const activeOutbound = outbound.filter(c => c.status === 'APPROVED_RESERVED' || c.status === 'DISPATCHED');
   if (outBadge) outBadge.textContent = `${activeOutbound.length} Outgoing`;
 
   if (outContainer) {
@@ -2612,35 +2754,35 @@ function renderClinicConsignments(inbound, outbound) {
     } else {
       outContainer.innerHTML = '';
       activeOutbound.forEach(c => {
-        const isApproved = c.status === 'APPROVED';
+        const isApproved = c.status === 'APPROVED_RESERVED';
         const card = document.createElement('div');
         card.className = "p-3.5 rounded-2xl bg-white border border-clay-salmon/20 shadow-sm space-y-2.5";
         card.innerHTML = `
           <div class="flex items-center justify-between">
-            <span class="text-[10px] font-mono font-bold text-clay-muted">${c.challan_id || c.id}</span>
+            <span class="text-[10px] font-mono font-bold text-clay-muted">${escapeHtml(c.challan_id || c.id)}</span>
             <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${isApproved ? 'bg-amber-100 text-amber-800' : 'bg-cyan-100 text-cyan-800'}">
               ${isApproved ? '📦 Stock Reserved' : '🚚 Dispatched'}
             </span>
           </div>
           <div>
-            <h5 class="text-xs font-black text-clay-dark">${escapeHtml(c.medicine_name)} (${c.allocated_quantity} Units)</h5>
+            <h5 class="text-xs font-black text-clay-dark">${escapeHtml(c.medicine_name)} (${escapeHtml(isApproved ? c.units_requested : c.units_dispatched)} Units)</h5>
             <p class="text-[11px] text-clay-muted mt-0.5">To: <strong class="text-clay-dark font-semibold">${escapeHtml(c.recipient_facility_name)}</strong></p>
-            <p class="text-[10px] font-mono text-clay-muted">Batch: ${c.batch_number}</p>
+            <p class="text-[10px] font-mono text-clay-muted">Batch: ${escapeHtml(c.batch_number)}</p>
           </div>
           ${isApproved ? `
             <div class="flex items-center space-x-2">
-              <button onclick="openDispatchModal('${c.id}')" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs py-2 px-3 rounded-xl transition shadow-sm flex items-center justify-center space-x-1 cursor-pointer">
+              <button onclick="openDispatchModal('${safeId(c.id)}')" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs py-2 px-3 rounded-xl transition shadow-sm flex items-center justify-center space-x-1 cursor-pointer">
                 <i data-lucide="truck" class="w-3.5 h-3.5"></i>
                 <span>Courier Handover</span>
               </button>
-              <button onclick="cancelConsignmentAction('${c.id}')" class="px-3 py-2 bg-clay-inner hover:bg-red-50 text-red-700 border border-clay-salmon/30 font-bold text-xs rounded-xl transition cursor-pointer" title="Cancel Consignment & Release Stock">
+              <button onclick="cancelConsignmentAction('${safeId(c.id)}')" class="px-3 py-2 bg-clay-inner hover:bg-red-50 text-red-700 border border-clay-salmon/30 font-bold text-xs rounded-xl transition cursor-pointer" title="Cancel Consignment & Release Stock">
                 <span>Cancel</span>
               </button>
             </div>
           ` : `
             <div class="flex items-center justify-between bg-clay-inner/60 p-2 rounded-lg text-[11px]">
-              <span class="text-clay-muted">Courier: <strong class="text-clay-dark font-mono">${c.vehicle_number || 'En Route'}</strong></span>
-              <button onclick="showChallanModal('${c.id}')" class="text-clay-terracotta font-bold hover:underline cursor-pointer">View Challan</button>
+              <span class="text-clay-muted">Vehicle: <strong class="text-clay-dark font-mono">${escapeHtml(c.vehicle_number || 'not recorded')}</strong></span>
+              <button onclick="showChallanModal('${safeId(c.id)}')" class="text-clay-terracotta font-bold hover:underline cursor-pointer">View Challan</button>
             </div>
           `}
         `;
@@ -2839,7 +2981,7 @@ async function submitStockAction() {
       action_type: selectedStockActionType,
       quantity: inputVal,
       reason: reason,
-      operator_name: "Ramesh Verma",
+      operator_name: "Demo Pharmacist",
       operator_role: "PHARMACIST"
     };
 
@@ -2857,7 +2999,7 @@ async function submitStockAction() {
       await fetchRecommendations();
       await fetchAuditLog();
       
-      let msg = `✅ Action Recorded: ${data.message}`;
+      let msg = `${data.success === false ? '⚠️' : '✅'} Action Recorded: ${data.message}`;
       if (data.reconciliation_exception) {
         msg += "\n⚠️ RECONCILIATION EXCEPTION: Dispatches for this batch have been FROZEN until supervisor audit.";
       }
@@ -2886,11 +3028,11 @@ function openReceiptModal(consignmentId) {
     if (rec) {
       c = {
         id: rec.id,
-        challan_id: `CHALLAN-UP-20260908-${rec.id.substring(0, 6)}`,
+        challan_id: rec.id,
         medicine_name: rec.medicine_name,
         donor_facility_name: rec.donor_facility_name,
         batch_number: rec.batch_number,
-        allocated_quantity: rec.units_to_transfer,
+        units_requested: rec.units_to_transfer,
         units_dispatched: rec.units_to_transfer
       };
     }
@@ -2901,7 +3043,7 @@ function openReceiptModal(consignmentId) {
   }
 
   currentReceiptConsignment = c;
-  const dispatched = c.units_dispatched != null ? c.units_dispatched : (c.allocated_quantity || 0);
+  const dispatched = c.units_dispatched != null ? c.units_dispatched : (c.units_requested || 0);
 
   const challanEl = document.getElementById('receiptModalChallan');
   const medEl = document.getElementById('receiptMedName');
@@ -2939,7 +3081,7 @@ function closeReceiptModal() {
 function updateReceiptMath() {
   if (!currentReceiptConsignment) return;
   const dispatched = currentReceiptConsignment.units_dispatched != null ? 
-    currentReceiptConsignment.units_dispatched : (currentReceiptConsignment.allocated_quantity || 0);
+    currentReceiptConsignment.units_dispatched : (currentReceiptConsignment.units_requested || 0);
 
   const acc = parseInt(document.getElementById('receiptAcceptedInput').value) || 0;
   const qua = parseInt(document.getElementById('receiptQuarantinedInput').value) || 0;
@@ -2973,7 +3115,7 @@ function updateReceiptMath() {
 async function submitReceiptInspection() {
   if (!currentReceiptConsignment) return;
   const dispatched = currentReceiptConsignment.units_dispatched != null ? 
-    currentReceiptConsignment.units_dispatched : (currentReceiptConsignment.allocated_quantity || 0);
+    currentReceiptConsignment.units_dispatched : (currentReceiptConsignment.units_requested || 0);
 
   const acc = parseInt(document.getElementById('receiptAcceptedInput').value) || 0;
   const qua = parseInt(document.getElementById('receiptQuarantinedInput').value) || 0;
@@ -2994,7 +3136,7 @@ async function submitReceiptInspection() {
   try {
     const payload = {
       consignment_id: currentReceiptConsignment.id,
-      operator_name: "Ramesh Verma",
+      operator_name: "Demo Pharmacist",
       operator_role: "PHARMACIST",
       accepted_units: acc,
       quarantined_units: qua,
@@ -3052,10 +3194,13 @@ function openDispatchModal(consignmentId) {
 
   if (challanEl) challanEl.textContent = c.challan_id || c.id;
   if (medEl) medEl.textContent = c.medicine_name;
-  if (unitsEl) unitsEl.textContent = c.allocated_quantity;
+  if (unitsEl) unitsEl.textContent = c.units_requested;
   if (recEl) recEl.textContent = c.recipient_facility_name;
   if (batchEl) batchEl.textContent = c.batch_number;
-  if (vehInput) vehInput.value = c.vehicle_number || "UP-32-MED-4412";
+  if (vehInput) {
+    vehInput.value = c.vehicle_number || '';
+    vehInput.placeholder = regionForFacility(c.donor_facility_id) === 'bhubaneswar' ? 'e.g. OD-02-AB-1234' : 'e.g. UP-32-AB-1234';
+  }
   if (notesInput) notesInput.value = '';
 
   const modal = document.getElementById('dispatchConsignmentModal');
@@ -3079,9 +3224,9 @@ async function submitDispatchConsignment() {
   try {
     const payload = {
       consignment_id: currentDispatchConsignment.id,
-      operator_name: "Ramesh Verma",
+      operator_name: "Demo Pharmacist",
       operator_role: "PHARMACIST",
-      vehicle_number: document.getElementById('dispatchVehicleInput').value.trim() || "UP-32-MED-4412",
+      vehicle_number: document.getElementById('dispatchVehicleInput').value.trim() || null,
       courier_notes: document.getElementById('dispatchNotesInput').value.trim() || "Insulated cold-box handover verified"
     };
 
@@ -3091,17 +3236,17 @@ async function submitDispatchConsignment() {
       body: JSON.stringify(payload)
     });
 
-    const data = await res.json();
     if (res.ok) {
+      const data = await res.json();
       closeDispatchModal();
       await loadClinicDesk(currentClinicFacilityId);
       await fetchRisks();
       await fetchRecommendations();
       await fetchAuditLog();
-      alert(`✅ Outbound Consignment Dispatched! Physical on-hand stock deducted, courier ${payload.vehicle_number} en route.`);
-      showChallanModal(data.id, data);
+      alert(`✅ Outbound consignment dispatched. On-hand stock deducted${payload.vehicle_number ? `, vehicle ${payload.vehicle_number}` : ''}.`);
+      showChallanModal(data.id, { consignment: data });
     } else {
-      alert("Dispatch Handover Failed: " + (data.detail || "Server error"));
+      alert("Dispatch Handover Failed: " + await apiErrorMessage(res, "Server error"));
     }
   } catch (err) {
     console.error("submitDispatchConsignment error:", err);
@@ -3149,21 +3294,28 @@ async function cancelConsignmentAction(consignmentId) {
   }
 }
 
-function openClinicDeskForVoiceDraft(facilityId, medicineId, reportedQty) {
-  switchMainView('clinic');
-  if (facilityId) {
-    onClinicFacilityChange(facilityId);
+async function openClinicDeskForVoiceDraft(facilityId, medicineId, reportedQty) {
+  // The desk only lists the current region's facilities, so move to the facility's region first
+  const facRegion = facilityId ? regionForFacility(facilityId) : currentRegion;
+  if (facRegion !== currentRegion) {
+    await switchRegion(facRegion);
+    if (currentRegion !== facRegion) return;  // switch failed and was reported
   }
-  setTimeout(() => {
-    openStockActionModal(medicineId);
-    if (reportedQty != null) {
-      const input = document.getElementById('stockActionQtyInput');
-      if (input) input.value = reportedQty;
-      const reason = document.getElementById('stockActionReasonInput');
-      if (reason) reason.value = "Confirmed frontline voice log report";
-      updateStockActionPreview();
-    }
-  }, 250);
+  if (facilityId) currentClinicFacilityId = facilityId;
+  switchMainView('clinic', false);
+  await loadClinicDesk(currentClinicFacilityId);
+  if (!activeClinicDeskData || (facilityId && activeClinicDeskData.facility && activeClinicDeskData.facility.id !== facilityId)) {
+    alert('Could not load the Clinic Desk for this facility.');
+    return;
+  }
+  openStockActionModal(medicineId);
+  if (reportedQty != null) {
+    const input = document.getElementById('stockActionQtyInput');
+    if (input) input.value = reportedQty;
+    const reason = document.getElementById('stockActionReasonInput');
+    if (reason) reason.value = "Confirmed frontline voice log report";
+    updateStockActionPreview();
+  }
 }
 
 // ==============================================================================
@@ -3233,9 +3385,9 @@ function openResolveReconciliationModal(medicineId, batchNumber) {
         const div = document.createElement('div');
         div.className = "flex items-center space-x-2 bg-white p-2.5 rounded-xl border border-clay-salmon/20 text-xs";
         div.innerHTML = `
-          <input type="checkbox" name="reconConsignment" value="${c.id}" id="recon_c_${c.id}" class="rounded text-red-600 focus:ring-red-500 cursor-pointer">
-          <label for="recon_c_${c.id}" class="flex-1 font-mono text-[11px] cursor-pointer">
-            <strong>${c.challan_id || c.id}</strong> &bull; ${c.units_requested} units &bull; Destination: ${escapeHtml(c.recipient_facility_name)}
+          <input type="checkbox" name="reconConsignment" value="${escapeHtml(c.id)}" id="recon_c_${safeId(c.id)}" class="rounded text-red-600 focus:ring-red-500 cursor-pointer">
+          <label for="recon_c_${safeId(c.id)}" class="flex-1 font-mono text-[11px] cursor-pointer">
+            <strong>${escapeHtml(c.challan_id || c.id)}</strong> &bull; ${escapeHtml(c.units_requested)} units &bull; Destination: ${escapeHtml(c.recipient_facility_name)}
           </label>
         `;
         consList.appendChild(div);
@@ -3298,7 +3450,7 @@ async function submitResolveReconciliation() {
     medicine_id: currentReconMedicineId,
     batch_number: currentReconBatchNumber,
     resolution_type: selectedReconResolutionType,
-    supervisor_name: "Dr. S. K. Saxena (MOIC)",
+    supervisor_name: "Demo MOIC (Supervisor)",
     supervisor_role: "MOIC",
     resolution_notes: notes
   };
@@ -3347,7 +3499,7 @@ async function submitResolveReconciliation() {
       await fetchRisks();
       await fetchRecommendations();
       await fetchAuditLog();
-      alert(`✅ Reconciliation Update: ${data.message}`);
+      alert(`${data.success ? '✅' : '⚠️'} Reconciliation Update: ${data.message}`);
     } else {
       alert("Reconciliation Resolution Failed: " + (data.detail || "Server error"));
     }
@@ -3424,7 +3576,7 @@ async function openStockMovementRegister(medicineId, batchNumber) {
           </td>
           <td class="p-2.5 font-sans whitespace-nowrap"><strong>${escapeHtml(m.operator_name)}</strong> <span class="text-clay-muted text-[10px]">(${escapeHtml(m.operator_role)})</span></td>
           <td class="p-2.5 font-sans text-clay-muted max-w-xs truncate" title="${escapeHtml(m.reason || '')}">${escapeHtml(m.reason || '—')}</td>
-          <td class="p-2.5 text-clay-muted text-[10px] truncate max-w-[90px]" title="${m.audit_hash}">${m.audit_hash.substring(0, 8)}...</td>
+          <td class="p-2.5 text-clay-muted text-[10px] truncate max-w-[90px]" title="${escapeHtml(m.audit_hash)}">${escapeHtml(String(m.audit_hash || "").substring(0, 8))}...</td>
         `;
         tbody.appendChild(tr);
       });
@@ -3461,7 +3613,7 @@ async function fetchNews(region = null, forceRefresh = false) {
     if (ticker && allNewsArticles.length > 0) {
       const top = allNewsArticles[0];
       const prefix = top.severity === 'critical' ? '🔴' : (top.severity === 'warning' ? '🟡' : '🟢');
-      ticker.innerHTML = `${prefix} <span class="font-extrabold text-clay-terracotta">[${escapeHtml(top.source.split(' ')[0])}]:</span> <span>${escapeHtml(top.title)}</span> &bull; <span class="text-xs font-normal text-clay-muted">(${escapeHtml(top.published_at)})</span>`;
+      ticker.innerHTML = `${prefix} <span class="font-extrabold text-clay-terracotta">[${escapeHtml(top.source)}]:</span> <span>${escapeHtml(top.title)}</span> &bull; <span class="text-xs font-normal text-clay-muted">(${escapeHtml(top.published_at)})</span>`;
     }
 
     // Update region badge in news modal
@@ -3533,11 +3685,12 @@ function renderNewsList() {
 
     // Build medicine badges
     const medBadges = (art.related_medicines || []).map(mid => {
-      const medName = mid === 'MED-001' ? 'Salbutamol' : (mid === 'MED-002' ? 'ORS' : (mid === 'MED-003' ? 'Dexamethasone' : (mid === 'MED-004' ? 'Amoxicillin' : 'Paracetamol')));
-      return `<button onclick="filterMedicine('${mid}'); closeNewsModal();" class="text-[11px] bg-clay-inner hover:bg-clay-bg text-clay-terracotta border border-clay-salmon/30 font-bold px-2.5 py-0.5 rounded-full transition cursor-pointer" title="Filter dashboard for ${medName}">${mid} &bull; ${medName}</button>`;
+      const medName = MEDICINE_SHORT_NAMES[mid] || mid;
+      return `<button onclick="filterMedicine('${safeId(mid)}'); closeNewsModal();" class="text-[11px] bg-clay-inner hover:bg-clay-bg text-clay-terracotta border border-clay-salmon/30 font-bold px-2.5 py-0.5 rounded-full transition cursor-pointer" title="Filter dashboard for ${escapeHtml(medName)}">${escapeHtml(mid)} &bull; ${escapeHtml(medName)}</button>`;
     }).join(' ');
 
     const catLabel = catEmojiMap[art.category] || '📰 General Health';
+    const safeUrl = /^https?:\/\//i.test(art.url || '') ? art.url : null;
     const sevBadge = severityBadgeMap[art.severity] || severityBadgeMap['info'];
     const liveWireBadge = art.is_live ? `<span class="bg-emerald-50 text-emerald-700 border border-emerald-300/60 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center space-x-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span><span>Live Wire</span></span>` : '';
 
@@ -3555,9 +3708,9 @@ function renderNewsList() {
       </div>
 
       <div>
-        <h4 class="text-sm sm:text-base font-extrabold text-clay-dark leading-snug hover:text-clay-terracotta transition cursor-pointer" onclick="simulateNewsImpact('${art.id}')">
+        ${safeUrl ? `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" class="block text-sm sm:text-base font-extrabold text-clay-dark leading-snug hover:text-clay-terracotta transition">
           ${escapeHtml(art.title)}
-        </h4>
+        </a>` : `<h4 class="text-sm sm:text-base font-extrabold text-clay-dark leading-snug">${escapeHtml(art.title)}</h4>`}
         <p class="text-xs text-clay-muted font-medium mt-1.5 leading-relaxed">
           ${escapeHtml(art.summary)}
         </p>
@@ -3578,7 +3731,7 @@ function renderNewsList() {
             <div class="flex flex-wrap gap-1">${medBadges}</div>
           </div>
           <div class="flex items-center space-x-2">
-            <button onclick="simulateNewsImpact('${art.id}')" class="text-xs bg-clay-terracotta hover:bg-clay-terracottaDark text-white px-3.5 py-1.5 rounded-full font-black shadow-clay-btn transition flex items-center space-x-1 cursor-pointer">
+            <button onclick="simulateNewsImpact('${safeId(art.id)}')" class="text-xs bg-clay-terracotta hover:bg-clay-terracottaDark text-white px-3.5 py-1.5 rounded-full font-black shadow-clay-btn transition flex items-center space-x-1 cursor-pointer">
               <span>${escapeHtml(art.action_label || 'Analyze Impact')}</span>
             </button>
           </div>
@@ -3586,9 +3739,9 @@ function renderNewsList() {
       </div>
 
       <div class="flex flex-wrap items-center justify-between text-[11px] text-clay-muted font-medium pt-1 border-t border-slate-100 gap-2">
-        <span>Verified Source: <strong class="text-clay-dark font-bold">${escapeHtml(art.source)}</strong> &bull; District: <strong class="text-clay-dark">${escapeHtml(art.district)}</strong></span>
-        ${art.url ? `
-          <a href="${escapeHtml(art.url)}" target="_blank" rel="noopener noreferrer" class="text-clay-terracotta hover:text-clay-terracottaDark hover:underline font-bold inline-flex items-center space-x-1 bg-clay-inner px-2.5 py-1 rounded-full border border-clay-salmon/25 shadow-sm transition cursor-pointer" title="Read original verified article">
+        <span>Source: <strong class="text-clay-dark font-bold">${escapeHtml(art.source)}</strong> &bull; District: <strong class="text-clay-dark">${escapeHtml(art.district)}</strong></span>
+        ${safeUrl ? `
+          <a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" class="text-clay-terracotta hover:text-clay-terracottaDark hover:underline font-bold inline-flex items-center space-x-1 bg-clay-inner px-2.5 py-1 rounded-full border border-clay-salmon/25 shadow-sm transition cursor-pointer" title="Read original verified article">
             <span>Read Original Dispatch</span>
             <i data-lucide="external-link" class="w-3 h-3"></i>
           </a>
@@ -3640,12 +3793,7 @@ function simulateNewsImpact(articleId) {
 
   closeNewsModal();
 
-  if (art.category === 'climate') {
-    switchScenario('heat');
-  } else if (art.category === 'air_quality') {
-    switchScenario('smog');
-  }
-
+  // Focus the dashboard on what the article concerns; it never changes the live/scenario telemetry
   if (art.related_medicines && art.related_medicines.length > 0) {
     filterMedicine(art.related_medicines[0]);
   }

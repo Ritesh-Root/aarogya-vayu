@@ -4,13 +4,11 @@ medicine cupboard, and the result is compared against the facility's stock regis
 The output is advisory evidence only; it never writes stock.
 """
 
-import base64
-import binascii
 from typing import Dict, List, Optional, Tuple
 
 from pydantic import BaseModel
 
-from app.llm import generate_json
+from app.llm import decode_media, generate_json
 
 MAX_IMAGE_BYTES = 3 * 1024 * 1024
 ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp"}
@@ -33,22 +31,7 @@ class ShelfScan(BaseModel):
 
 def decode_image(image_base64: str, mime_type: Optional[str]) -> Tuple[bytes, str]:
     """Accepts raw base64 or a data URL; raises ValueError on bad input."""
-    data = image_base64 or ""
-    if data.startswith("data:"):
-        header, _, data = data.partition(",")
-        mime_type = header[5:].split(";")[0] or mime_type
-    mime = (mime_type or "image/jpeg").lower()
-    if mime not in ALLOWED_MIME:
-        raise ValueError("Unsupported image type; use JPEG, PNG or WebP")
-    if len(data) > MAX_IMAGE_BYTES * 4 // 3 + 4:
-        raise ValueError("Image too large (max 3 MB)")
-    try:
-        raw = base64.b64decode(data, validate=True)
-    except (binascii.Error, ValueError):
-        raise ValueError("image_base64 is not valid base64")
-    if not raw:
-        raise ValueError("Empty image")
-    return raw, mime
+    return decode_media(image_base64, mime_type, "image/jpeg", ALLOWED_MIME, MAX_IMAGE_BYTES, "image")
 
 
 async def scan_shelf(image: Tuple[bytes, str], medicines: Dict[str, dict]) -> Optional[Tuple[ShelfScan, str]]:
@@ -64,19 +47,31 @@ async def scan_shelf(image: Tuple[bytes, str], medicines: Dict[str, dict]) -> Op
 
 
 def compare_with_register(scan: ShelfScan, facility_id: str, inventory: List[dict], medicines: Dict[str, dict]) -> List[dict]:
-    """Attach the register's available count to each matched item and flag mismatches."""
-    rows = []
+    """
+    Compare what the photo shows with the register's physical stock (on_hand, which still includes units
+    reserved for an approved transfer until dispatch). Several detected items of the same medicine (e.g. two
+    batches) are summed and compared once, on that medicine's first row.
+    """
+    seen_total: Dict[str, int] = {}
+    for item in scan.items:
+        if item.matched_medicine_id in medicines:
+            seen_total[item.matched_medicine_id] = seen_total.get(item.matched_medicine_id, 0) + max(0, item.unit_count_estimate)
+    rows, compared = [], set()
     for item in scan.items:
         mid = item.matched_medicine_id if item.matched_medicine_id in medicines else None
-        register = None
-        if mid:
+        row = item.model_dump()
+        row["unit_count_estimate"] = max(0, item.unit_count_estimate)
+        row["matched_medicine_id"] = mid
+        row["register_available"] = None
+        row["discrepancy_units"] = None
+        if mid and mid not in compared:
+            compared.add(mid)
             register = sum(
-                i.get("available", i.get("current_stock", 0))
+                i.get("on_hand", i.get("current_stock", 0))
                 for i in inventory if i["facility_id"] == facility_id and i["medicine_id"] == mid
             )
-        row = item.model_dump()
-        row["matched_medicine_id"] = mid
-        row["register_available"] = register
-        row["discrepancy_units"] = abs(item.unit_count_estimate - register) if register is not None else None
+            row["register_available"] = register
+            row["seen_total"] = seen_total[mid]
+            row["discrepancy_units"] = abs(seen_total[mid] - register)
         rows.append(row)
     return rows

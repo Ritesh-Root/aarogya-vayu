@@ -103,6 +103,7 @@ class StockoutRiskAssessment(BaseModel):
     days_to_expiry: int
     on_hand: Optional[int] = None
     available: Optional[int] = None
+    inbound_units: int = 0  # approved or dispatched transfers on their way to this facility
 
 # EDL-UP-2026 Canonical Pharmaceutical Product Specifications
 EDL_PRODUCT_SPEC: Dict[str, Dict[str, Any]] = {
@@ -271,7 +272,7 @@ class DispatchConsignmentRequest(BaseModel):
     consignment_id: str
     operator_name: str = "Staff Pharmacist"
     operator_role: str = "PHARMACIST"
-    vehicle_number: Optional[str] = "UP-32-MED-4412"
+    vehicle_number: Optional[str] = None
     courier_notes: Optional[str] = None
     idempotency_key: Optional[str] = None
 
@@ -279,9 +280,9 @@ class ReceiveConsignmentRequest(BaseModel):
     consignment_id: str
     operator_name: str = "Staff Pharmacist"
     operator_role: str = "PHARMACIST"
-    accepted_units: int
-    quarantined_units: int = 0
-    missing_units: int = 0
+    accepted_units: int = Field(ge=0)
+    quarantined_units: int = Field(default=0, ge=0)
+    missing_units: int = Field(default=0, ge=0)
     condition_intact: bool = True
     discrepancy_notes: Optional[str] = None
     idempotency_key: Optional[str] = None
@@ -398,7 +399,7 @@ class VoiceIntakeResponse(BaseModel):
     dosage_form: str = ""
     strength: str = ""
     edl_category: str = ""
-    reported_stock: int
+    reported_stock: Optional[int] = None  # None when the report states no count
     dispensed_yesterday: Optional[int]
     confidence_score: float
     detected_language: str

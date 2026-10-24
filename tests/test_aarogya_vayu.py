@@ -158,7 +158,7 @@ def test_transfer_lifecycle_reservation_and_conservation():
     assert total_physical_before == donor_final + rec_after
 
 
-def test_deterministic_acceptance_scenario():
+def test_deterministic_acceptance_scenario(monkeypatch):
     """
     Acceptance Fixture required by specification:
     | Step | Donor on hand | Donor reserved | In transit | Recipient on hand | Recipient quarantined |
@@ -172,6 +172,9 @@ def test_deterministic_acceptance_scenario():
     uid = uuid.uuid4().hex[:6]
     test_donor_fac = f"TEST-D-{uid}"
     test_rec_fac = f"TEST-R-{uid}"
+    from app.main import facilities_dict
+    for fid in (test_donor_fac, test_rec_fac):
+        monkeypatch.setitem(facilities_dict, fid, {**facilities_dict["PHC-LKO-01"], "id": fid, "name": f"Test {fid}"})
     med_id = "MED-001"
     batch = f"BAT-DET-{uid}"
 
@@ -444,7 +447,7 @@ def test_physical_count_below_commitments_triggers_reconciliation_exception():
 
 def test_voice_intake_is_draft_only_and_does_not_mutate_master_stock():
     """Verify that voice intake generates a draft report and never mutates master stock."""
-    inv_before, _, _, _ = storage.load_all()
+    inv_before, _, _, _ = storage.load_all(region="lucknow")
     target_item = next(i for i in inv_before if i["facility_id"] == "PHC-LKO-01" and i["medicine_id"] == "MED-001")
     stock_before = target_item["on_hand"]
 
@@ -459,7 +462,7 @@ def test_voice_intake_is_draft_only_and_does_not_mutate_master_stock():
     assert res["is_draft"] is True
     assert res["action_taken"] == "DRAFT_CREATED_AWAITING_CONFIRMATION"
 
-    inv_after, _, _, _ = storage.load_all()
+    inv_after, _, _, _ = storage.load_all(region="lucknow")
     target_after = next(i for i in inv_after if i["facility_id"] == "PHC-LKO-01" and i["medicine_id"] == "MED-001")
     # Master inventory must be UNTOUCHED
     assert target_after["on_hand"] == stock_before
@@ -832,17 +835,32 @@ def test_voice_intake_rejects_unknown_llm_ids_and_keeps_selected_facility(monkey
     assert data["confidence_score"] <= 0.5
 
 
-def test_voice_intake_without_stock_count_uses_heuristic_path(monkeypatch):
+def test_voice_intake_without_stock_count_keeps_llm_result_and_flags_it(monkeypatch):
     async def no_count(system, user, schema):
         return schema(facility_id="CHC-BBS-02", medicine_id="MED-002", reported_stock=None), "gemini"
 
     monkeypatch.setattr(voice_module, "generate_json", no_count)
-    monkeypatch.setattr(main_module, "_llm_hits", {})
-    monkeypatch.setattr(voice_module.VoiceIntakeService, "_heuristic_extraction",
-                        lambda self, text, hint: (_ for _ in ()).throw(RuntimeError("heuristic used")))
-    with pytest.raises(RuntimeError, match="heuristic used"):
-        asyncio.run(main_module.voice_service.parse_and_validate(
-            VoiceIntakeRequest(transcript_text="ORS khatam ho raha hai", facility_id="CHC-BBS-02")))
+    res = asyncio.run(main_module.voice_service.parse_and_validate(
+        VoiceIntakeRequest(transcript_text="ORS khatam ho raha hai", facility_id="CHC-BBS-02")))
+    assert res.parsed_by == "gemini" and res.medicine_id == "MED-002"
+    assert res.reported_stock is None and res.anomaly_flag and res.confidence_score <= 0.45
+
+
+def test_offline_parser_does_not_invent_counts_or_match_substrings(monkeypatch):
+    async def no_llm(system, user, schema):
+        return None
+
+    monkeypatch.setattr(voice_module, "generate_json", no_llm)
+    parse = lambda text, fac="PHC-LKO-01": asyncio.run(main_module.voice_service.parse_and_validate(
+        VoiceIntakeRequest(transcript_text=text, facility_id=fac)))
+    res = parse("Kakori PHC salbutamol khatam hone wala hai")
+    assert res.reported_stock is None and res.confidence_score <= 0.3 and res.parsed_by == "heuristic"
+    res = parse("Salbutamol 2.5mg respules, 40 left, 12 used yesterday")
+    assert res.reported_stock == 40 and res.dispensed_yesterday == 12
+    res = parse("Paracetamol 30 left. Doctors on leave")
+    assert res.medicine_id == "MED-005"
+    res = parse("ORS 20 left", fac="PHC-NOPE-99")
+    assert res.anomaly_flag and res.confidence_score < 0.7
 
 
 def test_llm_total_budget_returns_none_instead_of_hanging(monkeypatch):
@@ -1016,9 +1034,10 @@ def test_llm_chosen_radius_cannot_hide_a_policy_feasible_transfer(monkeypatch):
     assert res["radius_widened_to_policy"] == (res["recommendation"]["distance_km"] > 5)
 
 
-def _wav(n_samples=1600):
+def _wav(n_samples=24000, amplitude=3000):
+    import math
     import struct
-    pcm = b"\x00\x00" * n_samples
+    pcm = b"".join(struct.pack("<h", int(amplitude * math.sin(i / 8))) for i in range(n_samples))
     return (b"RIFF" + struct.pack("<I", 36 + len(pcm)) + b"WAVEfmt " + struct.pack("<IHHIIHH", 16, 1, 1, 16000, 32000, 2, 16)
             + b"data" + struct.pack("<I", len(pcm)) + pcm)
 
@@ -1030,14 +1049,17 @@ def test_audio_is_never_sent_to_claude(monkeypatch):
         calls.append("gemini")
         return None
 
-    async def claude_ok(system, user, schema, media=None):
+    def claude_client():
         calls.append("claude")
-        return schema(reported_stock=1)
+        return None
 
     monkeypatch.setattr(llm, "_call_gemini", gemini_down)
-    monkeypatch.setattr(llm, "_call_claude", claude_ok)
+    monkeypatch.setattr(llm, "_claude", claude_client)
     assert asyncio.run(llm.generate_json("sys", "user", VoiceExtraction, media=(_wav(), "audio/wav"))) is None
     assert calls == ["gemini"]
+    # images still go to Claude
+    asyncio.run(llm.generate_json("sys", "user", VoiceExtraction, media=(b"\x89PNG", "image/png")))
+    assert calls == ["gemini", "gemini", "claude"]
 
 
 def test_transcribe_requires_wav_and_returns_gemini_transcript(monkeypatch):
@@ -1047,6 +1069,7 @@ def test_transcribe_requires_wav_and_returns_gemini_transcript(monkeypatch):
     assert client.post("/api/voice-intake/transcribe", json={"audio_base64": webm}).status_code == 400
     fake_wav = "data:audio/wav;base64," + base64.b64encode(b"0" * 64).decode()
     assert client.post("/api/voice-intake/transcribe", json={"audio_base64": fake_wav}).status_code == 400
+    assert client.post("/api/voice-intake/transcribe", json={"audio_base64": "AAAA", "mime_type": 123}).status_code == 400
 
     async def fake_transcribe(audio):
         assert audio[1] == "audio/wav" and audio[0][:4] == b"RIFF"
@@ -1058,6 +1081,10 @@ def test_transcribe_requires_wav_and_returns_gemini_transcript(monkeypatch):
     assert res.status_code == 200
     data = res.json()
     assert data["transcript"] == "PHC Kakori: 15 Salbutamol respules left" and data["transcribed_by"].startswith("Gemini")
+
+    silent = "data:audio/wav;base64," + base64.b64encode(_wav(amplitude=0)).decode()
+    res = client.post("/api/voice-intake/transcribe", json={"audio_base64": silent})
+    assert res.status_code == 200 and res.json()["is_speech"] is False
 
     async def no_model(audio):
         return None

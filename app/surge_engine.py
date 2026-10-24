@@ -1,6 +1,6 @@
 import json
 import math
-from typing import List, Dict, Tuple
+from typing import List, Dict, Optional, Tuple
 from app.models import EnvironmentalReading, StockoutRiskAssessment, Facility, Medicine, InventoryItem
 
 class SurgeEngine:
@@ -61,20 +61,25 @@ class SurgeEngine:
         return {
             "AQI / Smog": resp_mult,
             "Heatwave / Drought": heat_mult,
-            "Secondary Respiratory": max(1.10, resp_mult * 0.85),
-            "Heat / Infection": max(heat_mult * 0.8, resp_mult * 0.7),
+            # Partly sensitive categories take a share of the surge, and are exactly 1.0 at baseline
+            "Secondary Respiratory": round(1 + 0.85 * (resp_mult - 1), 3),
+            "Heat / Infection": round(max(1 + 0.8 * (heat_mult - 1), 1 + 0.7 * (resp_mult - 1)), 3),
             "Smog / Dust": resp_mult
         }
 
     def assess_facility_risks(
         self,
         inventory_items: List[dict],
-        env: EnvironmentalReading
+        env: EnvironmentalReading,
+        inbound: Optional[Dict[Tuple[str, str], int]] = None
     ) -> List[StockoutRiskAssessment]:
         """
         Projects forward demand and calculates stockout probability within 7 days.
         Aggregates multiple batches per facility and medicine to evaluate true usable stock.
+        `inbound` maps (facility_id, medicine_id) to units already approved or dispatched to that
+        facility; they count toward cover so the same need is not planned twice.
         """
+        inbound = inbound or {}
         multipliers = self.calculate_surge_multipliers(env)
         assessments = []
 
@@ -101,17 +106,19 @@ class SurgeEngine:
                 for item in batch_items
             )
 
-            # Usable stock for dispensing is total_available
-            days_of_cover = round(total_available / projected_rate, 1)
+            # Usable stock is what is on the shelf plus transfers already committed to this facility
+            inbound_units = inbound.get((fac_id, med_id), 0)
+            usable = total_available + inbound_units
+            days_of_cover = round(usable / projected_rate, 1)
 
             # Cumulative stockout probability within 7 days using Poisson-approximated demand
             # Expected 7-day demand = 7 * projected_rate
             expected_7d_demand = 7 * projected_rate
-            if total_available <= 0:
+            if usable <= 0:
                 stockout_prob = 1.0
             else:
                 std_dev = math.sqrt(expected_7d_demand * 1.5)
-                z_score = (total_available - expected_7d_demand) / (std_dev if std_dev > 0 else 1.0)
+                z_score = (usable - expected_7d_demand) / (std_dev if std_dev > 0 else 1.0)
                 cdf = 0.5 * (1.0 + math.erf(z_score / math.sqrt(2.0)))
                 stockout_prob = max(0.0, min(1.0, round(1.0 - cdf, 3)))
 
@@ -147,7 +154,8 @@ class SurgeEngine:
                 expiry_risk=expiry_risk,
                 days_to_expiry=min_days_to_expiry,
                 on_hand=total_on_hand,
-                available=total_available
+                available=total_available,
+                inbound_units=inbound_units
             ))
 
         return assessments

@@ -1,5 +1,6 @@
 import json
 import random
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -14,7 +15,9 @@ with open(DATA_DIR / "medicines.json", "r", encoding="utf-8") as f:
 
 # Deterministic seed for reproducible testing & live demos
 random.seed(108)
-today = datetime.now()
+# Reference date for expiry dates (MOCK_REFERENCE_DATE=YYYY-MM-DD to pin it); the app recomputes
+# days_to_expiry from expiry_date on every load, so the stored count is only a snapshot
+today = datetime.fromisoformat(os.environ["MOCK_REFERENCE_DATE"]) if os.environ.get("MOCK_REFERENCE_DATE") else datetime.now()
 
 inventory = []
 for fac in facilities:

@@ -65,6 +65,36 @@ class InventoryDomainService:
                     return item
         return None
 
+    def _resolve_item(self, inventory: List[dict], facility_id: str, medicine_id: str, batch_number: Optional[str] = None) -> dict:
+        """The named batch, or, when no batch is named, the only batch of that medicine. Never guesses."""
+        if batch_number:
+            item = self._find_item(inventory, facility_id, medicine_id, batch_number)
+            if not item:
+                raise HTTPException(status_code=404, detail=f"Batch {batch_number} not found for {facility_id} / {medicine_id}.")
+            return item
+        items = [i for i in inventory if i["facility_id"] == facility_id and i["medicine_id"] == medicine_id]
+        if not items:
+            raise HTTPException(status_code=404, detail=f"Stock item not found for {facility_id} / {medicine_id}")
+        if len(items) > 1:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{facility_id} holds {len(items)} batches of {medicine_id}; specify batch_number."
+            )
+        return items[0]
+
+    @staticmethod
+    def _balance(item: dict) -> Dict[str, int]:
+        """Balances of one batch right after an event, stored in the audit entry for the movement register."""
+        return {
+            "on_hand": item.get("on_hand", 0),
+            "available": item.get("available", 0),
+            "reserved": item.get("reserved", 0),
+            "quarantined": item.get("quarantined", 0),
+        }
+
+    def _state_code(self, facility_id: str) -> str:
+        return "OD" if self.get_region_for_facility(facility_id) == "bhubaneswar" else "UP"
+
     def get_region_for_facility(self, facility_id: str) -> str:
         fac = self.facilities.get(facility_id)
         if fac:
@@ -120,17 +150,15 @@ class InventoryDomainService:
         return fac_items
 
     def execute_stock_action(self, req: StockActionRequest) -> StockActionResult:
+        if not (req.reason or "").strip():
+            raise HTTPException(status_code=400, detail="A reason is required for every stock action (it is written to the audit ledger).")
+
         def _txn(inventory, consignments, idempotency_cache, audit_log):
             cached = self._check_idempotency(req.idempotency_key, req.model_dump(), idempotency_cache)
             if cached:
                 return StockActionResult(**cached), inventory, consignments, idempotency_cache, None
 
-            item = self._find_item(inventory, req.facility_id, req.medicine_id, req.batch_number)
-            if not item:
-                # Fallback search without batch if single batch exists
-                item = self._find_item(inventory, req.facility_id, req.medicine_id)
-                if not item:
-                    raise HTTPException(status_code=404, detail=f"Stock item not found for {req.facility_id} / {req.medicine_id}")
+            item = self._resolve_item(inventory, req.facility_id, req.medicine_id, req.batch_number)
 
             # Optimistic locking check
             if req.expected_version is not None and item.get("version", 1) != req.expected_version:
@@ -308,7 +336,8 @@ class InventoryDomainService:
             return TransferConsignment(**cached)
 
         # Idempotent re-approval check: return existing consignment if already approved
-        existing_c = next((c for c in consignments.values() if c.get("recommendation_id") == rec.id and c.get("status") in ["APPROVED_RESERVED", "DISPATCHED", "RECEIVED"]), None)
+        # (recommendation IDs are deterministic per donor/recipient/medicine/batch, so a received transfer may be proposed again later)
+        existing_c = next((c for c in consignments.values() if c.get("recommendation_id") == rec.id and c.get("status") in ["APPROVED_RESERVED", "DISPATCHED"]), None)
         if existing_c:
             return TransferConsignment(**existing_c)
 
@@ -357,7 +386,7 @@ class InventoryDomainService:
         donor_item["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         consignment_id = f"CONSIGN-{uuid.uuid4().hex[:8].upper()}"
-        challan_id = f"CHALLAN-UP-{datetime.now().strftime('%Y%m%d')}-{consignment_id[-6:]}"
+        challan_id = f"CHALLAN-{self._state_code(rec.donor_facility_id)}-{datetime.now().strftime('%Y%m%d')}-{consignment_id[-6:]}"
         now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
         audit_entry = self.audit_ledger.record_entry(
@@ -374,6 +403,7 @@ class InventoryDomainService:
                 "units_reserved": transfer_units,
                 "batch_number": donor_item.get("batch_number", "BAT-DEF"),
                 "donor_remaining_available": donor_item["available"],
+                "balance_after": self._balance(donor_item),
                 "officer_comments": req.comments,
                 "idempotency_key": req.idempotency_key
             },
@@ -449,7 +479,11 @@ class InventoryDomainService:
                 "consignment_id": req.consignment_id,
                 "reason": req.reason,
                 "units_released": c_data["units_requested"],
-                "donor_facility_id": c_data["donor_facility_id"]
+                "donor_facility_id": c_data["donor_facility_id"],
+                "recipient_facility_id": c_data["recipient_facility_id"],
+                "medicine_id": c_data["medicine_id"],
+                "batch_number": c_data["batch_number"],
+                "balance_after": self._balance(donor_item) if donor_item else None
             },
             approved_by=f"{req.operator_name} ({req.operator_role})"
         )
@@ -524,7 +558,12 @@ class InventoryDomainService:
                 "consignment_id": req.consignment_id,
                 "challan_id": c_data["challan_id"],
                 "units_dispatched": units,
+                "donor_facility_id": c_data["donor_facility_id"],
+                "recipient_facility_id": c_data["recipient_facility_id"],
+                "medicine_id": c_data["medicine_id"],
+                "batch_number": c_data["batch_number"],
                 "donor_remaining_on_hand": donor_item["on_hand"],
+                "balance_after": self._balance(donor_item),
                 "vehicle_number": req.vehicle_number,
                 "courier_notes": req.courier_notes
             },
@@ -550,9 +589,17 @@ class InventoryDomainService:
         if not c_data:
             raise HTTPException(status_code=404, detail="Consignment not found.")
 
-        # Idempotent re-receipt check
+        # Idempotent re-receipt check: the same breakdown returns the record, a different one is a conflict
         if c_data.get("status") == "RECEIVED":
-            return TransferConsignment(**c_data)
+            same = (c_data.get("units_accepted"), c_data.get("units_quarantined"), c_data.get("units_missing")) == (
+                req.accepted_units, req.quarantined_units, req.missing_units)
+            if same:
+                return TransferConsignment(**c_data)
+            raise HTTPException(
+                status_code=409,
+                detail=f"Consignment already received ({c_data.get('units_accepted')} accepted, {c_data.get('units_quarantined')} quarantined, "
+                       f"{c_data.get('units_missing')} missing). A receipt cannot be changed; record a stock action instead."
+            )
 
         if c_data.get("status") != "DISPATCHED":
             raise HTTPException(
@@ -564,6 +611,9 @@ class InventoryDomainService:
         accepted = req.accepted_units
         quarantined = req.quarantined_units
         missing = req.missing_units
+
+        if min(accepted, quarantined, missing) < 0:
+            raise HTTPException(status_code=400, detail="Accepted, quarantined and missing units cannot be negative.")
 
         # Enforce strict single final receipt equality: Q_dispatched = Q_accepted + Q_quarantined + Q_missing
         if (accepted + quarantined + missing) != dispatched:
@@ -631,13 +681,17 @@ class InventoryDomainService:
                 "consignment_id": req.consignment_id,
                 "challan_id": c_data["challan_id"],
                 "recipient_facility_id": c_data["recipient_facility_id"],
+                "donor_facility_id": c_data["donor_facility_id"],
+                "medicine_id": c_data["medicine_id"],
+                "batch_number": c_data["batch_number"],
                 "units_accepted": accepted,
                 "units_quarantined": quarantined,
                 "units_missing": missing,
                 "discrepancy_recorded": missing > 0,
                 "discrepancy_notes": req.discrepancy_notes,
                 "recipient_new_on_hand": rec_item["on_hand"],
-                "recipient_new_available": rec_item["available"]
+                "recipient_new_available": rec_item["available"],
+                "balance_after": self._balance(rec_item)
             },
             approved_by=f"{req.operator_name} ({req.operator_role})"
         )
@@ -750,6 +804,9 @@ class InventoryDomainService:
                 detail=f"Unauthorized: Role '{req.supervisor_role}' cannot resolve reconciliation exceptions. Requires MOIC or Supervisor authorization."
             )
 
+        if not (req.resolution_notes or "").strip():
+            raise HTTPException(status_code=400, detail="Resolution notes are required to resolve a reconciliation exception.")
+
         reg = self.get_region_for_facility(req.facility_id)
         inventory, consignments, idempotency_cache, _ = self.storage.load_all(region=reg)
 
@@ -757,11 +814,7 @@ class InventoryDomainService:
         if cached:
             return ResolveReconciliationResult(**cached)
 
-        item = self._find_item(inventory, req.facility_id, req.medicine_id, req.batch_number)
-        if not item:
-            item = self._find_item(inventory, req.facility_id, req.medicine_id)
-        if not item:
-            raise HTTPException(status_code=404, detail=f"Stock item not found for facility {req.facility_id} and medicine {req.medicine_id}")
+        item = self._resolve_item(inventory, req.facility_id, req.medicine_id, req.batch_number)
 
         previous_deficit = item.get("reconciliation_deficit", 0)
         prev_on_hand = item.get("on_hand", 0)
@@ -784,25 +837,37 @@ class InventoryDomainService:
             released_total = 0
             for cid in req.cancelled_consignment_ids:
                 c_data = consignments.get(cid)
-                if c_data and c_data.get("donor_facility_id") == req.facility_id and c_data.get("status") == "APPROVED_RESERVED":
-                    units = c_data.get("units_requested", 0)
-                    released_total += units
-                    item["reserved"] = max(0, item.get("reserved", 0) - units)
-                    c_data["status"] = "CANCELLED"
-                    c_data["condition_notes"] = f"Cancelled by {req.supervisor_name} ({req.supervisor_role}) during reconciliation resolution: {req.resolution_notes}"
-                    cancel_audit = self.audit_ledger.record_entry(
-                        event_type="STOCK_TRANSFER_CANCELLED",
-                        details={
-                            "consignment_id": cid,
-                            "reason": f"MOIC Reconciliation Resolution: {req.resolution_notes}",
-                            "units_released": units,
-                            "donor_facility_id": req.facility_id,
-                            "resolution_type": req.resolution_type
-                        },
-                        approved_by=f"{req.supervisor_name} ({req.supervisor_role})"
+                if not (c_data and c_data.get("donor_facility_id") == req.facility_id and c_data.get("status") == "APPROVED_RESERVED"):
+                    continue
+                # The consignment must reserve stock from the batch being reconciled
+                if c_data.get("medicine_id") != item["medicine_id"] or (
+                        c_data.get("batch_number") and c_data.get("batch_number") != item.get("batch_number")):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Consignment {cid} reserves {c_data.get('medicine_id')} batch {c_data.get('batch_number')}, "
+                               f"not the batch under reconciliation ({item['medicine_id']} {item.get('batch_number')})."
                     )
-                    c_data["cryptographic_hash"] = cancel_audit.get("current_hash")
-                    cancelled_consignments_logged.append(cid)
+                units = c_data.get("units_requested", 0)
+                released_total += units
+                item["reserved"] = max(0, item.get("reserved", 0) - units)
+                c_data["status"] = "CANCELLED"
+                c_data["condition_notes"] = f"Cancelled by {req.supervisor_name} ({req.supervisor_role}) during reconciliation resolution: {req.resolution_notes}"
+                cancel_audit = self.audit_ledger.record_entry(
+                    event_type="STOCK_TRANSFER_CANCELLED",
+                    details={
+                        "consignment_id": cid,
+                        "reason": f"MOIC Reconciliation Resolution: {req.resolution_notes}",
+                        "units_released": units,
+                        "donor_facility_id": req.facility_id,
+                        "recipient_facility_id": c_data.get("recipient_facility_id"),
+                        "medicine_id": item["medicine_id"],
+                        "batch_number": item.get("batch_number"),
+                        "resolution_type": req.resolution_type
+                    },
+                    approved_by=f"{req.supervisor_name} ({req.supervisor_role})"
+                )
+                c_data["cryptographic_hash"] = cancel_audit.get("current_hash")
+                cancelled_consignments_logged.append(cid)
 
         elif req.resolution_type == "ADJUST_QUARANTINE":
             if req.quarantine_adjustment is None or req.quarantine_adjustment < 0:
@@ -895,11 +960,7 @@ class InventoryDomainService:
         """
         reg = self.get_region_for_facility(facility_id)
         inventory, _, _, audit_log = self.storage.load_all(region=reg)
-        item = self._find_item(inventory, facility_id, medicine_id, batch_number)
-        if not item:
-            item = self._find_item(inventory, facility_id, medicine_id)
-        if not item:
-            raise HTTPException(status_code=404, detail=f"No inventory record found for facility '{facility_id}' and medicine '{medicine_id}'.")
+        item = self._resolve_item(inventory, facility_id, medicine_id, batch_number)
 
         target_batch = batch_number or item.get("batch_number", "DEFAULT")
         fac_info = self.facilities.get(facility_id, {})
@@ -952,42 +1013,23 @@ class InventoryDomainService:
                 resulting_reserved = d.get("reserved", 0)
                 resulting_quarantined = d.get("quarantined", 0)
 
-            elif e_type == "STOCK_TRANSFER_RESERVED":
-                units = d.get("units_reserved", 0)
-                delta_p = 0
-                delta_a = -units
-                resulting_on_hand = item.get("on_hand", 0)
-                resulting_available = d.get("donor_remaining_available", max(0, resulting_on_hand - units))
-                resulting_reserved = units
-                resulting_quarantined = 0
-
-            elif e_type == "STOCK_TRANSFER_DISPATCHED":
-                units = d.get("units_dispatched", 0)
-                delta_p = -units
-                delta_a = 0
-                resulting_on_hand = d.get("donor_remaining_on_hand", max(0, item.get("on_hand", 0)))
-                resulting_available = item.get("available", 0)
-                resulting_reserved = 0
-                resulting_quarantined = item.get("quarantined", 0)
-
-            elif e_type == "STOCK_TRANSFER_RECEIVED":
-                accepted = d.get("units_accepted", 0)
-                quar = d.get("units_quarantined", 0)
-                delta_p = accepted + quar
-                delta_a = accepted
-                resulting_on_hand = d.get("recipient_new_on_hand", delta_p)
-                resulting_available = d.get("recipient_new_available", accepted)
-                resulting_reserved = 0
-                resulting_quarantined = quar
-
-            elif e_type == "STOCK_TRANSFER_CANCELLED":
-                units = d.get("units_released", 0)
-                delta_p = 0
-                delta_a = units
-                resulting_on_hand = item.get("on_hand", 0)
-                resulting_available = item.get("available", 0)
-                resulting_reserved = item.get("reserved", 0)
-                resulting_quarantined = item.get("quarantined", 0)
+            elif e_type in ["STOCK_TRANSFER_RESERVED", "STOCK_TRANSFER_DISPATCHED", "STOCK_TRANSFER_RECEIVED", "STOCK_TRANSFER_CANCELLED"]:
+                if e_type == "STOCK_TRANSFER_RESERVED":
+                    delta_p, delta_a = 0, -d.get("units_reserved", 0)
+                elif e_type == "STOCK_TRANSFER_DISPATCHED":
+                    delta_p, delta_a = -d.get("units_dispatched", 0), 0
+                elif e_type == "STOCK_TRANSFER_RECEIVED":
+                    delta_p = d.get("units_accepted", 0) + d.get("units_quarantined", 0)
+                    delta_a = d.get("units_accepted", 0)
+                else:
+                    delta_p, delta_a = 0, d.get("units_released", 0)
+                # Balances recorded at the time of the event; older entries without them fall back to
+                # the few fields they did record, never to today's balances
+                bal = d.get("balance_after") or {}
+                resulting_on_hand = bal.get("on_hand", d.get("donor_remaining_on_hand", d.get("recipient_new_on_hand", 0)))
+                resulting_available = bal.get("available", d.get("donor_remaining_available", d.get("recipient_new_available", 0)))
+                resulting_reserved = bal.get("reserved", 0)
+                resulting_quarantined = bal.get("quarantined", d.get("units_quarantined", 0) if e_type == "STOCK_TRANSFER_RECEIVED" else 0)
 
             elif e_type == "STOCK_RECONCILIATION_RESOLVED":
                 delta_p = d.get("new_on_hand", 0) - d.get("previous_on_hand", 0)

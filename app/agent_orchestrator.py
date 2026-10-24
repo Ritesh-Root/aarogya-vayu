@@ -1,7 +1,8 @@
 import math
+import re
 import time
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional, Literal
+from typing import List, Dict, Any, Optional, Literal, Set, Tuple
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -9,8 +10,9 @@ from pydantic import BaseModel
 
 from app.models import EnvironmentalReading, StockoutRiskAssessment
 from app.surge_engine import SurgeEngine
-from app.optimizer import RedistributionOptimizer
+from app.optimizer import RedistributionOptimizer, committed_transfers
 from app.llm import generate_json, call_tool, GEMINI_MODELS, CLAUDE_MODEL
+from app.telemetry_service import is_live_reading
 
 
 class CmoInsight(BaseModel):
@@ -106,7 +108,7 @@ class MultiAgentResilienceOrchestrator:
         72h CAMS forecast peak, wind, boundary-layer height (trapping), CAMS aerosol optical
         depth vs its 30-day baseline, and NASA FIRMS fire detections when configured.
         """
-        is_live = "Open-Meteo" in (env.source or "")
+        is_live = is_live_reading(env)
         wind = env.wind_speed_kmh
         blh = env.boundary_layer_m
         # A shallow mixing layer with light wind traps particulates near the surface
@@ -166,14 +168,16 @@ class MultiAgentResilienceOrchestrator:
     # =========================================================================
     # AGENT 3: Demand Intelligence Agent (lag-curve surge forecast)
     # =========================================================================
-    def run_demand_forecast(self, facility_id: str, medicine_id: str, raw_inventory: List[dict], env: EnvironmentalReading) -> Dict[str, Any]:
+    def run_demand_forecast(self, facility_id: str, medicine_id: str, raw_inventory: List[dict], env: EnvironmentalReading,
+                            inbound: Optional[Dict[Tuple[str, str], int]] = None) -> Dict[str, Any]:
         """
         Rule-based forecaster: baseline consumption × the surge engine's climate multiplier,
         ramped in over a sigmoid lag curve peaking on day 3, with P10/P50/P90 bands from the
-        same demand variance (1.5× mean) the surge engine uses for stockout probability.
+        same demand variance (1.5× mean) the surge engine uses. The 7-day stockout probability and
+        days of cover are the surge engine's own figures for this item.
         """
         items = [i for i in raw_inventory if i["facility_id"] == facility_id and i["medicine_id"] == medicine_id]
-        risk = next((r for r in self.surge_engine.assess_facility_risks(items, env)), None) if items else None
+        risk = next((r for r in self.surge_engine.assess_facility_risks(items, env, inbound)), None) if items else None
         base_rate = items[0].get("daily_consumption_base", 15.0) if items else 0.0
         current_stock = risk.current_stock if risk else 0
         climate_cat = self.medicines.get(medicine_id, {}).get("climate_sensitive", "General")
@@ -193,16 +197,11 @@ class MultiAgentResilienceOrchestrator:
                 "p90": round(day_p50 + band, 1),
             })
 
-        if current_stock <= 0:
-            stockout_prob_7d = 1.0
-        elif cum_demand_p50 <= 0:
-            stockout_prob_7d = 0.0
-        else:
-            z = (current_stock - cum_demand_p50) / math.sqrt(cum_demand_p50 * 1.5)
-            stockout_prob_7d = round(1.0 - 0.5 * (1.0 + math.erf(z / math.sqrt(2.0))), 3)
-
+        # Probability and cover come from the same surge-engine assessment as the risk table, so the
+        # pipeline never shows a different figure for the same item; None when there is no stock record
+        stockout_prob_7d = risk.stockout_probability_7d if risk else None
+        days_of_coverage = risk.days_of_coverage if risk else None
         peak_rate = max((d["p50"] for d in forecast_7d), default=0.0)
-        days_of_coverage = round(current_stock / peak_rate, 1) if peak_rate > 0 else None
         return {
             "agent": "DemandIntelligenceAgent",
             "model": "lag_curve_surge_forecaster (rule-based)",
@@ -247,6 +246,7 @@ class MultiAgentResilienceOrchestrator:
         risks: List[StockoutRiskAssessment],
         raw_inventory: List[dict],
         context: str = "",
+        active_ids: Optional[Set[str]] = None,
     ) -> Dict[str, Any]:
         """
         Asks the LLM (Gemini, Claude fallback) to choose the solver arguments via forced function
@@ -262,19 +262,19 @@ class MultiAgentResilienceOrchestrator:
             tool["name"], tool["description"], tool["parameters"],
         )
         args, called_by = (result if result else (default_args, "deterministic_default"))
-        # Never trust model-chosen IDs or limits: clamp to known values
-        if args.get("target_facility_id") not in self.facilities:
-            args["target_facility_id"] = target_phc_id
-        if args.get("medicine_id") not in self.medicines:
-            args["medicine_id"] = medicine_id
+        # Never trust model-chosen IDs or limits: the target and medicine are fixed by the request,
+        # and only the radius (clamped) and substitution flag come from the model
+        args["target_facility_id"] = target_phc_id
+        args["medicine_id"] = medicine_id
         try:
             args["max_distance_km"] = min(35.0, max(5.0, float(args.get("max_distance_km", 35.0))))
         except (TypeError, ValueError):
             args["max_distance_km"] = 35.0
-        args["allow_substitution"] = bool(args.get("allow_substitution", True))
+        sub = args.get("allow_substitution", True)
+        args["allow_substitution"] = sub if isinstance(sub, bool) else str(sub).strip().lower() == "true"
 
         started = time.perf_counter()
-        recs = self.optimizer.optimize(risks, raw_inventory)
+        recs = self.optimizer.optimize(risks, raw_inventory, active_ids)
         solver_ms = round((time.perf_counter() - started) * 1000, 2)
         matches = [r for r in recs if r.recipient_facility_id == args["target_facility_id"] and r.medicine_id == args["medicine_id"]]
         chosen_rec = next((r for r in matches if r.distance_km <= args["max_distance_km"]), None)
@@ -316,44 +316,75 @@ class MultiAgentResilienceOrchestrator:
         self,
         question: str,
         env: EnvironmentalReading,
-        raw_inventory: List[dict]
+        raw_inventory: List[dict],
+        consignments: Optional[Dict[str, dict]] = None,
     ) -> Dict[str, Any]:
         """
         Synthesizes clinical policy, what-if surge forecasting, and emergency stock
         rebalancing for the District Chief Medical Officer.
         """
         q = (question or "").lower().strip()
-        risks = self.surge_engine.assess_facility_risks(raw_inventory, env)
-        recs = self.optimizer.optimize(risks, raw_inventory)
+        inbound, active_ids = committed_transfers(consignments or {})
+        risks = self.surge_engine.assess_facility_risks(raw_inventory, env, inbound)
+        recs = self.optimizer.optimize(risks, raw_inventory, active_ids)
 
         is_bbs = any(tok in (env.corridor or "").lower() for tok in ["bhubaneswar", "cuttack", "odisha", "coastal"]) or any(r.facility_id.startswith("PHC-BBS") or r.facility_id.startswith("CHC-CTC") for r in risks)
         corridor_title = "Bhubaneswar–Cuttack Health Corridor" if is_bbs else "Lucknow-Unnao Health Corridor"
         state_title = "Odisha" if is_bbs else "Uttar Pradesh"
-        donors_title = "Capital Hospital Unit-6 and CHC Jatni" if is_bbs else "Nawabganj and Malihabad"
         mp_constituency = "Bhubaneswar & Cuttack Parliamentary Constituencies" if is_bbs else "Lucknow & Mohanlalganj Parliamentary Constituencies"
 
-        # Live LLM generation (Gemini primary, Claude fallback) when a key is configured
-        crit_list = [f"{r.facility_name}: {r.days_of_coverage}d cover" for r in risks if r.status == 'CRITICAL'][:5]
-        crit_summary = ", ".join(crit_list) if crit_list else "All facilities currently above critical threshold"
+        multipliers = self.surge_engine.calculate_surge_multipliers(env)
+        at_risk = sorted((r for r in risks if r.status in ["CRITICAL", "WARNING"]), key=lambda r: r.days_of_coverage)
+        donor_names = list(dict.fromkeys(r.donor_facility_name for r in recs))[:2]
+        donors_title = " and ".join(donor_names) if donor_names else "corridor surplus facilities"
+
+        # Everything the model may quote is computed here; it is told not to invent other figures
+        risk_lines = "\n".join(
+            f"- {r.facility_name}: {r.medicine_name.split('(')[0].strip()} {r.available if r.available is not None else r.current_stock} units, "
+            f"{r.days_of_coverage} days cover, 7-day stockout probability {round(r.stockout_probability_7d * 100)}% ({r.status})"
+            for r in at_risk[:8]
+        ) or "- No facility is below the warning threshold"
+        rec_lines = "\n".join(
+            f"- {r.donor_facility_name} -> {r.recipient_facility_name}: {r.units_to_transfer} units {r.medicine_name.split('(')[0].strip()}, {r.distance_km} km"
+            for r in recs[:6]
+        ) or "- None"
+        mult_line = ", ".join(f"{k} x{round(v, 2)}" for k, v in multipliers.items())
+        region_fac_ids = {i["facility_id"] for i in raw_inventory}
+        population = sum(self.facilities.get(f, {}).get("population_served", 0) for f in region_fac_ids)
+        expiry_units = sum(r.units_to_transfer for r in recs if r.expiry_waste_prevented)
         cmo_system_prompt = (
-            f"You are the Strategic Insight Agent for Aarogya-Vayu, an autonomous climate-resilient rural health logistics platform for {state_title}, India. "
-            f"You provide clinical, logistical, and policy guidance to Chief Medical Officers (CMO) in the {corridor_title}.\n"
-            f"Current Telemetry: AQI {env.aqi}, PM2.5 {env.pm25} µg/m³, Temp {env.temperature_c}°C, Corridor: '{env.corridor}', Smog Inversion: {env.smog_episode}, Heatwave: {env.heatwave_alert}.\n"
-            f"Critical Facilities: {crit_summary}.\n\n"
-            "Respond in plain text fields (no HTML or markdown). query_type is one of WHAT_IF_SURGE_SIMULATION, "
+            f"You are the Strategic Insight Agent for Aarogya-Vayu, a climate-resilient rural health logistics platform for {state_title}, India. "
+            f"You advise the Chief Medical Officer (CMO) of the {corridor_title}.\n"
+            f"Telemetry ({'live' if is_live_reading(env) else 'scenario'}): AQI {env.aqi}, PM2.5 {env.pm25} µg/m³, {env.temperature_c}°C, "
+            f"smog episode {env.smog_episode}, heatwave {env.heatwave_alert}.\n"
+            f"Demand surge multipliers by medicine class (rule-based): {mult_line}.\n"
+            f"Facilities at risk, soonest stockout first:\n{risk_lines}\n"
+            f"Proposed transfers awaiting CMO approval:\n{rec_lines}\n"
+            f"Coverage: {len(region_fac_ids)} monitored PHCs/CHCs serving {population:,} people (demo registry figures); "
+            f"{expiry_units} near-expiry units are in the proposed transfers.\n\n"
+            "Use only the figures above; never invent numbers, facilities, depots, medicines or percentages. If the question needs "
+            "data that is not here, say so. If the question is not about this district's health supply chain, say briefly that "
+            "you only answer questions about it. Respond in plain text fields (no HTML or markdown). query_type is one of WHAT_IF_SURGE_SIMULATION, "
             "DRUG_SUBSTITUTION_EVALUATION, PARLIAMENTARY_IMPACT_BRIEF, STRATEGIC_LOGISTICS_ADVISORY. answer_en is a concise "
             "strategic briefing in English, answer_hi a professional Hindi translation, and recommended_action one clear "
-            "operational action for the CMO or ambulance logistics team."
+            "operational action for the CMO or logistics team."
         )
         result = await generate_json(cmo_system_prompt, f"Question from CMO: {question}", CmoInsight)
         if result:
-            insight, _provider = result
-            return insight.model_dump()
+            insight, provider = result
+            answered_by = f"Gemini ({GEMINI_MODELS[0]})" if provider == "gemini" else f"Claude ({CLAUDE_MODEL}, fallback)"
+            return {**insight.model_dump(), "answered_by": answered_by}
 
-        # Fallback Scenario 1: Extended Smog Duration What-If ("5 din aur", "5 more days", "what-if")
-        if any(w in q for w in ["5", "स्मॉग", "din", "duration", "what if", "stock out", "first", "surge"]):
+        answer = self._scripted_insight(q, env, risks, recs, at_risk, multipliers, corridor_title, state_title, donors_title, mp_constituency, raw_inventory)
+        return {**answer, "answered_by": "Scripted answer (no LLM available)"}
+
+    def _scripted_insight(self, q, env, risks, recs, at_risk, multipliers, corridor_title, state_title, donors_title, mp_constituency, raw_inventory) -> Dict[str, Any]:
+        def asks(*patterns):
+            return any(re.search(p, q) for p in patterns)
+
+        # Fallback Scenario 1: Extended surge what-if ("5 din aur", "5 more days", "what if")
+        if asks(r"\bwhat[- ]?if\b", r"\bdin\b", r"\bmore days?\b", r"\bduration\b", r"\bstock ?outs?\b", r"\bsurge\b", "स्मॉग", "दिन"):
             # One row per facility (its earliest-depleting medicine), soonest stockout first
-            at_risk = sorted((r for r in risks if r.status in ["CRITICAL", "WARNING"]), key=lambda r: r.days_of_coverage)
             seen_facilities = set()
             extended_critical = []
             for r in at_risk:
@@ -368,40 +399,32 @@ class MultiAgentResilienceOrchestrator:
                 })
             extended_critical = extended_critical[:4]
 
-            if not extended_critical and risks:
-                extended_critical = [
-                    {
-                        "facility": risks[0].facility_name,
-                        "medicine": risks[0].medicine_name.split("(")[0].strip(),
-                        "current_days_cover": round(risks[0].days_of_coverage, 1),
-                        "projected_stockout_day": f"Day {max(1, int(risks[0].days_of_coverage))}"
-                    }
-                ]
-
-            fac_str = ", ".join([f"{x['facility']} ({x['projected_stockout_day']})" for x in extended_critical]) if extended_critical else "peripheral clinics"
-            fac_hi_str = ", ".join([f"{x['facility']}" for x in extended_critical]) if extended_critical else "प्राथमिक स्वास्थ्य केंद्र"
+            top_class, top_mult = max(multipliers.items(), key=lambda kv: kv[1])
+            surge_pct = round((top_mult - 1) * 100)
+            surge_en = (f"demand for {top_class} medicines runs {surge_pct:+d}% against baseline under the current multiplier"
+                        if surge_pct else "demand stays at baseline under current conditions")
+            fac_str = ", ".join(f"{x['facility']} ({x['projected_stockout_day']})" for x in extended_critical) or "no facility below the warning threshold"
+            fac_hi_str = ", ".join(x["facility"] for x in extended_critical) or "कोई केंद्र चेतावनी स्तर से नीचे नहीं"
 
             answer_en = (
-                f"WHAT-IF SCENARIO (5-Day Extended Inversion / Climate Surge): If atmospheric stress (AQI {env.aqi}, PM2.5 {env.pm25} µg/m³) sustains across {corridor_title} for 5 additional days, "
-                f"acute clinical demand will expand by +75% over baseline. "
-                f"{len(extended_critical)} rural facilities will deplete their primary essential stocks first: {fac_str}. "
-                f"Proactive lateral transfers from cluster reserves at {donors_title} will protect all facilities without requiring emergency state procurement."
+                f"WHAT-IF (conditions persist): at AQI {env.aqi}, PM2.5 {env.pm25} µg/m³ and {env.temperature_c}°C across {corridor_title}, "
+                f"{surge_en}. Earliest projected stockouts: {fac_str}. "
+                f"Transfers proposed from {donors_title} are awaiting approval."
             )
             answer_hi = (
-                f"यदि यह वातावरणीय दबाव अगले 5 दिनों तक जारी रहता है, तो {state_title} के {corridor_title} में दवाओं की खपत 75% बढ़ जाएगी। "
-                f"सबसे पहले इन केंद्रों पर स्टॉक समाप्त होगा: {fac_hi_str}। "
-                f"{donors_title} से समय रहते स्टॉक ट्रांसफर करने पर सभी केंद्र सुरक्षित रहेंगे।"
+                f"यदि मौजूदा स्थिति बनी रहती है ({state_title}, {corridor_title}): मांग गुणक {round(top_mult, 2)} ({top_class})। "
+                f"सबसे पहले स्टॉक समाप्त होने का अनुमान: {fac_hi_str}। {donors_title} से स्थानांतरण प्रस्ताव अनुमोदन हेतु लंबित हैं।"
             )
             return {
                 "query_type": "WHAT_IF_SURGE_SIMULATION",
                 "answer_en": answer_en,
                 "answer_hi": answer_hi,
                 "affected_facilities": extended_critical,
-                "recommended_action": f"Execute proactive inter-district transfer orders across {corridor_title} before Day 3."
+                "recommended_action": f"Approve the pending transfers for the earliest-stockout facilities in {corridor_title}."
             }
 
         # Scenario 2: Drug Substitution Query ("levosalbutamol", "substitute", "बदल")
-        elif any(w in q for w in ["levo", "substitut", "बदल", "विकल्प", "alternative"]):
+        elif asks(r"levo", r"substitut", r"\balternatives?\b", "बदल", "विकल्प"):
             sub = DRUG_SUBSTITUTION_GRAPH["MED-001"]["substitutes"][0]
             answer_en = (
                 f"THERAPEUTIC SUBSTITUTION VERIFIED: Yes, Levosalbutamol Respules (1.25mg/2.5ml) is approved as an emergency alternative "
@@ -422,7 +445,7 @@ class MultiAgentResilienceOrchestrator:
             }
 
         # Scenario 3: MP Impact & Accountability Report ("mp", "report", "रिपोर्ट", "साहब")
-        else:
+        elif asks(r"\bmp\b", r"parliament", r"\breport\b", r"\bbrief\b", r"constituenc", "रिपोर्ट", "सांसद", "साहब"):
             region_fac_ids = {i["facility_id"] for i in raw_inventory}
             population = sum(self.facilities.get(f, {}).get("population_served", 0) for f in region_fac_ids)
             at_risk_covered = len({(r.recipient_facility_id, r.medicine_id) for r in recs})
@@ -452,6 +475,19 @@ class MultiAgentResilienceOrchestrator:
                 }
             }
 
+        # Anything else: a factual status summary from the current assessment
+        top = at_risk[:3]
+        top_str = "; ".join(f"{r.facility_name} {r.medicine_name.split('(')[0].strip()} ({r.days_of_coverage}d cover)" for r in top) or "none"
+        pending_n = len(recs)
+        return {
+            "query_type": "STRATEGIC_LOGISTICS_ADVISORY",
+            "answer_en": (f"{corridor_title} status: {len(at_risk)} facility-medicine pairs are at warning or critical level. "
+                          f"Most urgent: {top_str}. {pending_n} transfer proposal(s) are awaiting CMO approval."),
+            "answer_hi": (f"{corridor_title} स्थिति: {len(at_risk)} दवा-केंद्र जोड़े चेतावनी या गंभीर स्तर पर हैं। "
+                          f"{pending_n} स्थानांतरण प्रस्ताव CMO अनुमोदन हेतु लंबित हैं।"),
+            "recommended_action": "Review the pending transfer recommendations, starting with the lowest days of cover.",
+        }
+
     # =========================================================================
     # Master Execution Trace for the multi-agent pipeline
     # =========================================================================
@@ -460,7 +496,8 @@ class MultiAgentResilienceOrchestrator:
         env: EnvironmentalReading,
         raw_inventory: List[dict],
         target_phc_id: str = "PHC-LKO-01",
-        intake: Optional[Dict[str, Any]] = None
+        intake: Optional[Dict[str, Any]] = None,
+        consignments: Optional[Dict[str, dict]] = None,
     ) -> Dict[str, Any]:
         traces: List[Dict[str, Any]] = []
         facility_name = self.facilities.get(target_phc_id, {}).get("name", target_phc_id)
@@ -476,7 +513,9 @@ class MultiAgentResilienceOrchestrator:
 
         # 2. Frontline Intake Agent: use the parsed field report when it is about this facility,
         # otherwise pick the facility's highest-risk medicine from the live risk assessment
-        risks = self.surge_engine.assess_facility_risks(raw_inventory, env)
+        # Stock already approved or on its way counts as cover, and its transfers are not proposed again
+        inbound, active_ids = committed_transfers(consignments or {})
+        risks = self.surge_engine.assess_facility_risks(raw_inventory, env, inbound)
         if intake and intake.get("facility_id") == target_phc_id:
             medicine_id = intake["medicine_id"]
             parser = {"gemini": f"Gemini ({GEMINI_MODELS[0]})", "claude": f"Claude ({CLAUDE_MODEL}, fallback)"}.get(
@@ -484,8 +523,10 @@ class MultiAgentResilienceOrchestrator:
             register = sum(r.current_stock for r in risks if r.facility_id == target_phc_id and r.medicine_id == medicine_id)
             traces.append(AgentStepTrace(
                 "FrontlineIntakeAgent", "THINKING",
-                f"Field report parsed by {parser}: {intake['reported_stock']} units left, confidence {round(intake['confidence_score'] * 100)}%. "
-                f"Saved as a draft; planning uses the register ({register} available) until staff confirm the count."
+                f"Field report parsed by {parser}: "
+                + (f"{intake['reported_stock']} units left" if intake.get("reported_stock") is not None else "no stock count stated")
+                + f", confidence {round(intake['confidence_score'] * 100)}%. "
+                f"Treated as unconfirmed: planning uses the register ({register} available) until staff confirm the count on the Clinic Desk."
             ).to_dict())
             entity = {
                 "standard_name": intake.get("standard_name") or intake.get("medicine_name"),
@@ -493,11 +534,15 @@ class MultiAgentResilienceOrchestrator:
                 "category": intake.get("edl_category") or "",
             }
         else:
-            facility_risks = sorted((r for r in risks if r.facility_id == target_phc_id), key=lambda r: -r.stockout_probability_7d)
+            facility_risks = sorted((r for r in risks if r.facility_id == target_phc_id),
+                                    key=lambda r: (-r.stockout_probability_7d, r.days_of_coverage))
             medicine_id = facility_risks[0].medicine_id if facility_risks else "MED-001"
+            other = intake.get("facility_name") if intake else None
+            note = (f"The field report is about {other}, not {facility_name}, so it is not used here. " if other
+                    else f"No stock report for {facility_name}. ")
             traces.append(AgentStepTrace(
                 "FrontlineIntakeAgent", "THINKING",
-                f"No stock report for {facility_name}; selecting its highest 7-day stockout risk from the inventory register."
+                note + "Selecting its most at-risk medicine from the inventory register."
             ).to_dict())
             med = self.medicines.get(medicine_id, {})
             entity = {"standard_name": med.get("name", medicine_id), "code": medicine_id, "category": med.get("category", "")}
@@ -508,28 +553,41 @@ class MultiAgentResilienceOrchestrator:
         ).to_dict())
 
         # 3. Demand Intelligence Agent
-        demand_res = self.run_demand_forecast(target_phc_id, medicine_id, raw_inventory, env)
+        demand_res = self.run_demand_forecast(target_phc_id, medicine_id, raw_inventory, env, inbound)
         cover = f"{demand_res['days_of_coverage']}d" if demand_res["days_of_coverage"] is not None else "n/a"
+        prob = demand_res["stockout_probability_7d"]
+        prob_pct = f"{round(prob * 100)}%" if prob is not None else "n/a (no stock record)"
         traces.append(AgentStepTrace(
             "DemandIntelligenceAgent", "THINKING",
             f"Lag-curve forecast: baseline {demand_res['baseline_daily_rate']}/day × surge {demand_res['surge_multiplier']} → peak {demand_res['median_surge_rate']}/day. "
-            f"Stock {demand_res['current_stock']}, cover {cover}, 7-day stockout probability {round(demand_res['stockout_probability_7d'] * 100)}%.",
+            f"Stock {demand_res['current_stock']}, cover {cover}, 7-day stockout probability {prob_pct}.",
             {"forecast": demand_res["forecast_quantiles_7d"][:3]}
         ).to_dict())
+
+        # A facility with healthy cover needs no transfer: don't call the model or escalate anything
+        if demand_res["risk_status"] not in ("CRITICAL", "WARNING", "NO_STOCK_RECORD"):
+            traces.append(AgentStepTrace(
+                "LogisticsAgent", "THINKING",
+                f"{facility_name} has {cover} of cover for this medicine ({demand_res['risk_status']}); no transfer is needed."
+            ).to_dict())
+            traces.append(AgentStepTrace("GovernanceAgent", "DISPATCH", "No action required.", {"status": "NO_ACTION_NEEDED"}).to_dict())
+            return {"status": "PIPELINE_COMPLETE", "traces": traces, "sentinel": sentinel_res, "demand_forecast": demand_res, "logistics": None}
 
         # 4. Logistics Agent
         context = (
             f"Situation: {sentinel_res['situation_brief']}\n"
             f"Demand forecast: {demand_res['risk_status']}, stock {demand_res['current_stock']}, "
-            f"7-day stockout probability {demand_res['stockout_probability_7d']}."
+            f"7-day stockout probability {prob_pct}."
         )
-        logistics_res = await self.run_logistics_agent(target_phc_id, medicine_id, risks, raw_inventory, context)
+        logistics_res = await self.run_logistics_agent(target_phc_id, medicine_id, risks, raw_inventory, context, active_ids)
         args = logistics_res["tool_arguments"]
         caller = {"gemini": f"Gemini ({GEMINI_MODELS[0]}) function call", "claude": f"Claude ({CLAUDE_MODEL}) tool call (Gemini unavailable)"}.get(
-            logistics_res["tool_called_by"], "Deterministic default arguments (LLM unavailable)")
+            logistics_res["tool_called_by"])
+        tool_msg = (f"{caller}: the LLM chooses the search radius and substitution policy; the allocation itself is computed by the deterministic solver."
+                    if caller else "No LLM available, so the solver runs with policy defaults (35 km, substitution allowed).")
         traces.append(AgentStepTrace(
             "LogisticsAgent", "TOOL_CALL",
-            f"{caller}: the LLM chooses arguments; the allocation itself is computed by the deterministic solver.",
+            tool_msg,
             {"tool": logistics_res["tool_called"], "arguments": args, "called_by": logistics_res["tool_called_by"]}
         ).to_dict())
 

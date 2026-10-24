@@ -7,7 +7,7 @@
     "current_stock": 15,
     "daily_consumption_base": 20,
     "batch_number": "BAT-859-26",
-    "expiry_date": "2027-03-10",
+    "expiry_date": "2027-04-28",
     "days_to_expiry": 186,
     "last_updated": "2026-09-08 03:18:21"
   },
@@ -19,7 +19,7 @@
     "current_stock": 597,
     "daily_consumption_base": 40,
     "batch_number": "BAT-854-26",
-    "expiry_date": "2027-03-15",
+    "expiry_date": "2027-05-03",
     "days_to_expiry": 191,
     "last_updated": "2026-09-05 01:34:25"
   },
@@ -31,7 +31,7 @@
     "current_stock": 121,
     "daily_consumption_base": 15,
     "batch_number": "BAT-189-26",
-    "expiry_date": "2027-07-21",
+    "expiry_date": "2027-09-08",
     "days_to_expiry": 319,
     "last_updated": "2026-09-08 03:18:20"
   },
@@ -43,7 +43,7 @@
     "current_stock": 426,
     "daily_consumption_base": 25,
     "batch_number": "BAT-195-26",
-    "expiry_date": "2027-01-18",
+    "expiry_date": "2027-03-08",
     "days_to_expiry": 135,
     "last_updated": "2026-09-04 23:34:25"
   },
@@ -55,7 +55,7 @@
     "current_stock": 266,
     "daily_consumption_base": 18,
     "batch_number": "BAT-127-26",
-    "expiry_date": "2027-11-07",
+    "expiry_date": "2027-12-26",
     "days_to_expiry": 428,
     "last_updated": "2026-09-04 18:34:25"
   },
@@ -67,7 +67,7 @@
     "current_stock": 431,
     "daily_consumption_base": 30,
     "batch_number": "BAT-529-26",
-    "expiry_date": "2027-10-09",
+    "expiry_date": "2027-11-27",
     "days_to_expiry": 399,
     "last_updated": "2026-09-04 23:34:25"
   },
@@ -79,7 +79,7 @@
     "current_stock": 1141,
     "daily_consumption_base": 50,
     "batch_number": "BAT-928-26",
-    "expiry_date": "2026-11-07",
+    "expiry_date": "2026-12-26",
     "days_to_expiry": 63,
     "last_updated": "2026-09-05 04:26:19"
   },
@@ -91,7 +91,7 @@
     "current_stock": 1207,
     "daily_consumption_base": 100,
     "batch_number": "BAT-814-26",
-    "expiry_date": "2027-03-25",
+    "expiry_date": "2027-05-13",
     "days_to_expiry": 201,
     "last_updated": "2026-09-04 20:34:25"
   },
@@ -103,7 +103,7 @@
     "current_stock": 799,
     "daily_consumption_base": 35,
     "batch_number": "BAT-320-26",
-    "expiry_date": "2026-11-03",
+    "expiry_date": "2026-12-22",
     "days_to_expiry": 59,
     "last_updated": "2026-09-05 22:56:04"
   },
@@ -115,7 +115,7 @@
     "current_stock": 962,
     "daily_consumption_base": 60,
     "batch_number": "BAT-489-26",
-    "expiry_date": "2027-02-19",
+    "expiry_date": "2027-04-09",
     "days_to_expiry": 167,
     "last_updated": "2026-09-05 01:34:25"
   },
@@ -127,7 +127,7 @@
     "current_stock": 733,
     "daily_consumption_base": 45,
     "batch_number": "BAT-718-26",
-    "expiry_date": "2027-06-28",
+    "expiry_date": "2027-08-16",
     "days_to_expiry": 296,
     "last_updated": "2026-09-04 22:34:25"
   },
@@ -139,7 +139,7 @@
     "current_stock": 1734,
     "daily_consumption_base": 80,
     "batch_number": "BAT-649-26",
-    "expiry_date": "2027-08-26",
+    "expiry_date": "2027-10-14",
     "days_to_expiry": 355,
     "last_updated": "2026-09-05 01:34:25"
   },
@@ -151,7 +151,7 @@
     "current_stock": 473,
     "daily_consumption_base": 20,
     "batch_number": "BAT-180-26",
-    "expiry_date": "2027-07-15",
+    "expiry_date": "2027-09-02",
     "days_to_expiry": 313,
     "last_updated": "2026-09-04 18:34:25"
   },
@@ -163,7 +163,7 @@
     "current_stock": 620,
     "daily_consumption_base": 40,
     "batch_number": "BAT-733-26",
-    "expiry_date": "2027-11-20",
+    "expiry_date": "2028-01-08",
     "days_to_expiry": 441,
     "last_updated": "2026-09-04 13:34:25"
   },
@@ -175,7 +175,7 @@
     "current_stock": 245,
     "daily_consumption_base": 15,
     "batch_number": "BAT-821-26",
-    "expiry_date": "2027-04-11",
+    "expiry_date": "2027-05-30",
     "days_to_expiry": 218,
     "last_updated": "2026-09-05 01:34:25"
   },
@@ -187,7 +187,7 @@
     "current_stock": 313,
     "daily_consumption_base": 25,
     "batch_number": "BAT-891-26",
-    "expiry_date": "2027-04-29",
+    "expiry_date": "2027-06-17",
     "days_to_expiry": 236,
     "last_updated": "2026-09-04 22:34:25"
   },
@@ -199,7 +199,7 @@
     "current_stock": 428,
     "daily_consumption_base": 18,
     "batch_number": "BAT-987-26",
-    "expiry_date": "2027-05-02",
+    "expiry_date": "2027-06-20",
     "days_to_expiry": 239,
     "last_updated": "2026-09-05 01:34:25"
   },
@@ -211,7 +211,7 @@
     "current_stock": 496,
     "daily_consumption_base": 30,
     "batch_number": "BAT-750-26",
-    "expiry_date": "2027-08-23",
+    "expiry_date": "2027-10-11",
     "days_to_expiry": 352,
     "last_updated": "2026-09-04 13:34:25"
   },
@@ -223,7 +223,7 @@
     "current_stock": 818,
     "daily_consumption_base": 50,
     "batch_number": "BAT-463-26",
-    "expiry_date": "2027-07-11",
+    "expiry_date": "2027-08-29",
     "days_to_expiry": 309,
     "last_updated": "2026-09-04 23:34:25"
   },
@@ -235,7 +235,7 @@
     "current_stock": 2004,
     "daily_consumption_base": 100,
     "batch_number": "BAT-723-26",
-    "expiry_date": "2027-02-08",
+    "expiry_date": "2027-03-29",
     "days_to_expiry": 156,
     "last_updated": "2026-09-04 16:34:25"
   },
@@ -247,7 +247,7 @@
     "current_stock": 491,
     "daily_consumption_base": 35,
     "batch_number": "BAT-267-26",
-    "expiry_date": "2027-05-08",
+    "expiry_date": "2027-06-26",
     "days_to_expiry": 245,
     "last_updated": "2026-09-04 19:34:25"
   },
@@ -259,7 +259,7 @@
     "current_stock": 993,
     "daily_consumption_base": 60,
     "batch_number": "BAT-804-26",
-    "expiry_date": "2027-11-26",
+    "expiry_date": "2028-01-14",
     "days_to_expiry": 447,
     "last_updated": "2026-09-04 18:34:25"
   },
@@ -271,7 +271,7 @@
     "current_stock": 658,
     "daily_consumption_base": 45,
     "batch_number": "BAT-963-26",
-    "expiry_date": "2027-06-18",
+    "expiry_date": "2027-08-06",
     "days_to_expiry": 286,
     "last_updated": "2026-09-04 14:34:25"
   },
@@ -283,7 +283,7 @@
     "current_stock": 1704,
     "daily_consumption_base": 80,
     "batch_number": "BAT-941-26",
-    "expiry_date": "2027-04-30",
+    "expiry_date": "2027-06-18",
     "days_to_expiry": 237,
     "last_updated": "2026-09-05 02:34:25"
   },
@@ -295,7 +295,7 @@
     "current_stock": 433,
     "daily_consumption_base": 20,
     "batch_number": "BAT-374-26",
-    "expiry_date": "2027-07-27",
+    "expiry_date": "2027-09-14",
     "days_to_expiry": 325,
     "last_updated": "2026-09-05 01:34:25"
   },
@@ -307,7 +307,7 @@
     "current_stock": 581,
     "daily_consumption_base": 40,
     "batch_number": "BAT-997-26",
-    "expiry_date": "2027-10-20",
+    "expiry_date": "2027-12-08",
     "days_to_expiry": 410,
     "last_updated": "2026-09-04 15:34:25"
   },
@@ -319,7 +319,7 @@
     "current_stock": 236,
     "daily_consumption_base": 15,
     "batch_number": "BAT-505-26",
-    "expiry_date": "2027-09-15",
+    "expiry_date": "2027-11-03",
     "days_to_expiry": 375,
     "last_updated": "2026-09-04 16:34:25"
   },
@@ -331,7 +331,7 @@
     "current_stock": 437,
     "daily_consumption_base": 25,
     "batch_number": "BAT-242-26",
-    "expiry_date": "2027-05-18",
+    "expiry_date": "2027-07-06",
     "days_to_expiry": 255,
     "last_updated": "2026-09-04 23:34:25"
   },
@@ -343,7 +343,7 @@
     "current_stock": 376,
     "daily_consumption_base": 18,
     "batch_number": "BAT-369-26",
-    "expiry_date": "2027-10-05",
+    "expiry_date": "2027-11-23",
     "days_to_expiry": 395,
     "last_updated": "2026-09-04 15:34:25"
   },
@@ -355,7 +355,7 @@
     "current_stock": 570,
     "daily_consumption_base": 30,
     "batch_number": "BAT-508-26",
-    "expiry_date": "2027-10-28",
+    "expiry_date": "2027-12-16",
     "days_to_expiry": 418,
     "last_updated": "2026-09-04 21:34:25"
   },
@@ -367,7 +367,7 @@
     "current_stock": 105,
     "daily_consumption_base": 50,
     "batch_number": "BAT-621-26",
-    "expiry_date": "2027-04-08",
+    "expiry_date": "2027-05-27",
     "days_to_expiry": 215,
     "last_updated": "2026-09-04 19:34:25"
   },
@@ -379,7 +379,7 @@
     "current_stock": 1309,
     "daily_consumption_base": 100,
     "batch_number": "BAT-981-26",
-    "expiry_date": "2027-01-27",
+    "expiry_date": "2027-03-17",
     "days_to_expiry": 144,
     "last_updated": "2026-09-05 01:34:25"
   },
@@ -391,7 +391,7 @@
     "current_stock": 320,
     "daily_consumption_base": 35,
     "batch_number": "BAT-911-26",
-    "expiry_date": "2027-04-13",
+    "expiry_date": "2027-06-01",
     "days_to_expiry": 220,
     "last_updated": "2026-09-08 03:16:47"
   },
@@ -403,7 +403,7 @@
     "current_stock": 1023,
     "daily_consumption_base": 60,
     "batch_number": "BAT-494-26",
-    "expiry_date": "2027-02-04",
+    "expiry_date": "2027-03-25",
     "days_to_expiry": 152,
     "last_updated": "2026-09-04 20:34:25"
   },
@@ -415,7 +415,7 @@
     "current_stock": 861,
     "daily_consumption_base": 45,
     "batch_number": "BAT-641-26",
-    "expiry_date": "2027-08-30",
+    "expiry_date": "2027-10-18",
     "days_to_expiry": 359,
     "last_updated": "2026-09-04 22:34:25"
   },
@@ -427,7 +427,7 @@
     "current_stock": 1892,
     "daily_consumption_base": 80,
     "batch_number": "BAT-796-26",
-    "expiry_date": "2027-01-08",
+    "expiry_date": "2027-02-26",
     "days_to_expiry": 125,
     "last_updated": "2026-09-04 15:34:25"
   },
@@ -439,7 +439,7 @@
     "current_stock": 267,
     "daily_consumption_base": 20,
     "batch_number": "BAT-868-26",
-    "expiry_date": "2027-10-04",
+    "expiry_date": "2027-11-22",
     "days_to_expiry": 394,
     "last_updated": "2026-09-04 22:34:25"
   },
@@ -451,7 +451,7 @@
     "current_stock": 848,
     "daily_consumption_base": 40,
     "batch_number": "BAT-214-26",
-    "expiry_date": "2027-06-26",
+    "expiry_date": "2027-08-14",
     "days_to_expiry": 294,
     "last_updated": "2026-09-04 22:34:25"
   },
@@ -463,7 +463,7 @@
     "current_stock": 258,
     "daily_consumption_base": 15,
     "batch_number": "BAT-103-26",
-    "expiry_date": "2027-08-23",
+    "expiry_date": "2027-10-11",
     "days_to_expiry": 352,
     "last_updated": "2026-09-04 15:34:25"
   },
@@ -475,7 +475,7 @@
     "current_stock": 562,
     "daily_consumption_base": 25,
     "batch_number": "BAT-612-26",
-    "expiry_date": "2027-05-17",
+    "expiry_date": "2027-07-05",
     "days_to_expiry": 254,
     "last_updated": "2026-09-04 14:34:25"
   },
@@ -487,7 +487,7 @@
     "current_stock": 254,
     "daily_consumption_base": 18,
     "batch_number": "BAT-991-26",
-    "expiry_date": "2027-02-26",
+    "expiry_date": "2027-04-16",
     "days_to_expiry": 174,
     "last_updated": "2026-09-04 16:34:25"
   },
@@ -499,7 +499,7 @@
     "current_stock": 467,
     "daily_consumption_base": 30,
     "batch_number": "BAT-619-26",
-    "expiry_date": "2027-11-26",
+    "expiry_date": "2028-01-14",
     "days_to_expiry": 447,
     "last_updated": "2026-09-04 17:34:25"
   },
@@ -511,7 +511,7 @@
     "current_stock": 287,
     "daily_consumption_base": 20,
     "batch_number": "BAT-880-26",
-    "expiry_date": "2027-07-13",
+    "expiry_date": "2027-08-31",
     "days_to_expiry": 311,
     "last_updated": "2026-09-05 00:34:25"
   },
@@ -523,7 +523,7 @@
     "current_stock": 738,
     "daily_consumption_base": 40,
     "batch_number": "BAT-100-26",
-    "expiry_date": "2027-10-01",
+    "expiry_date": "2027-11-19",
     "days_to_expiry": 391,
     "last_updated": "2026-09-04 17:34:25"
   },
@@ -535,7 +535,7 @@
     "current_stock": 238,
     "daily_consumption_base": 15,
     "batch_number": "BAT-214-26",
-    "expiry_date": "2027-01-12",
+    "expiry_date": "2027-03-02",
     "days_to_expiry": 129,
     "last_updated": "2026-09-04 21:34:25"
   },
@@ -547,7 +547,7 @@
     "current_stock": 563,
     "daily_consumption_base": 25,
     "batch_number": "BAT-345-26",
-    "expiry_date": "2027-06-09",
+    "expiry_date": "2027-07-28",
     "days_to_expiry": 277,
     "last_updated": "2026-09-05 02:34:25"
   },
@@ -559,7 +559,7 @@
     "current_stock": 268,
     "daily_consumption_base": 18,
     "batch_number": "BAT-180-26",
-    "expiry_date": "2027-10-20",
+    "expiry_date": "2027-12-08",
     "days_to_expiry": 410,
     "last_updated": "2026-09-05 01:34:25"
   },
@@ -571,7 +571,7 @@
     "current_stock": 623,
     "daily_consumption_base": 30,
     "batch_number": "BAT-878-26",
-    "expiry_date": "2027-02-07",
+    "expiry_date": "2027-03-28",
     "days_to_expiry": 155,
     "last_updated": "2026-09-04 18:34:25"
   },
@@ -583,7 +583,7 @@
     "current_stock": 1059,
     "daily_consumption_base": 50,
     "batch_number": "BAT-775-26",
-    "expiry_date": "2027-03-09",
+    "expiry_date": "2027-04-27",
     "days_to_expiry": 185,
     "last_updated": "2026-09-04 19:34:25"
   },
@@ -595,7 +595,7 @@
     "current_stock": 2336,
     "daily_consumption_base": 100,
     "batch_number": "BAT-371-26",
-    "expiry_date": "2027-03-28",
+    "expiry_date": "2027-05-16",
     "days_to_expiry": 204,
     "last_updated": "2026-09-04 18:34:25"
   },
@@ -607,7 +607,7 @@
     "current_stock": 786,
     "daily_consumption_base": 35,
     "batch_number": "BAT-316-26",
-    "expiry_date": "2027-08-07",
+    "expiry_date": "2027-09-25",
     "days_to_expiry": 336,
     "last_updated": "2026-09-04 18:34:25"
   },
@@ -619,7 +619,7 @@
     "current_stock": 1263,
     "daily_consumption_base": 60,
     "batch_number": "BAT-830-26",
-    "expiry_date": "2027-04-15",
+    "expiry_date": "2027-06-03",
     "days_to_expiry": 222,
     "last_updated": "2026-09-04 22:34:25"
   },
@@ -631,7 +631,7 @@
     "current_stock": 755,
     "daily_consumption_base": 45,
     "batch_number": "BAT-548-26",
-    "expiry_date": "2027-07-13",
+    "expiry_date": "2027-08-31",
     "days_to_expiry": 311,
     "last_updated": "2026-09-04 18:34:25"
   },
@@ -643,7 +643,7 @@
     "current_stock": 1393,
     "daily_consumption_base": 80,
     "batch_number": "BAT-330-26",
-    "expiry_date": "2027-05-09",
+    "expiry_date": "2027-06-27",
     "days_to_expiry": 246,
     "last_updated": "2026-09-05 01:34:25"
   },
@@ -655,7 +655,7 @@
     "current_stock": 321,
     "daily_consumption_base": 20,
     "batch_number": "BAT-667-26",
-    "expiry_date": "2027-10-31",
+    "expiry_date": "2027-12-19",
     "days_to_expiry": 421,
     "last_updated": "2026-09-04 23:34:25"
   },
@@ -667,7 +667,7 @@
     "current_stock": 762,
     "daily_consumption_base": 40,
     "batch_number": "BAT-172-26",
-    "expiry_date": "2027-01-06",
+    "expiry_date": "2027-02-24",
     "days_to_expiry": 123,
     "last_updated": "2026-09-04 15:34:25"
   },
@@ -679,7 +679,7 @@
     "current_stock": 293,
     "daily_consumption_base": 15,
     "batch_number": "BAT-169-26",
-    "expiry_date": "2027-04-30",
+    "expiry_date": "2027-06-18",
     "days_to_expiry": 237,
     "last_updated": "2026-09-05 02:34:25"
   },
@@ -691,7 +691,7 @@
     "current_stock": 557,
     "daily_consumption_base": 25,
     "batch_number": "BAT-626-26",
-    "expiry_date": "2027-02-08",
+    "expiry_date": "2027-03-29",
     "days_to_expiry": 156,
     "last_updated": "2026-09-04 23:34:25"
   },
@@ -703,7 +703,7 @@
     "current_stock": 276,
     "daily_consumption_base": 18,
     "batch_number": "BAT-319-26",
-    "expiry_date": "2027-09-08",
+    "expiry_date": "2027-10-27",
     "days_to_expiry": 368,
     "last_updated": "2026-09-04 18:34:25"
   },
@@ -715,7 +715,7 @@
     "current_stock": 407,
     "daily_consumption_base": 30,
     "batch_number": "BAT-690-26",
-    "expiry_date": "2027-10-22",
+    "expiry_date": "2027-12-10",
     "days_to_expiry": 412,
     "last_updated": "2026-09-04 19:34:25"
   },
@@ -727,7 +727,7 @@
     "current_stock": 1407,
     "daily_consumption_base": 50,
     "batch_number": "BAT-926-26",
-    "expiry_date": "2026-11-14",
+    "expiry_date": "2027-01-02",
     "days_to_expiry": 70,
     "last_updated": "2026-09-04 20:34:25"
   },
@@ -739,7 +739,7 @@
     "current_stock": 1428,
     "daily_consumption_base": 100,
     "batch_number": "BAT-774-26",
-    "expiry_date": "2027-02-21",
+    "expiry_date": "2027-04-11",
     "days_to_expiry": 169,
     "last_updated": "2026-09-04 20:34:25"
   },
@@ -751,7 +751,7 @@
     "current_stock": 1016,
     "daily_consumption_base": 35,
     "batch_number": "BAT-578-26",
-    "expiry_date": "2026-11-12",
+    "expiry_date": "2026-12-31",
     "days_to_expiry": 68,
     "last_updated": "2026-09-08 03:16:47"
   },
@@ -763,7 +763,7 @@
     "current_stock": 1244,
     "daily_consumption_base": 60,
     "batch_number": "BAT-200-26",
-    "expiry_date": "2027-11-29",
+    "expiry_date": "2028-01-17",
     "days_to_expiry": 450,
     "last_updated": "2026-09-05 02:34:25"
   },
@@ -775,7 +775,7 @@
     "current_stock": 757,
     "daily_consumption_base": 45,
     "batch_number": "BAT-919-26",
-    "expiry_date": "2027-06-25",
+    "expiry_date": "2027-08-13",
     "days_to_expiry": 293,
     "last_updated": "2026-09-04 13:34:25"
   },
@@ -787,7 +787,7 @@
     "current_stock": 1064,
     "daily_consumption_base": 80,
     "batch_number": "BAT-294-26",
-    "expiry_date": "2027-04-11",
+    "expiry_date": "2027-05-30",
     "days_to_expiry": 218,
     "last_updated": "2026-09-04 18:34:25"
   },
@@ -799,7 +799,7 @@
     "current_stock": 456,
     "daily_consumption_base": 20,
     "batch_number": "BAT-287-26",
-    "expiry_date": "2026-11-12",
+    "expiry_date": "2026-12-31",
     "days_to_expiry": 68,
     "last_updated": "2026-09-05 22:56:08"
   },
@@ -811,7 +811,7 @@
     "current_stock": 702,
     "daily_consumption_base": 40,
     "batch_number": "BAT-553-26",
-    "expiry_date": "2027-02-10",
+    "expiry_date": "2027-03-31",
     "days_to_expiry": 158,
     "last_updated": "2026-09-04 14:34:25"
   },
@@ -823,7 +823,7 @@
     "current_stock": 462,
     "daily_consumption_base": 15,
     "batch_number": "BAT-200-26",
-    "expiry_date": "2026-11-16",
+    "expiry_date": "2027-01-04",
     "days_to_expiry": 72,
     "last_updated": "2026-09-08 03:18:20"
   },
@@ -835,7 +835,7 @@
     "current_stock": 495,
     "daily_consumption_base": 25,
     "batch_number": "BAT-956-26",
-    "expiry_date": "2027-10-06",
+    "expiry_date": "2027-11-24",
     "days_to_expiry": 396,
     "last_updated": "2026-09-05 02:34:25"
   },
@@ -847,7 +847,7 @@
     "current_stock": 425,
     "daily_consumption_base": 18,
     "batch_number": "BAT-270-26",
-    "expiry_date": "2027-05-04",
+    "expiry_date": "2027-06-22",
     "days_to_expiry": 241,
     "last_updated": "2026-09-04 20:34:25"
   },
@@ -859,7 +859,7 @@
     "current_stock": 534,
     "daily_consumption_base": 30,
     "batch_number": "BAT-985-26",
-    "expiry_date": "2027-04-22",
+    "expiry_date": "2027-06-10",
     "days_to_expiry": 229,
     "last_updated": "2026-09-04 20:34:25"
   },
@@ -871,7 +871,7 @@
     "current_stock": 1141,
     "daily_consumption_base": 50,
     "batch_number": "BAT-488-26",
-    "expiry_date": "2027-03-28",
+    "expiry_date": "2027-05-16",
     "days_to_expiry": 204,
     "last_updated": "2026-09-05 02:34:25"
   },
@@ -883,7 +883,7 @@
     "current_stock": 2382,
     "daily_consumption_base": 100,
     "batch_number": "BAT-902-26",
-    "expiry_date": "2027-05-18",
+    "expiry_date": "2027-07-06",
     "days_to_expiry": 255,
     "last_updated": "2026-09-04 14:34:25"
   },
@@ -895,7 +895,7 @@
     "current_stock": 611,
     "daily_consumption_base": 35,
     "batch_number": "BAT-813-26",
-    "expiry_date": "2027-08-07",
+    "expiry_date": "2027-09-25",
     "days_to_expiry": 336,
     "last_updated": "2026-09-04 15:34:25"
   },
@@ -907,7 +907,7 @@
     "current_stock": 1436,
     "daily_consumption_base": 60,
     "batch_number": "BAT-777-26",
-    "expiry_date": "2027-10-14",
+    "expiry_date": "2027-12-02",
     "days_to_expiry": 404,
     "last_updated": "2026-09-04 15:34:25"
   },
@@ -919,7 +919,7 @@
     "current_stock": 802,
     "daily_consumption_base": 45,
     "batch_number": "BAT-403-26",
-    "expiry_date": "2027-04-10",
+    "expiry_date": "2027-05-29",
     "days_to_expiry": 217,
     "last_updated": "2026-09-04 23:34:25"
   },
@@ -931,7 +931,7 @@
     "current_stock": 1889,
     "daily_consumption_base": 80,
     "batch_number": "BAT-853-26",
-    "expiry_date": "2027-10-26",
+    "expiry_date": "2027-12-14",
     "days_to_expiry": 416,
     "last_updated": "2026-09-04 18:34:25"
   },
@@ -943,7 +943,7 @@
     "current_stock": 254,
     "daily_consumption_base": 20,
     "batch_number": "BAT-158-26",
-    "expiry_date": "2027-06-12",
+    "expiry_date": "2027-07-31",
     "days_to_expiry": 280,
     "last_updated": "2026-09-05 02:34:25"
   },
@@ -955,7 +955,7 @@
     "current_stock": 760,
     "daily_consumption_base": 40,
     "batch_number": "BAT-973-26",
-    "expiry_date": "2027-09-17",
+    "expiry_date": "2027-11-05",
     "days_to_expiry": 377,
     "last_updated": "2026-09-04 18:34:25"
   },
@@ -967,7 +967,7 @@
     "current_stock": 208,
     "daily_consumption_base": 15,
     "batch_number": "BAT-182-26",
-    "expiry_date": "2027-09-20",
+    "expiry_date": "2027-11-08",
     "days_to_expiry": 380,
     "last_updated": "2026-09-04 13:34:25"
   },
@@ -979,7 +979,7 @@
     "current_stock": 355,
     "daily_consumption_base": 25,
     "batch_number": "BAT-169-26",
-    "expiry_date": "2027-11-03",
+    "expiry_date": "2027-12-22",
     "days_to_expiry": 424,
     "last_updated": "2026-09-04 16:34:25"
   },
@@ -991,7 +991,7 @@
     "current_stock": 402,
     "daily_consumption_base": 18,
     "batch_number": "BAT-222-26",
-    "expiry_date": "2027-07-28",
+    "expiry_date": "2027-09-15",
     "days_to_expiry": 326,
     "last_updated": "2026-09-04 17:34:25"
   },
@@ -1003,7 +1003,7 @@
     "current_stock": 448,
     "daily_consumption_base": 30,
     "batch_number": "BAT-140-26",
-    "expiry_date": "2027-11-03",
+    "expiry_date": "2027-12-22",
     "days_to_expiry": 424,
     "last_updated": "2026-09-04 17:34:25"
   },
@@ -1015,7 +1015,7 @@
     "current_stock": 649,
     "daily_consumption_base": 50,
     "batch_number": "BAT-678-26",
-    "expiry_date": "2027-10-28",
+    "expiry_date": "2027-12-16",
     "days_to_expiry": 418,
     "last_updated": "2026-09-04 18:34:25"
   },
@@ -1027,7 +1027,7 @@
     "current_stock": 1579,
     "daily_consumption_base": 100,
     "batch_number": "BAT-309-26",
-    "expiry_date": "2027-05-16",
+    "expiry_date": "2027-07-04",
     "days_to_expiry": 253,
     "last_updated": "2026-09-04 16:34:25"
   },
@@ -1039,7 +1039,7 @@
     "current_stock": 720,
     "daily_consumption_base": 35,
     "batch_number": "BAT-371-26",
-    "expiry_date": "2027-05-05",
+    "expiry_date": "2027-06-23",
     "days_to_expiry": 242,
     "last_updated": "2026-09-04 20:34:25"
   },
@@ -1051,7 +1051,7 @@
     "current_stock": 814,
     "daily_consumption_base": 60,
     "batch_number": "BAT-407-26",
-    "expiry_date": "2027-11-29",
+    "expiry_date": "2028-01-17",
     "days_to_expiry": 450,
     "last_updated": "2026-09-04 19:34:25"
   },
@@ -1063,7 +1063,7 @@
     "current_stock": 710,
     "daily_consumption_base": 45,
     "batch_number": "BAT-109-26",
-    "expiry_date": "2027-02-09",
+    "expiry_date": "2027-03-30",
     "days_to_expiry": 157,
     "last_updated": "2026-09-04 19:34:25"
   },
@@ -1075,7 +1075,7 @@
     "current_stock": 1556,
     "daily_consumption_base": 80,
     "batch_number": "BAT-202-26",
-    "expiry_date": "2027-10-18",
+    "expiry_date": "2027-12-06",
     "days_to_expiry": 408,
     "last_updated": "2026-09-05 01:34:25"
   },
@@ -1087,7 +1087,7 @@
     "current_stock": 369,
     "daily_consumption_base": 20,
     "batch_number": "BAT-371-26",
-    "expiry_date": "2027-09-19",
+    "expiry_date": "2027-11-07",
     "days_to_expiry": 379,
     "last_updated": "2026-09-05 00:34:25"
   },
@@ -1099,7 +1099,7 @@
     "current_stock": 927,
     "daily_consumption_base": 40,
     "batch_number": "BAT-350-26",
-    "expiry_date": "2027-02-07",
+    "expiry_date": "2027-03-28",
     "days_to_expiry": 155,
     "last_updated": "2026-09-04 21:34:25"
   },
@@ -1111,7 +1111,7 @@
     "current_stock": 231,
     "daily_consumption_base": 15,
     "batch_number": "BAT-953-26",
-    "expiry_date": "2027-08-15",
+    "expiry_date": "2027-10-03",
     "days_to_expiry": 344,
     "last_updated": "2026-09-04 18:34:25"
   },
@@ -1123,7 +1123,7 @@
     "current_stock": 511,
     "daily_consumption_base": 25,
     "batch_number": "BAT-926-26",
-    "expiry_date": "2027-11-12",
+    "expiry_date": "2027-12-31",
     "days_to_expiry": 433,
     "last_updated": "2026-09-04 16:34:25"
   },
@@ -1135,7 +1135,7 @@
     "current_stock": 330,
     "daily_consumption_base": 18,
     "batch_number": "BAT-406-26",
-    "expiry_date": "2027-10-13",
+    "expiry_date": "2027-12-01",
     "days_to_expiry": 403,
     "last_updated": "2026-09-04 16:34:25"
   },
@@ -1147,7 +1147,7 @@
     "current_stock": 397,
     "daily_consumption_base": 30,
     "batch_number": "BAT-370-26",
-    "expiry_date": "2027-03-12",
+    "expiry_date": "2027-04-30",
     "days_to_expiry": 188,
     "last_updated": "2026-09-05 01:34:25"
   },
@@ -1159,7 +1159,7 @@
     "current_stock": 1133,
     "daily_consumption_base": 50,
     "batch_number": "BAT-259-26",
-    "expiry_date": "2027-10-13",
+    "expiry_date": "2027-12-01",
     "days_to_expiry": 403,
     "last_updated": "2026-09-04 22:34:25"
   },
@@ -1171,7 +1171,7 @@
     "current_stock": 1538,
     "daily_consumption_base": 100,
     "batch_number": "BAT-834-26",
-    "expiry_date": "2027-04-20",
+    "expiry_date": "2027-06-08",
     "days_to_expiry": 227,
     "last_updated": "2026-09-04 21:34:25"
   },
@@ -1183,7 +1183,7 @@
     "current_stock": 505,
     "daily_consumption_base": 35,
     "batch_number": "BAT-973-26",
-    "expiry_date": "2027-11-23",
+    "expiry_date": "2028-01-11",
     "days_to_expiry": 444,
     "last_updated": "2026-09-04 22:34:25"
   },
@@ -1195,7 +1195,7 @@
     "current_stock": 1083,
     "daily_consumption_base": 60,
     "batch_number": "BAT-966-26",
-    "expiry_date": "2027-05-11",
+    "expiry_date": "2027-06-29",
     "days_to_expiry": 248,
     "last_updated": "2026-09-05 02:34:25"
   },
@@ -1207,7 +1207,7 @@
     "current_stock": 589,
     "daily_consumption_base": 45,
     "batch_number": "BAT-949-26",
-    "expiry_date": "2027-08-07",
+    "expiry_date": "2027-09-25",
     "days_to_expiry": 336,
     "last_updated": "2026-09-04 22:34:25"
   },
@@ -1219,7 +1219,7 @@
     "current_stock": 1002,
     "daily_consumption_base": 80,
     "batch_number": "BAT-889-26",
-    "expiry_date": "2027-06-22",
+    "expiry_date": "2027-08-10",
     "days_to_expiry": 290,
     "last_updated": "2026-09-05 00:34:25"
   },
@@ -1231,7 +1231,7 @@
     "current_stock": 392,
     "daily_consumption_base": 20,
     "batch_number": "BAT-265-26",
-    "expiry_date": "2027-05-17",
+    "expiry_date": "2027-07-05",
     "days_to_expiry": 254,
     "last_updated": "2026-09-04 15:34:25"
   },
@@ -1243,7 +1243,7 @@
     "current_stock": 692,
     "daily_consumption_base": 40,
     "batch_number": "BAT-674-26",
-    "expiry_date": "2027-08-09",
+    "expiry_date": "2027-09-27",
     "days_to_expiry": 338,
     "last_updated": "2026-09-05 02:34:25"
   },
@@ -1255,7 +1255,7 @@
     "current_stock": 200,
     "daily_consumption_base": 15,
     "batch_number": "BAT-658-26",
-    "expiry_date": "2027-03-20",
+    "expiry_date": "2027-05-08",
     "days_to_expiry": 196,
     "last_updated": "2026-09-05 02:34:25"
   },
@@ -1267,7 +1267,7 @@
     "current_stock": 550,
     "daily_consumption_base": 25,
     "batch_number": "BAT-665-26",
-    "expiry_date": "2027-10-28",
+    "expiry_date": "2027-12-16",
     "days_to_expiry": 418,
     "last_updated": "2026-09-05 00:34:25"
   },
@@ -1279,7 +1279,7 @@
     "current_stock": 308,
     "daily_consumption_base": 18,
     "batch_number": "BAT-415-26",
-    "expiry_date": "2027-01-24",
+    "expiry_date": "2027-03-14",
     "days_to_expiry": 141,
     "last_updated": "2026-09-04 21:34:25"
   },
@@ -1291,7 +1291,7 @@
     "current_stock": 683,
     "daily_consumption_base": 30,
     "batch_number": "BAT-466-26",
-    "expiry_date": "2027-01-23",
+    "expiry_date": "2027-03-13",
     "days_to_expiry": 140,
     "last_updated": "2026-09-04 23:34:25"
   },
@@ -1303,7 +1303,7 @@
     "current_stock": 1009,
     "daily_consumption_base": 50,
     "batch_number": "BAT-462-26",
-    "expiry_date": "2027-02-24",
+    "expiry_date": "2027-04-14",
     "days_to_expiry": 172,
     "last_updated": "2026-09-04 14:34:25"
   },
@@ -1315,7 +1315,7 @@
     "current_stock": 1871,
     "daily_consumption_base": 100,
     "batch_number": "BAT-735-26",
-    "expiry_date": "2027-07-30",
+    "expiry_date": "2027-09-17",
     "days_to_expiry": 328,
     "last_updated": "2026-09-04 15:34:25"
   },
@@ -1327,7 +1327,7 @@
     "current_stock": 484,
     "daily_consumption_base": 35,
     "batch_number": "BAT-985-26",
-    "expiry_date": "2027-05-04",
+    "expiry_date": "2027-06-22",
     "days_to_expiry": 241,
     "last_updated": "2026-09-05 00:34:25"
   },
@@ -1339,7 +1339,7 @@
     "current_stock": 1422,
     "daily_consumption_base": 60,
     "batch_number": "BAT-522-26",
-    "expiry_date": "2027-04-03",
+    "expiry_date": "2027-05-22",
     "days_to_expiry": 210,
     "last_updated": "2026-09-05 02:34:25"
   },
@@ -1351,7 +1351,7 @@
     "current_stock": 636,
     "daily_consumption_base": 45,
     "batch_number": "BAT-901-26",
-    "expiry_date": "2027-06-22",
+    "expiry_date": "2027-08-10",
     "days_to_expiry": 290,
     "last_updated": "2026-09-04 20:34:25"
   },
@@ -1363,7 +1363,7 @@
     "current_stock": 1730,
     "daily_consumption_base": 80,
     "batch_number": "BAT-373-26",
-    "expiry_date": "2027-05-10",
+    "expiry_date": "2027-06-28",
     "days_to_expiry": 247,
     "last_updated": "2026-09-05 00:34:25"
   },
@@ -1375,7 +1375,7 @@
     "current_stock": 15,
     "daily_consumption_base": 20,
     "batch_number": "BAT-491-26",
-    "expiry_date": "2027-02-27",
+    "expiry_date": "2027-04-17",
     "days_to_expiry": 175,
     "last_updated": "2026-09-05 03:35:53"
   },
@@ -1387,7 +1387,7 @@
     "current_stock": 498,
     "daily_consumption_base": 40,
     "batch_number": "BAT-327-26",
-    "expiry_date": "2027-08-31",
+    "expiry_date": "2027-10-19",
     "days_to_expiry": 360,
     "last_updated": "2026-09-04 23:34:25"
   },
@@ -1399,7 +1399,7 @@
     "current_stock": 326,
     "daily_consumption_base": 15,
     "batch_number": "BAT-458-26",
-    "expiry_date": "2027-08-26",
+    "expiry_date": "2027-10-14",
     "days_to_expiry": 355,
     "last_updated": "2026-09-04 22:34:25"
   },
@@ -1411,7 +1411,7 @@
     "current_stock": 546,
     "daily_consumption_base": 25,
     "batch_number": "BAT-328-26",
-    "expiry_date": "2027-04-29",
+    "expiry_date": "2027-06-17",
     "days_to_expiry": 236,
     "last_updated": "2026-09-05 02:34:25"
   },
@@ -1423,7 +1423,7 @@
     "current_stock": 358,
     "daily_consumption_base": 18,
     "batch_number": "BAT-436-26",
-    "expiry_date": "2027-07-26",
+    "expiry_date": "2027-09-13",
     "days_to_expiry": 324,
     "last_updated": "2026-09-04 22:34:25"
   },
@@ -1435,7 +1435,7 @@
     "current_stock": 671,
     "daily_consumption_base": 30,
     "batch_number": "BAT-459-26",
-    "expiry_date": "2027-05-25",
+    "expiry_date": "2027-07-13",
     "days_to_expiry": 262,
     "last_updated": "2026-09-04 16:34:25"
   }

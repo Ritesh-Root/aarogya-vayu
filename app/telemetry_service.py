@@ -33,6 +33,13 @@ IST = timezone(timedelta(hours=5, minutes=30))
 USER_AGENT = {"User-Agent": "AarogyaVayu/2.0 (Health Logistics Resilience)"}
 FIRMS_BBOX_DEG = 1.5  # ~165 km around the corridor centroid
 FORECAST_HOURS = 72
+LIVE_SOURCE_PREFIX = "Open-Meteo"
+FAILURE_RETRY_S = 60  # after a failed fetch, serve the fallback for this long instead of re-waiting on timeouts
+STALE_AFTER_S = 3600  # a cached reading older than this is no longer presented as live
+
+
+def is_live_reading(reading: EnvironmentalReading) -> bool:
+    return (reading.source or "").startswith(LIVE_SOURCE_PREFIX)
 
 
 def _get_json(url: str, timeout: float = 5) -> dict:
@@ -67,6 +74,7 @@ class LiveTelemetryService:
     def __init__(self, cache_ttl_seconds: int = 300):
         self.cache_ttl = cache_ttl_seconds
         self._cache: Dict[str, Dict[str, Any]] = {}
+        self._failures: Dict[str, Dict[str, Any]] = {}
 
     def _fetch_fire_hotspots(self, lat: float, lng: float) -> Optional[int]:
         key = os.getenv("FIRMS_MAP_KEY")
@@ -91,11 +99,14 @@ class LiveTelemetryService:
         reg = region.lower()
         coords = COORDINATES.get(reg, COORDINATES["bhubaneswar"])
 
-        # Check cache
+        # Check cache (successes for cache_ttl; failures for FAILURE_RETRY_S)
         now = time.time()
         cached = self._cache.get(reg)
         if cached and (now - cached["timestamp"] < self.cache_ttl):
             return cached["reading"]
+        failed = self._failures.get(reg)
+        if failed and now - failed["timestamp"] < FAILURE_RETRY_S:
+            return failed["reading"]
 
         try:
             lat, lng = coords["lat"], coords["lng"]
@@ -158,7 +169,7 @@ class LiveTelemetryService:
                 heatwave_alert=hottest >= coords["heatwave_threshold_c"],
                 smog_episode=(aqi >= 200 or pm25 >= 120.0 or (peak_aqi or 0) >= 200),
                 corridor=f"{coords['name']} (Live Real-Time Telemetry)",
-                source="Open-Meteo & Copernicus Atmospheric Monitoring Service (CAMS)"
+                source=f"{LIVE_SOURCE_PREFIX} & Copernicus Atmospheric Monitoring Service (CAMS)"
                 + (" + NASA FIRMS" if fires is not None else ""),
                 recorded_at=curr_aq.get("time") or curr_w.get("time"),
                 aod=float(aod) if aod is not None else None,
@@ -178,21 +189,29 @@ class LiveTelemetryService:
             return reading
 
         except Exception as e:
-            logger.warning(f"Could not fetch real-time Open-Meteo telemetry for {region}: {e}. Using baseline fallback.")
-            if cached:
-                return cached["reading"]
-
-            # Clearly labelled offline baseline; is_live is derived from `source`, so this never shows as live
-            return EnvironmentalReading(
-                aqi=68 if reg == "bhubaneswar" else 78,
-                pm25=22.4 if reg == "bhubaneswar" else 26.8,
-                temperature_c=27.5 if reg == "bhubaneswar" else 28.0,
-                humidity_pct=82.0 if reg == "bhubaneswar" else 76.0,
-                wind_speed_kmh=9.5 if reg == "bhubaneswar" else 12.0,
-                heatwave_alert=False,
-                smog_episode=False,
-                corridor=f"{coords['name']} (Offline Baseline)",
-                source="Offline baseline (live feed unavailable)"
-            )
+            logger.warning("Could not fetch Open-Meteo telemetry for %s: %s", region, e)
+            if cached and now - cached["timestamp"] < STALE_AFTER_S:
+                reading = cached["reading"]
+            elif cached:
+                # Too old to present as live: same values, explicitly labelled stale (is_live_reading() is False)
+                age_min = round((now - cached["timestamp"]) / 60)
+                reading = cached["reading"].model_copy(update={
+                    "source": f"Stale: last Open-Meteo/CAMS reading {age_min} min ago (live feed unavailable)",
+                })
+            else:
+                # Clearly labelled offline baseline; never shows as live
+                reading = EnvironmentalReading(
+                    aqi=68 if reg == "bhubaneswar" else 78,
+                    pm25=22.4 if reg == "bhubaneswar" else 26.8,
+                    temperature_c=27.5 if reg == "bhubaneswar" else 28.0,
+                    humidity_pct=82.0 if reg == "bhubaneswar" else 76.0,
+                    wind_speed_kmh=9.5 if reg == "bhubaneswar" else 12.0,
+                    heatwave_alert=False,
+                    smog_episode=False,
+                    corridor=f"{coords['name']} (Offline Baseline)",
+                    source="Offline baseline (live feed unavailable)"
+                )
+            self._failures[reg] = {"timestamp": now, "reading": reading}
+            return reading
 
 telemetry_service = LiveTelemetryService()

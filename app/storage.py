@@ -3,8 +3,21 @@ import sys
 import json
 import tempfile
 import threading
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def refresh_days_to_expiry(item: dict, today: Optional[date] = None) -> None:
+    """days_to_expiry is derived from expiry_date on every load; a stored count would go stale."""
+    try:
+        expiry = date.fromisoformat(str(item["expiry_date"])[:10])
+    except (KeyError, ValueError):
+        return
+    item["days_to_expiry"] = (expiry - (today or datetime.now(IST).date())).days
+
 
 class StorageError(Exception):
     """Raised when atomic state persistence fails."""
@@ -81,6 +94,8 @@ class StorageManager:
             try:
                 inv_docs = self.firestore_client.collection("inventory").stream()
                 inventory = [d.to_dict() for d in inv_docs]
+                for item in inventory:
+                    refresh_days_to_expiry(item)
                 
                 cons_docs = self.firestore_client.collection("consignments").stream()
                 consignments = {d.id: d.to_dict() for d in cons_docs}
@@ -118,6 +133,7 @@ class StorageManager:
                     item["pack_size"] = 10
                 if "is_frozen" not in item:
                     item["is_frozen"] = item["is_reconciliation_required"]
+                refresh_days_to_expiry(item)
 
             # 2. Consignments
             consignments = self._read_json_file(cons_path, fallback_path=self.tmp_dir / cons_path.name, default={})

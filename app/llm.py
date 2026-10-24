@@ -12,7 +12,10 @@ so callers can drop to their deterministic offline fallback.
 
 import os
 import base64
+import binascii
+import time
 import asyncio
+from contextvars import ContextVar
 import logging
 from typing import Any, Dict, Optional, Tuple, Type, TypeVar
 
@@ -34,9 +37,44 @@ LLM_ATTEMPT_TIMEOUT_S = float(os.getenv("LLM_ATTEMPT_TIMEOUT_S", "12"))
 # Overall budget across all attempts, so callers reach their offline fallback before a serverless timeout
 LLM_TOTAL_BUDGET_S = float(os.getenv("LLM_TOTAL_BUDGET_S", "28"))
 MAX_OUTPUT_TOKENS = 4096
+# Optional per-request deadline (monotonic seconds) shared by every LLM call in that request
+_request_deadline: ContextVar[Optional[float]] = ContextVar("llm_request_deadline", default=None)
+
+
+def set_request_deadline(seconds: float) -> None:
+    """Cap the total LLM time for the current request, so multi-call endpoints finish before the platform timeout."""
+    _request_deadline.set(time.monotonic() + seconds)
+
+
+def _budget() -> float:
+    deadline = _request_deadline.get()
+    if deadline is None:
+        return LLM_TOTAL_BUDGET_S
+    return max(0.5, min(LLM_TOTAL_BUDGET_S, deadline - time.monotonic()))
 
 _gemini_client = None
 _claude_client = None
+
+
+def decode_media(data: str, mime_type: Any, default_mime: str, allowed: set, max_bytes: int, label: str) -> Media:
+    """Decode raw base64 or a data URL into (bytes, mime); raises ValueError on bad input."""
+    data = data if isinstance(data, str) else ""
+    mime_type = mime_type if isinstance(mime_type, str) else None
+    if data.startswith("data:"):
+        header, _, data = data.partition(",")
+        mime_type = header[5:].split(";")[0] or mime_type
+    mime = (mime_type or default_mime).split(";")[0].strip().lower()
+    if mime not in allowed:
+        raise ValueError(f"Unsupported {label} type")
+    if len(data) > max_bytes * 4 // 3 + 4:
+        raise ValueError(f"{label.capitalize()} too large (max {max_bytes // (1024 * 1024)} MB)")
+    try:
+        raw = base64.b64decode(data, validate=True)
+    except (binascii.Error, ValueError):
+        raise ValueError(f"{label.capitalize()} is not valid base64")
+    if not raw:
+        raise ValueError(f"Empty {label}")
+    return raw, mime
 
 
 def _gemini_key() -> Optional[str]:
@@ -99,9 +137,10 @@ async def _call_gemini(system: str, user: str, schema: Type[T], media: Optional[
             if resp.text:
                 return schema.model_validate_json(resp.text)
         except asyncio.TimeoutError:
-            # A slow Gemini is likely slow for every model; leave the budget for Claude
             logger.warning("Gemini %s timed out after %ss", model, LLM_ATTEMPT_TIMEOUT_S)
-            break
+            # A slow Gemini is likely slow for every model; leave the budget for Claude, unless Claude can't read this media
+            if _claude_can_read(media):
+                break
         except Exception as e:
             logger.warning("Gemini %s call failed: %s", model, e)
     return None
@@ -116,7 +155,13 @@ def _claude_content(user: str, media: Optional[Media]):
     ]
 
 
+def _claude_can_read(media: Optional[Media]) -> bool:
+    return media is None or media[1].startswith("image/")  # Claude reads images but not audio
+
+
 async def _call_claude(system: str, user: str, schema: Type[T], media: Optional[Media] = None) -> Optional[T]:
+    if not _claude_can_read(media):
+        return None
     try:
         client = _claude()
         if not client:
@@ -150,8 +195,6 @@ async def _generate_json(system: str, user: str, schema: Type[T], media: Optiona
     parsed = await _call_gemini(system, user, schema, media)
     if parsed is not None:
         return parsed, "gemini"
-    if media and not media[1].startswith("image/"):
-        return None  # Claude reads images but not audio
     parsed = await _call_claude(system, user, schema, media)
     if parsed is not None:
         return parsed, "claude"
@@ -161,7 +204,7 @@ async def _generate_json(system: str, user: str, schema: Type[T], media: Optiona
 async def generate_json(system: str, user: str, schema: Type[T], media: Optional[Media] = None) -> Optional[Tuple[T, str]]:
     """Gemini first, Claude as fallback. Returns (parsed, provider) or None."""
     try:
-        return await asyncio.wait_for(_generate_json(system, user, schema, media), timeout=LLM_TOTAL_BUDGET_S)
+        return await asyncio.wait_for(_generate_json(system, user, schema, media), timeout=_budget())
     except asyncio.TimeoutError:
         logger.warning("LLM budget of %ss exhausted; using offline fallback", LLM_TOTAL_BUDGET_S)
         return None
@@ -242,7 +285,7 @@ async def _tool_call(system: str, user: str, name: str, description: str, parame
 async def call_tool(system: str, user: str, name: str, description: str, parameters: dict) -> Optional[Tuple[Dict[str, Any], str]]:
     """Force the model to call one declared function; returns (arguments, provider) or None. Gemini first, Claude fallback."""
     try:
-        return await asyncio.wait_for(_tool_call(system, user, name, description, parameters), timeout=LLM_TOTAL_BUDGET_S)
+        return await asyncio.wait_for(_tool_call(system, user, name, description, parameters), timeout=_budget())
     except asyncio.TimeoutError:
         logger.warning("LLM tool-call budget of %ss exhausted", LLM_TOTAL_BUDGET_S)
         return None

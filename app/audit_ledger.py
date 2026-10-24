@@ -64,6 +64,7 @@ class AuditLedger:
         return entry
 
     def get_recent_entries(self, limit: int = 15) -> List[Dict[str, Any]]:
+        limit = max(1, min(100, int(limit)))  # entries[-0:] would return the whole ledger
         return list(reversed(self.entries[-limit:]))
 
     def verify_chain_integrity(self) -> Dict[str, Any]:

@@ -254,41 +254,39 @@ class NewsService:
 
                     corpus = f"{clean_title} {clean_desc}".lower()
 
+                    def mentions(*words):
+                        # whole words only: "brain" is not "rain", "surgery" is not "surge"
+                        return any(re.search(rf"\b{re.escape(w)}\b", corpus) for w in words)
+
                     # Semantic Category Classification
-                    if any(w in corpus for w in ["rain", "weather", "heat", "cyclone", "flood", "monsoon", "temperature", "forecast", "cloud"]):
+                    if mentions("rain", "rainfall", "weather", "heat", "heatwave", "cyclone", "flood", "floods", "monsoon", "temperature", "forecast", "cloud"):
                         category = "climate"
-                    elif any(w in corpus for w in ["pollution", "aqi", "smog", "air quality", "clean air", "emissions", "pm2.5", "swachh vayu"]):
+                    elif mentions("pollution", "aqi", "smog", "air quality", "clean air", "emissions", "pm2.5", "swachh vayu"):
                         category = "air_quality"
-                    elif any(w in corpus for w in ["dengue", "malaria", "fever", "diarrhea", "cholera", "infection", "virus", "outbreak", "swine flu"]):
+                    elif mentions("dengue", "malaria", "fever", "diarrhea", "diarrhoea", "cholera", "infection", "infections", "virus", "outbreak", "swine flu"):
                         category = "epidemic"
-                    elif any(w in corpus for w in ["drug", "medicine", "pharmacy", "warehouse", "stock", "supply", "dispensary", "depot"]):
+                    elif mentions("drug", "drugs", "medicine", "medicines", "pharmacy", "warehouse", "supply", "dispensary", "depot"):
                         category = "supply_chain"
                     else:
                         category = "clinical"
 
                     # Related Essential Medicines Tagging
                     related_meds: List[str] = []
-                    if category == "air_quality" or "respiratory" in corpus or "asthma" in corpus:
+                    if category == "air_quality" or mentions("respiratory", "asthma"):
                         related_meds = ["MED-001", "MED-006"]
-                    elif category == "climate" or "heat" in corpus or "dehydration" in corpus:
+                    elif category == "climate" or mentions("heat", "dehydration"):
                         related_meds = ["MED-002", "MED-005"]
-                    elif category == "epidemic" or "fever" in corpus or "dengue" in corpus:
+                    elif category == "epidemic" or mentions("fever", "dengue"):
                         related_meds = ["MED-003", "MED-004"]
                     else:
                         related_meds = ["MED-001", "MED-004"]
 
                     # Severity
-                    severity = "warning" if any(w in corpus for w in ["warning", "alert", "death", "surge", "severe", "outbreak", "inversion"]) else "info"
+                    severity = "warning" if mentions("warning", "alert", "red alert", "orange alert", "deaths", "death", "surge", "severe", "outbreak", "inversion") else "info"
 
-                    # Clinical impact
-                    if category == "air_quality":
-                        clinical_impact = f"Elevated particulate matter reported by {source_name}. Clinicians advised to pre-position bronchodilators."
-                    elif category == "climate":
-                        clinical_impact = f"Meteorological variation reported by {source_name}. Primary care facilities on alert for weather-related stress."
-                    elif category == "epidemic":
-                        clinical_impact = f"Disease surveillance dispatch from {source_name}. Monitor fever & rehydration protocols."
-                    else:
-                        clinical_impact = f"Verified public health news from {source_name}. Peripheral facilities advised to maintain standard reserves."
+                    # Only a factual tag: no advice is attributed to the outlet
+                    label = {"air_quality": "air quality", "climate": "weather", "epidemic": "disease", "supply_chain": "medicine supply"}.get(category, "health")
+                    clinical_impact = f"Headline from {source_name}, tagged '{label}' by keyword match. Open the article for details."
 
                     # Clean published date
                     formatted_pub = pub_date[:16] if len(pub_date) > 16 else pub_date

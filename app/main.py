@@ -1,4 +1,5 @@
 import os
+import logging
 import sys
 import asyncio
 import json
@@ -27,15 +28,18 @@ from app.models import (
 from app.storage import StorageManager, StorageError
 from app.domain import InventoryDomainService
 from app.surge_engine import SurgeEngine
+from app.optimizer import committed_transfers
 from app.optimizer import RedistributionOptimizer
 from app.voice_service import VoiceIntakeService
 from app.audit_ledger import AuditLedger
 from app.agent_orchestrator import MultiAgentResilienceOrchestrator
 from app.news_service import news_service
-from app.telemetry_service import telemetry_service
-from app.llm import provider_status, GEMINI_MODELS, CLAUDE_MODEL
+from app.telemetry_service import is_live_reading, telemetry_service
+from app.llm import provider_status, set_request_deadline, GEMINI_MODELS, CLAUDE_MODEL
 from app.vision_service import decode_image, scan_shelf, compare_with_register
-from app.speech_service import decode_audio, transcribe
+from app.speech_service import decode_audio, is_too_short_or_silent, transcribe
+
+logger = logging.getLogger("aarogya_vayu")
 
 app = FastAPI(
     title="Aarogya-Vāyu API",
@@ -186,20 +190,32 @@ active_unmet_demands = active_unmet_demands_by_region[active_region_id]
 inventory_data, _, _, _ = storage.load_all(region=active_region_id)
 facilities_data = facilities_by_region.get(active_region_id, facilities_lko)
 
+def resolve_region(region: Any) -> str:
+    """Normalise a client-supplied region; default to this instance's active region; 400 if unknown."""
+    if region is None or region == "":
+        return active_region_id
+    reg = str(region).strip().lower()
+    if reg not in REGIONS_CONFIG:
+        raise HTTPException(status_code=400, detail=f"Unknown region '{reg}'. Available: {list(REGIONS_CONFIG)}")
+    return reg
+
+
 def recompute_recommendations(target_region: Optional[str] = None):
     global inventory_data, active_recommendations, active_unmet_demands, current_env
     regions_to_run = [target_region] if target_region else ["lucknow", "bhubaneswar"]
     for reg in regions_to_run:
         if reg not in REGIONS_CONFIG:
             continue
-        inv, _, _, _ = storage.load_all(region=reg)
+        inv, consignments, _, _ = storage.load_all(region=reg)
         reg_env = current_env_by_region[reg]
-        risks = surge_engine.assess_facility_risks(inv, reg_env)
-        recs = optimizer.optimize(risks, inv)
+        closed = {c.get("recommendation_id") for c in consignments.values() if c.get("status") in ("RECEIVED", "CANCELLED")}
+        inbound, active_ids = committed_transfers(consignments)
+        risks = surge_engine.assess_facility_risks(inv, reg_env, inbound)
+        recs = optimizer.optimize(risks, inv, active_ids)
         active_unmet_demands_by_region[reg] = optimizer.get_unmet_demands()
 
         reg_recs = active_recommendations_by_region[reg]
-        approved = {rid: r for rid, r in reg_recs.items() if r.status == "APPROVED"}
+        approved = {rid: r for rid, r in reg_recs.items() if r.status == "APPROVED" and rid not in closed}
         reg_recs.clear()
         reg_recs.update(approved)
         for r in recs:
@@ -222,7 +238,11 @@ async def sync_live_env(reg: str, force: bool = False) -> None:
     global current_env
     reading = await asyncio.to_thread(telemetry_service.fetch_live_reading, reg)
     previous = current_env_by_region.get(reg)
-    if reading is previous:
+    # A scenario preset may have been posted while we were fetching; it wins
+    if reading is previous or env_mode_by_region.get(reg) != "live":
+        return
+    if not is_live_reading(reading):
+        # Feed unavailable: keep planning on the last reading rather than an invented baseline
         return
     current_env_by_region[reg] = reading
     if reg == active_region_id:
@@ -269,7 +289,7 @@ async def switch_region(payload: Dict[str, Any] = Body(...)):
     Switches active operational corridor in memory.
     """
     global active_region_id, current_env, active_recommendations, active_unmet_demands, inventory_data, facilities_data
-    new_reg = payload.get("region", "").lower()
+    new_reg = str(payload.get("region") or "").strip().lower()
     if new_reg not in REGIONS_CONFIG:
         raise HTTPException(
             status_code=400,
@@ -297,10 +317,7 @@ async def switch_region(payload: Dict[str, Any] = Body(...)):
 
 @app.get("/api/facilities")
 async def get_facilities(region: Optional[str] = None):
-    reg = (region or active_region_id).lower()
-    if reg in facilities_by_region:
-        return facilities_by_region[reg]
-    return facilities_by_region[active_region_id]
+    return facilities_by_region[resolve_region(region)]
 
 @app.get("/api/medicines")
 async def get_medicines():
@@ -313,8 +330,9 @@ async def get_news(
     search: Optional[str] = None,
     force_refresh: bool = False
 ):
-    reg = (region or active_region_id).lower()
-    articles = news_service.get_news(region=reg, category=category, search=search, force_refresh=force_refresh)
+    reg = resolve_region(region)
+    # urllib blocks, so keep the event loop free for other requests
+    articles = await asyncio.to_thread(news_service.get_news, region=reg, category=category, search=search, force_refresh=force_refresh)
     return {
         "region": reg,
         "total": len(articles),
@@ -363,7 +381,7 @@ async def get_system_capabilities():
 
 @app.get("/api/environmental")
 async def get_environmental(region: Optional[str] = None, live: bool = False):
-    reg = (region or active_region_id).lower()
+    reg = resolve_region(region)
     if live and reg in env_mode_by_region:
         env_mode_by_region[reg] = "live"
     await sync_live_env(reg)
@@ -372,7 +390,7 @@ async def get_environmental(region: Optional[str] = None, live: bool = False):
     multipliers = surge_engine.calculate_surge_multipliers(reg_env)
     return {
         "region": reg,
-        "is_live": "Open-Meteo" in (reg_env.source or ""),
+        "is_live": is_live_reading(reg_env),
         "mode": env_mode_by_region.get(reg, "scenario"),
         "telemetry": reg_env.model_dump(),
         "surge_multipliers": multipliers
@@ -380,25 +398,26 @@ async def get_environmental(region: Optional[str] = None, live: bool = False):
 
 @app.get("/api/environmental/live")
 async def get_live_environmental(region: Optional[str] = None):
-    reg = (region or active_region_id).lower()
+    reg = resolve_region(region)
     reading = await asyncio.to_thread(telemetry_service.fetch_live_reading, reg)
     multipliers = surge_engine.calculate_surge_multipliers(reading)
     return {
         "region": reg,
-        "is_live": "Open-Meteo" in (reading.source or ""),
+        "is_live": is_live_reading(reading),
         "telemetry": reading.model_dump(),
         "surge_multipliers": multipliers
     }
 
 @app.post("/api/environmental/live/activate")
 async def activate_live_environmental(region: Optional[str] = None):
-    reg = (region or active_region_id).lower()
+    reg = resolve_region(region)
     if reg in env_mode_by_region:
         env_mode_by_region[reg] = "live"
     await sync_live_env(reg, force=True)
     reading = current_env_by_region.get(reg, current_env)
+    live_ok = is_live_reading(reading)
     audit_ledger.record_entry(
-        event_type="LIVE_CAMS_TELEMETRY_ACTIVATED",
+        event_type="LIVE_CAMS_TELEMETRY_ACTIVATED" if live_ok else "LIVE_TELEMETRY_UNAVAILABLE",
         details={
             "region": reg,
             "aqi": reading.aqi,
@@ -412,9 +431,9 @@ async def activate_live_environmental(region: Optional[str] = None):
     )
     multipliers = surge_engine.calculate_surge_multipliers(reading)
     return {
-        "status": "activated",
+        "status": "activated" if live_ok else "live_feed_unavailable",
         "region": reg,
-        "is_live": "Open-Meteo" in (reading.source or ""),
+        "is_live": is_live_reading(reading),
         "telemetry": reading.model_dump(),
         "surge_multipliers": multipliers
     }
@@ -424,7 +443,7 @@ async def update_environmental(env: EnvironmentalReading, region: Optional[str] 
     global current_env
     corridor_lower = (env.corridor or "").lower()
     if region:
-        reg = region.lower()
+        reg = resolve_region(region)
     elif any(tok in corridor_lower for tok in ["bhubaneswar", "cuttack", "odisha", "coastal"]):
         reg = "bhubaneswar"
     elif any(tok in corridor_lower for tok in ["lucknow", "unnao", "gangetic", "awadh"]):
@@ -453,16 +472,17 @@ async def update_environmental(env: EnvironmentalReading, region: Optional[str] 
 
 @app.get("/api/risks")
 async def get_risks(region: Optional[str] = None):
-    reg = (region or active_region_id).lower()
+    reg = resolve_region(region)
     await sync_live_env(reg)
-    inv, _, _, _ = storage.load_all(region=reg)
+    inv, consignments, _, _ = storage.load_all(region=reg)
     reg_env = current_env_by_region.get(reg, current_env)
-    risks = surge_engine.assess_facility_risks(inv, reg_env)
+    inbound, _ = committed_transfers(consignments)
+    risks = surge_engine.assess_facility_risks(inv, reg_env, inbound)
     return [r.model_dump() for r in risks]
 
 @app.get("/api/recommendations")
 async def get_recommendations(region: Optional[str] = None):
-    reg = (region or active_region_id).lower()
+    reg = resolve_region(region)
     await sync_live_env(reg)
     recs_dict = active_recommendations_by_region.get(reg, active_recommendations)
     return [r.model_dump() for r in recs_dict.values()]
@@ -474,7 +494,7 @@ async def get_unmet_demands(region: Optional[str] = None):
     infeasible (no corridor donor retains >=14d safety reserve within 35km).
     Escalated to District Replenishment Requisition Queue.
     """
-    reg = (region or active_region_id).lower()
+    reg = resolve_region(region)
     await sync_live_env(reg)
     unmet_list = active_unmet_demands_by_region.get(reg, active_unmet_demands)
     return [u.model_dump() for u in unmet_list]
@@ -482,6 +502,8 @@ async def get_unmet_demands(region: Optional[str] = None):
 # Per-client throttle for endpoints that spend paid LLM calls (per serverless instance)
 LLM_RATE_LIMIT_PER_MIN = int(os.getenv("LLM_RATE_LIMIT_PER_MIN", "20"))
 MAX_LLM_INPUT_CHARS = 1000
+# The pipeline makes up to two LLM calls; together they must finish well inside the serverless timeout
+PIPELINE_LLM_BUDGET_S = float(os.getenv("PIPELINE_LLM_BUDGET_S", "40"))
 _llm_hits: Dict[str, deque] = {}
 
 def enforce_llm_rate_limit(http_request: Request):
@@ -508,6 +530,8 @@ async def transcribe_voice_note(http_request: Request, payload: Dict[str, Any] =
         audio = decode_audio(str(payload.get("audio_base64") or ""), payload.get("mime_type"))
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex))
+    if is_too_short_or_silent(audio[0]):
+        return {"is_speech": False, "transcript": "", "language": "", "transcribed_by": "Audio check (too short or silent)"}
     enforce_llm_rate_limit(http_request)
     result = await transcribe(audio)
     if not result:
@@ -565,6 +589,13 @@ async def approve_transfer(req: ApprovalRequest):
                 rec = reg_recs[req.recommendation_id]
                 break
     if not rec:
+        # IDs are deterministic, so a recommendation listed by another serverless instance can be rebuilt here
+        for reg in REGIONS_CONFIG:
+            recompute_recommendations(reg)
+            rec = active_recommendations_by_region[reg].get(req.recommendation_id)
+            if rec:
+                break
+    if not rec:
         raise HTTPException(status_code=404, detail="Recommendation not found")
 
     already_approved = (rec.status == "APPROVED")
@@ -598,18 +629,9 @@ async def get_clinic_desk(facility_id: str):
     - Active outbound consignments awaiting packaging and dispatch
     - Reconciliation exceptions on frozen batches
     """
-    fac = facilities_dict.get(facility_id) or {
-        "id": facility_id,
-        "name": f"Clinic {facility_id}",
-        "district": "Lucknow",
-        "type": "PHC",
-        "lat": 26.85,
-        "lng": 80.95,
-        "population_served": 20000,
-        "beds": 6,
-        "cold_storage": True,
-        "doctor": "Medical Officer On Duty"
-    }
+    fac = facilities_dict.get(facility_id)
+    if not fac:
+        raise HTTPException(status_code=404, detail=f"Unknown facility '{facility_id}'")
 
     actions = domain_service.get_facility_action_items(facility_id)
     inv = domain_service.get_facility_inventory(facility_id)
@@ -704,7 +726,7 @@ async def cancel_consignment(req: CancelConsignmentRequest):
 
 @app.get("/api/consignments")
 async def get_all_consignments(region: Optional[str] = None):
-    reg = (region or active_region_id).lower()
+    reg = resolve_region(region)
     _, consignments, _, _ = storage.load_all(region=reg)
     return list(consignments.values())
 
@@ -719,21 +741,23 @@ async def verify_audit_ledger():
 @app.post("/api/agents/run-resilience-pipeline")
 async def run_resilience_pipeline(http_request: Request, payload: Dict[str, Any] = Body(default={})):
     target_phc = payload.get("target_facility_id") or REGIONS_CONFIG[active_region_id]["default_facility_id"]
-    if target_phc not in facilities_dict:
+    if not isinstance(target_phc, str) or target_phc not in facilities_dict:
         raise HTTPException(status_code=400, detail="Unknown target_facility_id")
     snippet = str(payload.get("voice_snippet") or "").strip()
     if len(snippet) > MAX_LLM_INPUT_CHARS:
         raise HTTPException(status_code=400, detail=f"voice_snippet exceeds {MAX_LLM_INPUT_CHARS} characters")
     enforce_llm_rate_limit(http_request)
-    await sync_live_env(active_region_id)
+    set_request_deadline(PIPELINE_LLM_BUDGET_S)
+    # The facility decides the region; the per-instance active region may belong to another user or instance
+    reg = domain_service.get_region_for_facility(target_phc)
+    await sync_live_env(reg)
     intake = None
     if snippet:
         parsed = await voice_service.parse_and_validate(VoiceIntakeRequest(transcript_text=snippet, facility_id=target_phc))
         intake = parsed.model_dump()
-    inv, _, _, _ = storage.load_all(region=active_region_id)
-    reg_env = current_env_by_region[active_region_id]
-    result = await agent_orchestrator.run_pipeline(reg_env, inv, target_phc, intake)
-    recompute_recommendations(active_region_id)
+    inv, consignments, _, _ = storage.load_all(region=reg)
+    result = await agent_orchestrator.run_pipeline(current_env_by_region[reg], inv, target_phc, intake, consignments)
+    recompute_recommendations(reg)
     audit_ledger.record_entry(
         event_type="MULTI_AGENT_PIPELINE_RUN",
         details={
@@ -756,22 +780,18 @@ async def cmo_chat(http_request: Request, payload: Dict[str, Any] = Body(...)):
     if len(question) > MAX_LLM_INPUT_CHARS:
         raise HTTPException(status_code=400, detail=f"Question exceeds {MAX_LLM_INPUT_CHARS} characters")
     enforce_llm_rate_limit(http_request)
-    reg = (payload.get("region") or active_region_id).lower()
+    reg = resolve_region(payload.get("region"))
     await sync_live_env(reg)
-    inv, _, _, _ = storage.load_all(region=reg)
+    inv, consignments, _, _ = storage.load_all(region=reg)
     reg_env = current_env_by_region.get(reg, current_env)
     try:
-        response = await agent_orchestrator.query_strategic_insight(question, reg_env, inv)
-    except Exception as ex:
-        response = {
-            "query_type": "STRATEGIC_LOGISTICS_ADVISORY",
-            "answer_en": f"Operational briefing for {reg.title()}: All 20 monitored primary health centres in the corridor are evaluated under continuous risk telemetry. Lateral redistribution routes are active.",
-            "answer_hi": f"{reg.title()} के लिए सामरिक रिपोर्ट: सभी 20 प्राथमिक स्वास्थ्य केंद्रों पर निरंतर निगरानी सक्रिय है।",
-            "recommended_action": "Review active transfer recommendations and confirm emergency buffer compliance."
-        }
+        response = await agent_orchestrator.query_strategic_insight(question, reg_env, inv, consignments)
+    except Exception:
+        logger.exception("CMO strategic insight failed")
+        raise HTTPException(status_code=500, detail="The strategic insight agent failed on this question. Please try again or rephrase.")
     audit_ledger.record_entry(
         event_type="CMO_STRATEGIC_QUERY",
-        details={"question": question, "query_type": response.get("query_type"), "region": reg},
+        details={"question": question, "query_type": response.get("query_type"), "region": reg, "answered_by": response.get("answered_by")},
         approved_by="DR_SAXENA_CMO"
     )
     return response
@@ -799,13 +819,16 @@ async def verify_shelf_photo(http_request: Request, payload: Dict[str, Any] = Bo
     region = domain_service.get_region_for_facility(facility_id)
     inv, _, _, _ = storage.load_all(region=region)
     items = compare_with_register(scan, facility_id, inv, medicines_dict)
-    flagged = [i for i in items if i["discrepancy_units"] is not None and i["discrepancy_units"] > 3]
+    compared = [i for i in items if i["register_available"] is not None]
+    # More units on the shelf than the register holds is a real discrepancy; fewer usually means the photo shows part of the stock
+    flagged = [i for i in compared if i["seen_total"] > i["register_available"] + 3]
+    partial = [i for i in compared if i["seen_total"] < i["register_available"] - 3]
     if not scan.is_medicine_shelf or not items:
         status = "NOT_A_SHELF_PHOTO" if not scan.is_medicine_shelf else "NO_ITEMS_DETECTED"
     elif not any(i["register_available"] is not None for i in items):
         status = "NO_CATALOGUE_MATCH"
     else:
-        status = "DISCREPANCY_FLAGGED" if flagged else "VERIFIED_MATCH"
+        status = "DISCREPANCY_FLAGGED" if flagged else ("PARTIAL_COUNT" if partial else "VERIFIED_MATCH")
 
     audit_ledger.record_entry(
         event_type="SHELF_PHOTO_VISION_VERIFICATION",
@@ -821,16 +844,22 @@ async def verify_shelf_photo(http_request: Request, payload: Dict[str, Any] = Bo
 
     parts = [
         f"{i['medicine_name']}: ~{i['unit_count_estimate']} seen"
-        + (f" vs {i['register_available']} in register" if i["register_available"] is not None else "")
+        + (f" ({i['seen_total']} across all its items) vs {i['register_available']} on hand in the register"
+           if i["register_available"] is not None and i.get("seen_total") != i["unit_count_estimate"]
+           else f" vs {i['register_available']} on hand in the register" if i["register_available"] is not None else "")
         + (f", batch {i['batch_number']}" if i["batch_number"] else "")
         + (f", exp {i['expiry_text']}" if i["expiry_text"] else "")
         for i in items
     ]
     model_label = f"Gemini ({GEMINI_MODELS[0]})" if provider == "gemini" else f"Claude ({CLAUDE_MODEL}, fallback)"
-    summary = f"[{model_label}] " + ("; ".join(parts) if parts else (scan.notes or "No medicine products detected.")) + ". Advisory only: pharmacist confirmation required."
+    body = ("; ".join(parts) if parts else (scan.notes or "No medicine products detected")).rstrip(". ")
+    summary = (f"[{model_label}] {facilities_dict[facility_id]['name']}: {body}. "
+               + ("Fewer units are visible than the register holds; the photo may show only part of the stock. " if partial and not flagged else "")
+               + "Advisory only: pharmacist confirmation required.")
     return {
         "status": status,
         "facility_id": facility_id,
+        "facility_name": facilities_dict[facility_id]["name"],
         "detected_items": items,
         "flagged_items": len(flagged),
         "model_provider": provider,
