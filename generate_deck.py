@@ -242,12 +242,12 @@ add_header(
 steps = [
     ("1. SENSE", "Atmospheric Telemetry", 
      "• Live Copernicus CAMS air quality + Open-Meteo weather.\n"
-     "• AQI, PM2.5, aerosol optical depth, boundary-layer height, 72h forecast.\n"
+     "• AQI, PM2.5, heat, rainfall and minimum temperature, 72h forecast.\n"
      "• NASA FIRMS fire hotspots when an API key is set.", 
      BLUE_ACCENT, LIGHT_BLUE_BG),
     
     ("2. FORECAST", "Rule-Based Surge Engine", 
-     "• Converts AQI and heat into demand multipliers per medicine class.\n"
+     "• Smog, heat, floods and cold waves become demand multipliers per medicine.\n"
      "• Projects days of cover from baseline consumption × multiplier.\n"
      "• Outputs a 7-day stockout probability (transparent, no training data needed).", 
      AMBER, LIGHT_AMBER_BG),
@@ -346,7 +346,7 @@ p.font.color.rgb = BLUE_ACCENT
 p.space_after = Pt(8)
 
 agents = [
-    ("🛰️ Environmental Sentinel Agent", "Reads live Copernicus CAMS air quality and Open-Meteo weather (boundary layer, 30-day aerosol anomaly, 72h forecast) and flags smog or heatwave conditions.", BLUE_ACCENT),
+    ("🛰️ Environmental Sentinel Agent", "Reads live Copernicus CAMS air quality and Open-Meteo weather (boundary layer, aerosol anomaly, rainfall, minimum temperature, 72h forecast) and flags smog, heatwaves, floods and cold waves using IMD thresholds.", BLUE_ACCENT),
     ("🎙️ Frontline Intake Agent", "Gemini 3.8 Flash transcribes nurses' voice notes and extracts facility, medicine and count, mapping colloquial terms ('सांस की दवाई') to state EDL codes.", EMERALD),
     ("📈 Demand Intelligence Agent", "Rule-based surge engine: climate multipliers × baseline consumption give days of cover and a 7-day stockout probability per clinic and medicine.", AMBER),
     ("📦 Logistics Redistribution Agent", "Gemini 3.8 Flash function calling invokes the deterministic allocator; the model cannot change the 35 km radius, the donor reserve or the quantity.", TERRACOTTA)
@@ -663,13 +663,67 @@ for m_v, m_d, m_c in imp_metrics:
     p.space_after = Pt(4)
 
 # ==============================================================================
+# SLIDE 10: Climate hazards and the medicines they drive
+# ==============================================================================
+slide_hz = prs.slides.add_slide(blank_slide_layout)
+set_slide_background(slide_hz)
+add_header(
+    slide_hz,
+    "09 / CLIMATE HAZARDS",
+    "Each Weather Shock Raises Different Medicines",
+    "Live from Open-Meteo + Copernicus CAMS; thresholds from IMD; multipliers checked against published studies"
+)
+add_card(slide_hz, Inches(0.8), Inches(1.45), Inches(11.7), Inches(5.55), bg_color=CARD_BG, border_color=CARD_BORDER, corner_radius=0.025)
+hz_rows = [
+    ("Medicine", "Smog\n(AQI 385)", "Heatwave", "Flood\n(very heavy / extreme rain)", "Cold wave\n(≤ 4 °C / ≤ 2 °C)"),
+    ("Salbutamol (nebuliser)", "×1.62", "—", "—", "×1.15 / ×1.3"),
+    ("Dexamethasone (injection)", "×1.62", "—", "—", "×1.15 / ×1.3"),
+    ("Cetirizine", "×1.62", "—", "—", "—"),
+    ("Amoxicillin + clavulanate", "×1.53", "—", "—", "×1.25 / ×1.5"),
+    ("Paracetamol IV (fever)", "×1.43", "×1.60", "×1.2 / ×1.4", "×1.15 / ×1.3"),
+    ("ORS (rehydration)", "—", "×1.75+", "×1.5 / ×2.0", "—"),
+]
+tbl = slide_hz.shapes.add_table(len(hz_rows), 5, Inches(1.1), Inches(1.7), Inches(11.1), Inches(3.6)).table
+for col, width in enumerate((3.3, 1.7, 1.7, 2.3, 2.1)):
+    tbl.columns[col].width = Inches(width)
+HEAD_BG = RGBColor(253, 236, 228)
+for r, row in enumerate(hz_rows):
+    for c, value in enumerate(row):
+        cell = tbl.cell(r, c)
+        cell.text = value
+        cell.fill.solid()
+        cell.fill.fore_color.rgb = HEAD_BG if r == 0 else (RGBColor(255, 255, 255) if r % 2 else RGBColor(248, 250, 252))
+        for para in cell.text_frame.paragraphs:
+            para.alignment = PP_ALIGN.LEFT if c == 0 else PP_ALIGN.CENTER
+            for run in para.runs:
+                run.font.size = Pt(12 if r else 11)
+                run.font.bold = (r == 0 or c == 0 or (value.startswith("×") and value not in ("×1.0",)))
+                run.font.color.rgb = TEXT_HEAD if (r == 0 or c == 0) else (TERRACOTTA if value.startswith("×") else TEXT_MUTED)
+tb_h = slide_hz.shapes.add_textbox(Inches(1.1), Inches(5.5), Inches(11.1), Inches(1.4))
+tf_h = tb_h.text_frame
+tf_h.word_wrap = True
+tf_h.margin_left = tf_h.margin_top = tf_h.margin_right = tf_h.margin_bottom = 0
+notes = [
+    ("Thresholds (IMD SOP): ", "very heavy rain 115.6 mm and extremely heavy 204.5 mm in 24 h; cold wave on the plains at ≤ 4 °C, severe at ≤ 2 °C."),
+    ("Evidence: ", "smog — Zheng 2015 meta-analysis, Yadav 2021 AIIMS Delhi (our top smog bands are higher than Delhi ER data); "
+                   "floods — Bush 2014 Chennai (×1.6 gut illness), Hashizume 2008 Dhaka (×2 diarrhoea); "
+                   "cold — Feng 2023, Wu 2024 (China; no Indian study exists)."),
+    ("Next: ", "dengue and malaria, which peak 1–3 months after the monsoon."),
+]
+for k, (label, text) in enumerate(notes):
+    p = tf_h.paragraphs[0] if k == 0 else tf_h.add_paragraph()
+    r1 = p.add_run(); r1.text = label; r1.font.bold = True; r1.font.size = Pt(10); r1.font.color.rgb = TEXT_HEAD
+    r2 = p.add_run(); r2.text = text; r2.font.size = Pt(10); r2.font.color.rgb = TEXT_BODY
+    p.space_after = Pt(4)
+
+# ==============================================================================
 # SLIDE 10: Simulated impact (scripts/simulate_impact.py)
 # ==============================================================================
 slide_sim = prs.slides.add_slide(blank_slide_layout)
 set_slide_background(slide_sim)
 add_header(
     slide_sim,
-    "09 / DOES IT HELP?",
+    "10 / DOES IT HELP?",
     "Fewer Stockouts in the First Week of a Surge",
     "Simulation on the app's 40 sample clinics with its own engine and allocator (20 runs, no store deliveries in the window)"
 )
@@ -694,7 +748,7 @@ slide10 = prs.slides.add_slide(blank_slide_layout)
 set_slide_background(slide10)
 add_header(
     slide10, 
-    "10 / ROADMAP & DEVELOPER", 
+    "11 / ROADMAP & DEVELOPER", 
     "From Hackathon Prototype to National Infrastructure", 
     "Scalability milestones and solo developer credentials"
 )
@@ -775,4 +829,4 @@ p.font.bold = True
 p.font.color.rgb = EMERALD
 
 prs.save(PPTX_PATH)
-print(f"SUCCESS: Generated 11-slide deck to {PPTX_PATH}")
+print(f"SUCCESS: Generated 12-slide deck to {PPTX_PATH}")
