@@ -33,9 +33,9 @@ GEMINI_MODELS = [
     os.getenv("FALLBACK_MODEL") or "gemini-3.5-flash-lite",
 ]
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL") or "claude-haiku-5-5"
-LLM_ATTEMPT_TIMEOUT_S = float(os.getenv("LLM_ATTEMPT_TIMEOUT_S", "12"))
+LLM_ATTEMPT_TIMEOUT_S = float(os.getenv("LLM_ATTEMPT_TIMEOUT_S", "20"))  # long bilingual CMO answers take 10-15 s
 # Overall budget across all attempts, so callers reach their offline fallback before a serverless timeout
-LLM_TOTAL_BUDGET_S = float(os.getenv("LLM_TOTAL_BUDGET_S", "28"))
+LLM_TOTAL_BUDGET_S = float(os.getenv("LLM_TOTAL_BUDGET_S", "36"))
 MAX_OUTPUT_TOKENS = 4096
 # Optional per-request deadline (monotonic seconds) shared by every LLM call in that request
 _request_deadline: ContextVar[Optional[float]] = ContextVar("llm_request_deadline", default=None)
