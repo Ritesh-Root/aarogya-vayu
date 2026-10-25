@@ -28,7 +28,7 @@ class AuditLedger:
             # Genesis block
             self.record_entry(
                 event_type="GENESIS",
-                details={"message": "Aarogya-Vāyu Climate-Health Ledger Initialized for Lucknow-Unnao District Cluster"},
+                details={"message": "Aarogya-Vāyu audit ledger initialised (Lucknow-Unnao and Bhubaneswar-Cuttack demo regions)"},
                 approved_by="SYSTEM_INITIALIZER"
             )
 
@@ -70,7 +70,7 @@ class AuditLedger:
     def verify_chain_integrity(self) -> Dict[str, Any]:
         """
         Cryptographically validates the entire SHA-256 hash chain from genesis to head.
-        Guarantees tamper-evidence and non-repudiation across all audit records.
+        Shows tampering (any edited entry breaks the chain); entries are not signed, so it does not prove who wrote them.
         """
         if not self.entries:
             return {"valid": True, "total_blocks": 0, "head_hash": None, "tamper_evident": True}
