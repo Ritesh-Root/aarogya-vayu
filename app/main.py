@@ -13,7 +13,7 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Body, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.models import (
@@ -37,7 +37,7 @@ from app.news_service import news_service
 from app.telemetry_service import is_live_reading, telemetry_service
 from app.llm import provider_status, set_request_deadline, GEMINI_MODELS, CLAUDE_MODEL
 from app.vision_service import decode_image, scan_shelf, compare_with_register
-from app.speech_service import decode_audio, is_too_short_or_silent, transcribe
+from app.speech_service import decode_audio, is_too_short_or_silent, synthesize, transcribe
 
 logger = logging.getLogger("aarogya_vayu")
 
@@ -543,6 +543,19 @@ async def transcribe_voice_note(http_request: Request, payload: Dict[str, Any] =
         "language": note.language,
         "transcribed_by": f"Gemini ({GEMINI_MODELS[0]})",
     }
+
+@app.post("/api/cmo/speak")
+async def speak_cmo_briefing(http_request: Request, payload: Dict[str, Any] = Body(...)):
+    """Reads a CMO briefing aloud with a Gemini speech model; returns audio/wav."""
+    text = str(payload.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Nothing to read aloud.")
+    enforce_llm_rate_limit(http_request)
+    result = await synthesize(text)
+    if not result:
+        raise HTTPException(status_code=503, detail="Speech model unavailable.")
+    wav, model = result
+    return Response(content=wav, media_type="audio/wav", headers={"X-Spoken-By": model, "Cache-Control": "no-store"})
 
 @app.post("/api/voice-intake")
 async def process_voice_intake(request: VoiceIntakeRequest, http_request: Request):

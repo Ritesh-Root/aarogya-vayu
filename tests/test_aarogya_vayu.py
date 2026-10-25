@@ -1091,3 +1091,43 @@ def test_transcribe_requires_wav_and_returns_gemini_transcript(monkeypatch):
 
     monkeypatch.setattr(main_module, "transcribe", no_model)
     assert client.post("/api/voice-intake/transcribe", json={"audio_base64": wav}).status_code == 503
+
+
+def test_cmo_speak_returns_gemini_wav_and_caps_text(monkeypatch):
+    import app.speech_service as speech_module
+    monkeypatch.setattr(main_module, "_llm_hits", {})
+    assert client.post("/api/cmo/speak", json={"text": "   "}).status_code == 400
+
+    spoken = []
+
+    async def fake_synthesize(text):
+        spoken.append(text)
+        return speech_module._pcm_to_wav(b"\x00\x00" * 2400), "gemini-3.8-flash-tts"
+
+    monkeypatch.setattr(main_module, "synthesize", fake_synthesize)
+    res = client.post("/api/cmo/speak", json={"text": "PHC Kakori runs out first."})
+    assert res.status_code == 200 and res.headers["content-type"] == "audio/wav"
+    assert res.content[:4] == b"RIFF" and res.headers["x-spoken-by"] == "gemini-3.8-flash-tts"
+
+    async def no_model(text):
+        return None
+
+    monkeypatch.setattr(main_module, "synthesize", no_model)
+    assert client.post("/api/cmo/speak", json={"text": "hello"}).status_code == 503
+
+    # Long text is trimmed before it reaches the speech model, and replays come from the cache
+    calls = []
+
+    class FakeModels:
+        async def generate_content(self, model, contents, config):
+            calls.append(contents)
+            part = type("P", (), {"inline_data": type("D", (), {"data": b"\x01\x00" * 10})()})()
+            return type("R", (), {"candidates": [type("C", (), {"content": type("X", (), {"parts": [part]})()})()]})()
+
+    fake_client = type("Client", (), {"aio": type("Aio", (), {"models": FakeModels()})()})()
+    monkeypatch.setattr(speech_module, "_gemini", lambda: fake_client)
+    monkeypatch.setattr(speech_module, "_tts_cache", speech_module.OrderedDict())
+    wav, model = asyncio.run(speech_module.synthesize("word " * 400))
+    assert wav[:4] == b"RIFF" and model == speech_module.TTS_MODELS[0]
+    assert len(calls[0]) <= speech_module.MAX_TTS_CHARS
+    assert asyncio.run(speech_module.synthesize("word " * 400))[1] == "cache" and len(calls) == 1

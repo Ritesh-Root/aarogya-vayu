@@ -227,11 +227,11 @@ function updateRegionButtons(regId) {
     if (regId === 'bhubaneswar') {
       btnBbs.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-clay-terracotta text-white shadow-clay-btn transition flex items-center space-x-1.5';
       btnLko.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition flex items-center space-x-1.5';
-      if (sub) sub.textContent = 'Bhubaneswar–Cuttack Dynamic Multi-Echelon Network';
+      if (sub) sub.textContent = 'Bhubaneswar–Cuttack · tap a clinic to see its stock';
     } else {
       btnLko.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-clay-terracotta text-white shadow-clay-btn transition flex items-center space-x-1.5';
       btnBbs.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition flex items-center space-x-1.5';
-      if (sub) sub.textContent = 'Lucknow–Unnao Dynamic Multi-Echelon Network';
+      if (sub) sub.textContent = 'Lucknow–Unnao · tap a clinic to see its stock';
     }
   }
 }
@@ -330,22 +330,25 @@ async function fetchEnvironmental() {
     const activeScenario = isLiveMode ? 'live' : (t.smog_episode ? 'smog' : (t.heatwave_alert ? 'heat' : 'normal'));
     highlightScenarioButton(activeScenario);
 
-    const corridorName = escapeHtml(t.corridor || 'Regional Corridor');
+    // Banner uses the short area name: "Lucknow-Unnao (UP)" rather than the full corridor description
+    const corridorName = escapeHtml((t.corridor || 'Regional Corridor').replace(/ [^()]*Corridor/, ''));
+    const area = t.corridor ? t.corridor.replace(/ [^()]*Corridor/, '') : 'this region';
+    const pct = key => Math.round(((mults[key] || 1) - 1) * 100);
     if (isLiveMode && data.is_live) {
-      if (bannerTitle) bannerTitle.innerHTML = `<span class="inline-flex flex-wrap items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-300 animate-ping flex-shrink-0"></span><span>${corridorName}</span> <span class="whitespace-nowrap flex-shrink-0 text-[10px] leading-none bg-emerald-500/40 text-emerald-100 border border-emerald-300/50 px-2 py-1 rounded-full uppercase tracking-wider font-mono">Live Data Feed</span></span>`;
-      if (bannerDesc) bannerDesc.textContent = `Live Telemetry (Open-Meteo · Copernicus CAMS) • AQI ${t.aqi} (${aqiCategory(t.aqi)}) • PM2.5: ${t.pm25} µg/m³ • Temp: ${t.temperature_c}°C • Humidity: ${t.humidity_pct ?? 'n/a'}% • Wind: ${t.wind_speed_kmh ?? 'n/a'} km/h`;
+      if (bannerTitle) bannerTitle.innerHTML = `<span class="inline-flex flex-wrap items-center gap-x-2 gap-y-1"><span>Today's air: ${corridorName}</span><span class="whitespace-nowrap text-[10px] leading-none bg-emerald-500/40 text-emerald-50 border border-emerald-300/50 px-2 py-1 rounded-full uppercase tracking-wider font-extrabold">Live</span></span>`;
+      if (bannerDesc) bannerDesc.textContent = `AQI ${t.aqi} (${aqiCategory(t.aqi)}) · PM2.5 ${t.pm25} µg/m³ · ${t.temperature_c}°C · humidity ${t.humidity_pct ?? 'n/a'}% · wind ${t.wind_speed_kmh ?? 'n/a'} km/h. Source: Open-Meteo and Copernicus CAMS.`;
     } else if (isLiveMode) {
-      if (bannerTitle) bannerTitle.textContent = `${t.corridor || 'Regional Corridor'}: live feed unavailable`;
-      if (bannerDesc) bannerDesc.textContent = `Showing an offline baseline, not live data • AQI ${t.aqi} • Temp: ${t.temperature_c}°C`;
+      if (bannerTitle) bannerTitle.textContent = `${area}: live air data unavailable`;
+      if (bannerDesc) bannerDesc.textContent = `Showing a stored baseline, not live data · AQI ${t.aqi} · ${t.temperature_c}°C`;
     } else if (t.smog_episode) {
-      if (bannerTitle) bannerTitle.textContent = `SIMULATED SCENARIO: ${t.corridor || 'Regional Corridor'} Smog Inversion`;
-      if (bannerDesc) bannerDesc.textContent = `AQI ${t.aqi} • PM2.5: ${t.pm25} µg/m³ • +${Math.round(((mults['AQI / Smog'] || 1) - 1) * 100)}% Acute Respiratory Demand • Admissions lag PM2.5 peaks by 1–3 days`;
+      if (bannerTitle) bannerTitle.textContent = `Demo: winter smog over ${area}`;
+      if (bannerDesc) bannerDesc.textContent = `AQI ${t.aqi} · PM2.5 ${t.pm25} µg/m³ · demand for breathing medicines up ${pct('AQI / Smog')}%. Hospital visits rise 1–3 days after a PM2.5 peak.`;
     } else if (t.heatwave_alert) {
-      if (bannerTitle) bannerTitle.textContent = `SIMULATED SCENARIO: ${t.corridor || 'Regional Corridor'} Heatwave`;
-      if (bannerDesc) bannerDesc.textContent = `Temp: ${t.temperature_c}°C • +${Math.round(((mults['Heatwave / Drought'] || 1) - 1) * 100)}% Dehydration / ORS Demand`;
+      if (bannerTitle) bannerTitle.textContent = `Demo: heatwave over ${area}`;
+      if (bannerDesc) bannerDesc.textContent = `${t.temperature_c}°C · demand for ORS (rehydration salts) up ${pct('Heatwave / Drought')}%.`;
     } else {
-      if (bannerTitle) bannerTitle.textContent = `SIMULATED SCENARIO: ${t.corridor || 'Regional Corridor'} Baseline Operations`;
-      if (bannerDesc) bannerDesc.textContent = `AQI ${t.aqi} • Temp: ${t.temperature_c}°C • Baseline Normal Consumption`;
+      if (bannerTitle) bannerTitle.textContent = `Demo: normal conditions over ${area}`;
+      if (bannerDesc) bannerDesc.textContent = `AQI ${t.aqi} · ${t.temperature_c}°C · medicines used at their usual rate.`;
     }
 
     // Render Atmospheric Inversion Plume & Ground Sensors
@@ -436,9 +439,9 @@ function updateAtmosphericPlume(t) {
   const hudInversion = document.getElementById('hudInversion');
   if (hudInversion) {
     if (blh !== null) {
-      hudInversion.textContent = `${blh.toLocaleString()} m AGL (${blh < 300 ? 'Trapping' : (blh < 800 ? 'Limited Dispersion' : 'Normal Dispersion')})`;
+      hudInversion.textContent = `${blh.toLocaleString()} m (${blh < 300 ? 'smog trapped' : (blh < 800 ? 'slow to clear' : 'clears normally')})`;
     } else {
-      hudInversion.textContent = t.smog_episode ? "Smog scenario" : (t.heatwave_alert ? "Heatwave scenario" : "Normal Dispersion");
+      hudInversion.textContent = t.smog_episode ? "Smog demo" : (t.heatwave_alert ? "Heatwave demo" : "Clears normally");
     }
   }
 }
@@ -512,7 +515,7 @@ async function fetchFacilities() {
     renderVoiceSamples();
     const select = document.getElementById('voiceFacilitySelect');
     if (select) {
-      select.innerHTML = '<option value="">Auto-Detect from Voice Transcript</option>';
+      select.innerHTML = '<option value="">Clinic: detect it from the report</option>';
       facilities.forEach(fac => {
         const opt = document.createElement('option');
         opt.value = fac.id;
@@ -655,7 +658,7 @@ async function fetchRisks() {
               Inspect Stock
             </button>
             <button onclick="runTransferFor('${safeId(fac.id)}')" class="text-xs sm:text-sm bg-clay-terracotta hover:bg-clay-terracottaDark text-white px-3 py-1.5 rounded-full font-black shadow-sm transition text-center cursor-pointer">
-              Solve AI
+              Find stock
             </button>
           </div>
         </div>
@@ -718,8 +721,8 @@ function renderWatchlist(searchQuery = '') {
       </div>
       <div class="text-right flex items-center space-x-2 flex-shrink-0 pl-2">
         <span class="text-sm font-black text-clay-dark whitespace-nowrap">${item.current_stock} Units</span>
-        <button onclick="${isCritical ? 'runTransferFor' : 'openFacilityDetail'}('${safeId(item.facility_id)}')" class="text-xs ${isCritical ? 'bg-clay-terracotta hover:bg-clay-terracottaDark text-white' : 'bg-clay-terracotta/10 text-clay-terracotta hover:bg-clay-terracotta hover:text-white'} px-3.5 py-1.5 rounded-full font-bold shadow-sm transition cursor-pointer">
-          ${isCritical ? 'Solve' : 'View'}
+        <button onclick="${isCritical ? 'runTransferFor' : 'openFacilityDetail'}('${safeId(item.facility_id)}')" class="text-xs ${isCritical ? 'bg-clay-terracotta hover:bg-clay-terracottaDark text-white' : 'bg-clay-terracotta/10 text-clay-terracotta hover:bg-clay-terracotta hover:text-white'} px-3.5 py-1.5 rounded-full font-bold shadow-sm transition cursor-pointer whitespace-nowrap" title="${isCritical ? 'Look for a clinic within 35 km that can spare stock' : 'See this clinic\'s stock'}">
+          ${isCritical ? 'Find stock' : 'View'}
         </button>
       </div>
     `;
@@ -944,6 +947,9 @@ function setMapLayerFilter(layer) {
   }
 }
 
+let showAllRecs = false;  // the approval list shows 3 cards until the user expands it
+const RECS_PREVIEW = 3;
+
 function renderRecommendations(searchQuery = '') {
   const container = document.getElementById('recommendationsList');
   if (!container) return;
@@ -962,13 +968,17 @@ function renderRecommendations(searchQuery = '') {
   }
 
   if (items.length === 0) {
-    container.innerHTML = `<div class="col-span-full text-center py-6 text-clay-muted text-xs">${q ? `No transfer orders matching "${escapeHtml(searchQuery)}"` : 'All district inventories are balanced. Zero acute stockouts detected.'}</div>`;
+    container.innerHTML = `<div class="col-span-full text-center py-6 text-clay-muted text-xs">${q ? `No transfers matching "${escapeHtml(searchQuery)}"` : 'No transfers needed: every clinic has enough stock.'}</div>`;
     return;
   }
+
+  const hiddenCount = (!q && !showAllRecs) ? Math.max(0, items.length - RECS_PREVIEW) : 0;
+  if (hiddenCount) items = items.slice(0, RECS_PREVIEW);
 
   items.forEach(rec => {
     const card = document.createElement('div');
     card.className = `bg-white border ${rec.status === 'APPROVED' ? 'border-emerald-300 bg-emerald-50/40' : 'border-clay-salmon/30'} rounded-2xl p-4 sm:p-5 flex flex-col justify-between space-y-3 shadow-sm transition hover:shadow-md`;
+    card.dataset.recId = rec.id;
 
     const statusBadge = rec.status === 'APPROVED'
       ? `<span class="bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs px-3 py-1 rounded-full font-black">APPROVED &bull; STOCK RESERVED</span>`
@@ -987,7 +997,7 @@ function renderRecommendations(searchQuery = '') {
 
         <div class="mt-2.5 flex items-center justify-between bg-clay-inner p-3 rounded-xl border border-clay-salmon/20">
           <div>
-            <span class="text-[10px] text-clay-muted uppercase font-extrabold tracking-wider block">Donor (Surplus)</span>
+            <span class="text-[10px] text-clay-muted uppercase font-extrabold tracking-wider block">From (has spare)</span>
             <strong class="text-sm font-black text-clay-dark">${escapeHtml(rec.donor_facility_name)}</strong>
           </div>
           <div class="text-clay-muted text-xs px-2 flex flex-col items-center">
@@ -995,7 +1005,7 @@ function renderRecommendations(searchQuery = '') {
             <span class="text-xs font-black text-clay-terracotta">${rec.distance_km} km</span>
           </div>
           <div class="text-right">
-            <span class="text-[10px] text-clay-muted uppercase font-extrabold tracking-wider block">Recipient (Deficit)</span>
+            <span class="text-[10px] text-clay-muted uppercase font-extrabold tracking-wider block">To (running low)</span>
             <strong class="text-sm font-black text-red-600">${escapeHtml(rec.recipient_facility_name)}</strong>
           </div>
         </div>
@@ -1006,7 +1016,7 @@ function renderRecommendations(searchQuery = '') {
             <span class="font-black text-clay-terracotta text-base sm:text-lg">${rec.units_to_transfer} Units</span>
           </div>
           <div class="text-xs sm:text-sm text-clay-muted mt-0.5 font-medium">
-            Coverage: ${rec.recipient_initial_coverage_days}d &rarr; <strong class="text-emerald-700 font-black">${rec.recipient_new_coverage_days}d</strong>
+            Days of medicine left: ${rec.recipient_initial_coverage_days} &rarr; <strong class="text-emerald-700 font-black">${rec.recipient_new_coverage_days}</strong>
           </div>
         </div>
 
@@ -1017,7 +1027,7 @@ function renderRecommendations(searchQuery = '') {
 
       <div class="pt-2.5 border-t border-clay-salmon/20">
         ${rec.status === 'APPROVED' 
-          ? `<button onclick="showChallanModal('${safeId(rec.id)}')" class="w-full bg-clay-inner hover:bg-clay-bg text-clay-dark text-xs sm:text-sm py-2.5 rounded-full font-bold border border-clay-salmon/30 transition cursor-pointer">View Official Challan</button>`
+          ? `<button onclick="showChallanModal('${safeId(rec.id)}')" class="w-full bg-clay-inner hover:bg-clay-bg text-clay-dark text-xs sm:text-sm py-2.5 rounded-full font-bold border border-clay-salmon/30 transition cursor-pointer">View dispatch note (challan)</button>`
           : `<button onclick="approveTransfer('${safeId(rec.id)}')" class="w-full bg-clay-terracotta hover:bg-clay-terracottaDark text-white text-xs sm:text-sm py-2.5 rounded-full font-black shadow-clay-btn transition cursor-pointer">Approve &amp; Reserve Stock</button>`
         }
       </div>
@@ -1025,6 +1035,15 @@ function renderRecommendations(searchQuery = '') {
 
     container.appendChild(card);
   });
+
+  if (hiddenCount) {
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'w-full py-2.5 rounded-full text-xs sm:text-sm font-black text-clay-terracotta bg-white border border-clay-salmon/30 hover:bg-clay-bg transition cursor-pointer';
+    more.textContent = `Show all ${hiddenCount + RECS_PREVIEW} transfers`;
+    more.onclick = () => { showAllRecs = true; renderRecommendations(searchQuery); };
+    container.appendChild(more);
+  }
 }
 
 let approvingRecId = null;
@@ -1254,7 +1273,7 @@ async function submitVoiceIntake() {
     });
 
     btn.disabled = false;
-    btn.innerHTML = `<span>Process &amp; Commit Record</span>`;
+    btn.innerHTML = `<span>Read report</span>`;
     if (!res.ok) {
       alert("Could not process the report: " + await apiErrorMessage(res, "Server error"));
       return;
@@ -1321,7 +1340,7 @@ async function submitVoiceIntake() {
   } catch (err) {
     console.error(err);
     btn.disabled = false;
-    btn.innerHTML = `<span>Process &amp; Commit Record</span>`;
+    btn.innerHTML = `<span>Read report</span>`;
     alert("Network error while processing the report");
   } finally {
     if (wave) {
@@ -1599,23 +1618,179 @@ function fitMapBounds() {
   }
 }
 
-// Multi-Agent Pipeline Runner
+// Multi-Agent Pipeline Runner: a step tracker, a one-sentence outcome and a plain-language log
+const PIPE_STEP_OF = {
+  EnvironmentalSentinelAgent: 'air',
+  FrontlineIntakeAgent: 'intake',
+  DemandIntelligenceAgent: 'demand',
+  LogisticsAgent: 'transfer',
+  GovernanceAgent: 'cmo'
+};
+const PIPE_LABEL = { air: 'Air quality agent', intake: 'Field report agent', demand: 'Demand agent', transfer: 'Transfer agent', cmo: 'Governance' };
+const PIPE_ICON = { air: 'wind', intake: 'mic', demand: 'trending-up', transfer: 'route', cmo: 'shield-check' };
+const PIPE_ACTION = { TOOL_CALL: 'called the transfer solver', TOOL_RESULT: 'solver result', GROUNDING_MATCH: 'matched the drug list' };
+
+function setPipeStep(key, state, figure) {
+  const li = document.querySelector(`#pipeSteps [data-step="${key}"]`);
+  if (!li) return;
+  const fig = li.querySelector('.pipe-figure');
+  if (!li.dataset.defaultFigure) li.dataset.defaultFigure = fig.textContent;
+  li.dataset.state = state;
+  fig.textContent = figure === undefined ? li.dataset.defaultFigure : figure;
+}
+
+function shortMedicineName(name) {
+  return String(name || '').split(' (')[0];
+}
+
+// Final state and headline figure of each step, worked out from the whole response
+function pipelineStepSummary(data, traces) {
+  const tel = (data.sentinel && data.sentinel.telemetry) || {};
+  const condition = data.sentinel && data.sentinel.condition;
+  const grounding = traces.find(t => t.type === 'GROUNDING_MATCH');
+  const entity = (grounding && grounding.payload && grounding.payload.grounded_entity) || {};
+  const intakeNote = traces.find(t => t.agent === 'FrontlineIntakeAgent' && t.type === 'THINKING');
+  const usedReport = Boolean(intakeNote && String(intakeNote.message || '').startsWith('Field report parsed'));
+  const df = data.demand_forecast || {};
+  const logistics = data.logistics;
+  const rec = logistics && logistics.recommendation;
+  const cover = df.days_of_coverage;
+  const urgent = ['CRITICAL', 'WARNING', 'NO_STOCK_RECORD'].includes(df.risk_status);
+  return {
+    air: {
+      state: ['SEVERE_COMPOUND_INVERSION', 'ELEVATED_SURGE'].includes(condition) ? 'alert' : 'done',
+      figure: tel.aqi !== undefined ? `AQI ${tel.aqi} · ${tel.is_live ? 'live' : 'scenario'}` : undefined
+    },
+    intake: {
+      state: usedReport ? 'done' : 'skipped',
+      figure: usedReport ? shortMedicineName(entity.standard_name) : 'No report · register used'
+    },
+    demand: {
+      state: urgent ? 'alert' : 'done',
+      figure: cover === null || cover === undefined ? 'No stock record' : `${cover} days of cover`
+    },
+    transfer: rec
+      ? { state: 'done', figure: `${Number(rec.units_to_transfer) || 0} units from ${rec.donor_facility_name}` }
+      : logistics
+        ? { state: 'alert', figure: 'No donor within 35 km' }
+        : { state: 'skipped', figure: 'Not needed' },
+    cmo: rec
+      ? { state: 'waiting', figure: 'Waiting for approval' }
+      : logistics
+        ? { state: 'alert', figure: 'Escalated to district' }
+        : { state: 'skipped', figure: 'Nothing to approve' }
+  };
+}
+
+function renderPipelineOutcome(data, facId, medicineName) {
+  const box = document.getElementById('pipeOutcome');
+  const fac = facilities.find(f => f.id === facId);
+  const facName = escapeHtml(fac ? fac.name : facId);
+  const df = data.demand_forecast || {};
+  const logistics = data.logistics;
+  const rec = logistics && logistics.recommendation;
+  const med = escapeHtml(shortMedicineName((rec && rec.medicine_name) || medicineName || df.medicine_id || 'this medicine'));
+  const figure = (value, label) => `
+    <div class="bg-white/70 rounded-xl px-4 py-3">
+      <div class="text-xl sm:text-2xl font-black text-clay-dark tabular-nums">${value}</div>
+      <div class="text-xs sm:text-sm text-clay-muted mt-0.5">${label}</div>
+    </div>`;
+
+  if (rec) {
+    box.className = 'rounded-2xl p-5 sm:p-6 bg-[#E8F0EC]';
+    box.innerHTML = `
+      <p class="text-sm font-bold text-[#2F6B52]">Proposal for ${facName} · waiting for CMO sign-off</p>
+      <h4 class="text-xl sm:text-2xl font-black text-clay-dark tracking-tight mt-1 leading-snug">Send ${Number(rec.units_to_transfer) || 0} units of ${med} from ${escapeHtml(rec.donor_facility_name)} to ${escapeHtml(rec.recipient_facility_name)}</h4>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-4">
+        ${figure(`${Number(rec.distance_km) || 0} km`, 'Distance (limit 35 km)')}
+        ${figure(`${Number(rec.recipient_initial_coverage_days)} → ${Number(rec.recipient_new_coverage_days)} d`, `Cover at ${escapeHtml(rec.recipient_facility_name)}`)}
+        ${figure(`${Number(rec.donor_remaining_coverage_days)} d`, `Cover kept at ${escapeHtml(rec.donor_facility_name)} (min 14 d)`)}
+        ${figure(`${Number(rec.batch_expiry_days)} d`, 'Until the batch expires')}
+      </div>
+      <button onclick="focusRecommendation('${safeId(rec.id)}')" class="mt-4 bg-clay-terracotta hover:bg-clay-terracottaDark active:scale-[0.98] text-white font-black text-sm px-5 py-2.5 rounded-full transition">Review and approve</button>`;
+  } else if (logistics) {
+    const sub = logistics.drug_substitution;
+    box.className = 'rounded-2xl p-5 sm:p-6 bg-[#FBE4DE]';
+    box.innerHTML = `
+      <p class="text-sm font-bold text-[#8F2A19]">${facName} · escalated</p>
+      <h4 class="text-xl sm:text-2xl font-black text-clay-dark tracking-tight mt-1 leading-snug">No clinic within 35 km can spare ${med} for ${facName}</h4>
+      <p class="text-sm text-clay-dark mt-2">The shortfall goes to the district store as a requisition.${sub ? ` A substitute, ${escapeHtml(sub.substitute_name)}, is available if the CMO approves it.` : ''}</p>`;
+  } else {
+    const cover = df.days_of_coverage;
+    box.className = 'rounded-2xl p-5 sm:p-6 bg-clay-inner';
+    box.innerHTML = `
+      <p class="text-sm font-bold text-clay-muted">${facName} · no action needed</p>
+      <h4 class="text-xl sm:text-2xl font-black text-clay-dark tracking-tight mt-1 leading-snug">${facName} has enough ${med}${cover !== null && cover !== undefined ? `: ${Number(cover)} days of cover` : ''}</h4>
+      <p class="text-sm text-clay-dark mt-2">No transfer is proposed, so nothing goes to the CMO.</p>`;
+  }
+}
+
+function focusRecommendation(recId) {
+  if (!showAllRecs && !document.querySelector(`#recommendationsList [data-rec-id="${recId}"]`)) {
+    showAllRecs = true;
+    renderRecommendations(activeSearchQuery);
+  }
+  const card = document.querySelector(`#recommendationsList [data-rec-id="${recId}"]`) || document.getElementById('recommendationsList');
+  if (!card) return;
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  card.classList.add('ring-4', 'ring-clay-terracotta/60');
+  setTimeout(() => card.classList.remove('ring-4', 'ring-clay-terracotta/60'), 2400);
+}
+
+function pipelineLogRow(step) {
+  const key = PIPE_STEP_OF[step.agent] || 'cmo';
+  const payload = step.payload || {};
+  let details = '';
+  if (step.type === 'TOOL_CALL') {
+    const caller = payload.called_by === 'gemini' ? 'Gemini function call' : payload.called_by === 'claude' ? 'Claude tool call (Gemini unavailable)' : 'Default arguments (no model reachable)';
+    details = `${caller}\n${payload.tool || 'calculate_optimal_transfer'}(${JSON.stringify(payload.arguments || {}, null, 2)})`;
+  } else if (step.type === 'TOOL_RESULT' && !payload.no_feasible_donor) {
+    details = JSON.stringify({
+      donor: payload.donor_facility_name, units: payload.units_to_transfer, batch: payload.batch_number,
+      batch_expiry_days: payload.batch_expiry_days, distance_km: payload.distance_km,
+      donor_min_reserve_units: payload.donor_min_reserve_units, recommendation_id: payload.id
+    }, null, 2);
+  } else if (step.agent === 'EnvironmentalSentinelAgent' && payload.aqi !== undefined) {
+    details = JSON.stringify(payload, null, 2);
+  }
+  const action = PIPE_ACTION[step.type] ? ` <span class="font-semibold text-clay-muted">${PIPE_ACTION[step.type]}</span>` : '';
+  const row = document.createElement('div');
+  row.className = 'pipe-log-row';
+  row.innerHTML = `
+    <span class="pipe-dot"><i data-lucide="${PIPE_ICON[key]}" class="w-4 h-4"></i></span>
+    <div class="min-w-0">
+      <div class="flex flex-wrap items-baseline justify-between gap-x-3">
+        <p class="text-sm"><strong class="text-clay-dark">${PIPE_LABEL[key]}</strong>${action}</p>
+        <span class="text-xs text-clay-muted tabular-nums">${escapeHtml(step.timestamp || '')}</span>
+      </div>
+      <p class="text-sm text-clay-dark leading-relaxed mt-0.5">${escapeHtml(step.message)}</p>
+      ${details ? `<details><summary>${step.type === 'TOOL_CALL' ? 'Show the function call' : 'Show the data'}</summary><pre><code>${escapeHtml(details)}</code></pre></details>` : ''}
+    </div>`;
+  return row;
+}
+
 async function runAgentPipeline(targetFacId = null, includeFieldReport = true) {
   const btn = document.getElementById('btnRunAgents');
   const term = document.getElementById('agentTerminalBody');
+  const outcome = document.getElementById('pipeOutcome');
+  const latencyEl = document.getElementById('agentLatency');
   const snippet = includeFieldReport ? (document.getElementById('voiceTranscript').value.trim() || null) : null;
   const facSelect = document.getElementById('voiceFacilitySelect');
-  
+
   const facId = targetFacId || (facSelect && facSelect.value ? facSelect.value : (currentClinicFacilityId || (facilities.length > 0 ? facilities[0].id : (currentRegion === 'bhubaneswar' ? 'PHC-BBS-01' : 'PHC-LKO-01'))));
   if (facSelect && facId) facSelect.value = facId;
+  const fac = facilities.find(f => f.id === facId);
 
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Running multi-agent pipeline...</span>`;
-    lucide.createIcons();
+    btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Running...</span>`;
   }
-
-  term.innerHTML = '<div class="text-indigo-400 animate-pulse">// Fetching live telemetry &middot; calling Gemini agents...</div>';
+  ['air', 'intake', 'demand', 'transfer', 'cmo'].forEach(k => setPipeStep(k, 'idle'));
+  setPipeStep('air', 'running');
+  outcome.classList.add('hidden');
+  term.innerHTML = `<p class="text-sm text-clay-muted bg-clay-inner rounded-2xl p-4">Checking ${escapeHtml(fac ? fac.name : facId)}: reading live air quality and calling Gemini…</p>`;
+  if (latencyEl) latencyEl.textContent = '';
+  lucide.createIcons();
 
   const startedAt = performance.now();
   try {
@@ -1629,132 +1804,56 @@ async function runAgentPipeline(targetFacId = null, includeFieldReport = true) {
     });
 
     if (!res.ok) {
-      term.innerHTML = `<div class="text-red-400">// Pipeline failed: ${escapeHtml(await apiErrorMessage(res, 'Server error'))}</div>`;
+      setPipeStep('air', 'idle');
+      term.innerHTML = `<p class="text-sm text-[#8F2A19] bg-[#FBE4DE] rounded-2xl p-4">The pipeline failed: ${escapeHtml(await apiErrorMessage(res, 'Server error'))}</p>`;
       return;
     }
     const data = await res.json();
-    term.innerHTML = '';
-    const latencyEl = document.getElementById('agentLatency');
-    if (latencyEl) latencyEl.textContent = `last run: ${((performance.now() - startedAt) / 1000).toFixed(1)} s`;
-
+    const seconds = ((performance.now() - startedAt) / 1000).toFixed(1);
     const traces = data.traces || [];
-    for (let i = 0; i < traces.length; i++) {
-      const step = traces[i];
-      await new Promise(r => setTimeout(r, 260)); // Dramatic pacing for demo
+    const summary = pipelineStepSummary(data, traces);
+    term.innerHTML = '';
 
-      const stepDiv = document.createElement('div');
-      stepDiv.className = 'border-l-2 pl-3 py-1 space-y-1';
-
-      let agentColor = 'border-blue-500 text-blue-400';
-      let badgeColor = 'bg-blue-500/20 text-blue-300 border-blue-500/30';
-      if (step.agent === 'FrontlineIntakeAgent') {
-        agentColor = 'border-purple-500 text-purple-400';
-        badgeColor = 'bg-purple-500/20 text-purple-300 border-purple-500/30';
-      } else if (step.agent === 'LogisticsAgent') {
-        agentColor = 'border-amber-500 text-amber-400';
-        badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/30';
-      } else if (step.agent === 'GovernanceAgent') {
-        agentColor = 'border-emerald-500 text-emerald-400';
-        badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+    // Reveal each agent's work in order, so the hand-offs can be followed
+    let current = null;
+    for (const step of traces) {
+      const key = PIPE_STEP_OF[step.agent] || 'cmo';
+      if (key !== current) {
+        if (current) setPipeStep(current, summary[current].state, summary[current].figure);
+        setPipeStep(key, 'running');
+        current = key;
       }
-
-      stepDiv.className += ` ${agentColor}`;
-
-      let typeBadge = `<span class="px-2 py-0.5 rounded text-xs font-bold border ${badgeColor}">${escapeHtml(step.type)}</span>`;
-      
-      let extraContent = '';
-      if (step.type === 'TOOL_CALL') {
-        const payload = step.payload || {};
-        const toolName = payload.tool || 'calculate_optimal_transfer';
-        const args = payload.arguments || {};
-        const header = payload.called_by === 'gemini' ? '// GEMINI FUNCTION CALL'
-          : payload.called_by === 'claude' ? '// CLAUDE TOOL CALL (GEMINI FALLBACK)'
-          : '// DEFAULT SOLVER ARGUMENTS (LLM UNAVAILABLE)';
-        extraContent = `
-          <div class="mt-2 bg-[#0d121c] p-3.5 rounded-xl border border-amber-500/40 text-xs font-mono text-amber-300 shadow-inner">
-            <div class="flex items-center space-x-2 text-slate-400 text-xs uppercase font-mono font-bold mb-1.5">
-              <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
-              <span>${header}</span>
-            </div>
-            <div class="text-amber-200 font-bold">&gt; tool: <strong>${escapeHtml(toolName)}()</strong></div>
-            <div class="mt-1 text-slate-300 font-mono text-xs leading-relaxed">&gt; args: <span class="text-amber-100 font-semibold">${escapeHtml(JSON.stringify(args))}</span></div>
-          </div>
-        `;
-      } else if (step.type === 'GROUNDING_MATCH') {
-        const entity = (step.payload && step.payload.grounded_entity) || {};
-        extraContent = `
-          <div class="mt-2 bg-[#0d121c] p-3.5 rounded-xl border border-purple-500/40 text-xs font-mono text-purple-300 shadow-inner">
-            <div class="flex items-center space-x-2 text-slate-400 text-xs uppercase font-mono font-bold mb-1.5">
-              <span class="w-2 h-2 rounded-full bg-purple-400 animate-ping"></span>
-              <span>// EDL GROUNDING (EDL-UP-2026)</span>
-            </div>
-            <div>&gt; verified entity: <strong class="text-purple-200">${escapeHtml(entity.standard_name || '')}</strong> (${escapeHtml(entity.code || '')})</div>
-            <div class="mt-1 text-slate-300">&gt; clinical class: <span class="text-purple-100 font-semibold">${escapeHtml(entity.category || '')}</span></div>
-          </div>
-        `;
-      } else if (step.type === 'TOOL_RESULT') {
-        const payload = step.payload || {};
-        const body = payload.no_feasible_donor
-          ? `<div>&gt; no feasible donor &rarr; <strong class="text-amber-300">escalated to district requisition</strong></div>`
-            + (payload.drug_substitution ? `<div class="mt-1">&gt; substitute option: <strong class="text-emerald-200">${escapeHtml(payload.drug_substitution.substitute_name)}</strong> (CMO sign-off required)</div>` : '')
-          : `<div>&gt; transfer: <strong class="text-emerald-300 font-bold">${Number(payload.units_to_transfer) || 0} units</strong> from <strong class="text-emerald-200 font-bold">${escapeHtml(payload.donor_facility_name || '')}</strong></div>
-            <div class="mt-1">&gt; distance: <strong class="text-emerald-200">${Number(payload.distance_km) || 0} km</strong> | batch expiry: <strong class="text-emerald-200">${Number(payload.batch_expiry_days) || 0}d left</strong></div>`;
-        extraContent = `
-          <div class="mt-2 bg-[#0d121c] p-3.5 rounded-xl border border-emerald-500/40 text-xs font-mono text-emerald-300 shadow-inner">
-            <div class="flex items-center space-x-2 text-slate-400 text-xs uppercase font-mono font-bold mb-1.5">
-              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              <span>// DETERMINISTIC SOLVER RESULT</span>
-            </div>
-            ${body}
-          </div>
-        `;
-      } else if (step.agent === 'EnvironmentalSentinelAgent' && step.type === 'DISPATCH' && step.payload && step.payload.aqi) {
-        const p = step.payload;
-        const fmt = (v, suffix = '') => (v === null || v === undefined) ? 'n/a' : `${escapeHtml(String(v))}${suffix}`;
-        const sigma = (p.aod_anomaly_sigma === null || p.aod_anomaly_sigma === undefined) ? 'n/a' : `${p.aod_anomaly_sigma > 0 ? '+' : ''}${Number(p.aod_anomaly_sigma)}σ`;
-        extraContent = `
-          <div class="mt-2 bg-[#0d121c] p-3 rounded-xl border border-blue-500/40 text-xs font-mono text-blue-300 shadow-inner flex flex-wrap gap-x-4 gap-y-1">
-            <span>${p.is_live ? 'LIVE' : 'SCENARIO'}</span>
-            <span>AQI: <strong class="text-red-400">${fmt(p.aqi)}</strong></span>
-            <span>PM2.5: <strong class="text-red-400">${fmt(p.pm25, ' µg/m³')}</strong></span>
-            <span>Wind: <strong class="text-slate-200">${fmt(p.wind_speed_kmh, ' km/h')}</strong></span>
-            <span>Boundary layer: <strong class="text-slate-200">${fmt(p.boundary_layer_m, ' m')}</strong></span>
-            <span>72h AQI peak: <strong class="text-red-300">${fmt(p.forecast_peak_aqi_72h)}</strong></span>
-            <span>AOD vs 30d: <strong class="text-purple-300">${sigma}</strong></span>
-            <span>FIRMS fires: <strong class="text-amber-400">${fmt(p.firms_hotspots)}</strong></span>
-          </div>
-        `;
-      }
-
-      stepDiv.innerHTML = `
-        <div class="flex items-center space-x-2 text-xs">
-          <span class="text-slate-400 font-mono">${escapeHtml(step.timestamp)}</span>
-          <strong class="text-white font-bold">${escapeHtml(step.agent)}</strong>
-          ${typeBadge}
-        </div>
-        <p class="text-slate-200 text-xs sm:text-sm leading-relaxed font-sans">${escapeHtml(step.message)}</p>
-        ${extraContent}
-      `;
-
-      term.appendChild(stepDiv);
+      await new Promise(r => setTimeout(r, 320));
+      term.appendChild(pipelineLogRow(step));
+      lucide.createIcons();
       term.scrollTop = term.scrollHeight;
     }
+    Object.entries(summary).forEach(([k, v]) => setPipeStep(k, v.state, v.figure));
+
+    const grounding = traces.find(t => t.type === 'GROUNDING_MATCH');
+    renderPipelineOutcome(data, facId, grounding && grounding.payload && grounding.payload.grounded_entity && grounding.payload.grounded_entity.standard_name);
+    outcome.classList.remove('hidden');
+    const call = traces.find(t => t.type === 'TOOL_CALL');
+    const by = call && call.payload ? call.payload.called_by : null;
+    if (latencyEl) latencyEl.textContent = `Last run took ${seconds} s` + (by === 'gemini' ? ' · transfer solver called by Gemini' : by === 'claude' ? ' · transfer solver called by Claude (Gemini unavailable)' : '');
 
     // Refresh UI
     await loadInitialData();
   } catch (err) {
     console.error("Agent pipeline error:", err);
-    term.innerHTML = '<div class="text-red-400">// Network error while running the agent pipeline. Please try again.</div>';
+    // Stop any step that was still spinning when the run failed
+    document.querySelectorAll('#pipeSteps [data-state="running"]').forEach(li => setPipeStep(li.dataset.step, 'idle'));
+    term.innerHTML = '<p class="text-sm text-[#8F2A19] bg-[#FBE4DE] rounded-2xl p-4">The agent pipeline could not finish (network or display error). Please try again.</p>';
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = `<i data-lucide="play" class="w-4 h-4 fill-current"></i><span>Run Agent Pipeline (Live)</span>`;
+      btn.innerHTML = `<i data-lucide="play" class="w-4 h-4 fill-current"></i><span>Run Agent Pipeline</span>`;
       lucide.createIcons();
     }
   }
 }
 
-// Facility Action: Solve with the agent pipeline
+// Facility Action: Find stock with the agent pipeline
 function runTransferFor(facId) {
   const fac = facilities.find(f => f.id === facId);
   if (fac && map && facilityMarkers[facId]) {
@@ -1790,6 +1889,9 @@ function askCmoQuery(idx) {
 }
 
 async function submitCmoQuery() {
+  stopBriefingAudio();  // a new question replaces the briefing being read
+  const ttsBtnWhileLoading = document.getElementById('btnTtsSpeak');
+  if (ttsBtnWhileLoading) { ttsBtnWhileLoading.classList.add('hidden'); ttsBtnWhileLoading.classList.remove('inline-flex'); }
   const input = document.getElementById('cmoQueryInput');
   const question = input.value.trim();
   if (!question) return;
@@ -1849,59 +1951,80 @@ async function submitCmoQuery() {
   }
 }
 
-function speakCurrentCmoBriefing() {
-  if (!('speechSynthesis' in window)) {
-    alert("Speech Synthesis is not supported in this browser.");
-    return;
-  }
+// "Read aloud": Gemini's speech model voices the briefing; the browser's own voice is only a fallback
+let briefingAudio = null;
+let briefingRequest = null;
 
+function setTtsUi(label, status) {
   const btnLabel = document.getElementById('btnTtsLabel');
   const statusEl = document.getElementById('cmoTtsStatus');
+  if (btnLabel) btnLabel.textContent = label;
+  if (statusEl) statusEl.textContent = status || '';
+}
 
-  if (window.speechSynthesis.speaking) {
-    window.speechSynthesis.cancel();
-    if (btnLabel) btnLabel.textContent = "🔊 Read Briefing Aloud";
-    if (statusEl) statusEl.textContent = "";
-    isSpeaking = false;
+function stopBriefingAudio() {
+  if (briefingRequest) { briefingRequest.abort(); briefingRequest = null; }
+  if (briefingAudio) { briefingAudio.pause(); URL.revokeObjectURL(briefingAudio.src); briefingAudio = null; }
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  isSpeaking = false;
+  setTtsUi('Read aloud');
+}
+
+async function speakCurrentCmoBriefing() {
+  if (isSpeaking || briefingRequest) {
+    stopBriefingAudio();
     return;
   }
-
   const answerEl = document.getElementById('cmoAnswerText');
-  if (!answerEl) return;
+  const rawText = answerEl ? (answerEl.innerText || '') : '';
+  // Read the English answer (the first paragraph), not the Hindi translation below it
+  const textToSpeak = rawText.split('\n').map(l => l.trim()).filter(Boolean)[0] || '';
+  if (!textToSpeak || textToSpeak.startsWith('//')) return;  // no answer yet, only the loading placeholder
 
-  const rawText = answerEl.innerText || '';
-  // Extract primary English answer (before Hindi translation)
-  const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
-  const textToSpeak = lines[0] || rawText;
+  isSpeaking = true;
+  setTtsUi('Stop', 'Preparing audio with Gemini…');
+  briefingRequest = new AbortController();
+  try {
+    const res = await fetch('/api/cmo/speak', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: textToSpeak }),
+      signal: briefingRequest.signal
+    });
+    if (!res.ok) throw new Error(`speak HTTP ${res.status}`);
+    const blob = await res.blob();
+    briefingRequest = null;
+    if (!isSpeaking) return;  // stopped while the audio was being prepared
+    briefingAudio = new Audio(URL.createObjectURL(blob));
+    briefingAudio.onended = stopBriefingAudio;
+    briefingAudio.onerror = stopBriefingAudio;
+    setTtsUi('Stop', 'Voice: Gemini');
+    await briefingAudio.play();
+  } catch (err) {
+    briefingRequest = null;
+    if (err.name === 'AbortError' || !isSpeaking) return;
+    console.warn('Gemini speech unavailable, using the browser voice:', err);
+    speakWithBrowserVoice(textToSpeak);
+  }
+}
 
-  if (!textToSpeak || textToSpeak.includes("// Strategic Insight Agent")) {
-    alert("Please submit an inquiry first to generate a response!");
+function speakWithBrowserVoice(text) {
+  if (!('speechSynthesis' in window)) {
+    stopBriefingAudio();
+    setTtsUi('Read aloud', 'Audio is unavailable right now.');
     return;
   }
-
-  const utterance = new SpeechSynthesisUtterance(textToSpeak);
-  utterance.rate = 1.0;
-  utterance.pitch = 1.0;
-  utterance.lang = 'en-US';
-
-  utterance.onstart = () => {
-    isSpeaking = true;
-    if (btnLabel) btnLabel.textContent = "⏹️ Stop Speech";
-    if (statusEl) statusEl.textContent = "Synthesizing vocal briefing...";
-  };
-
-  utterance.onend = () => {
-    isSpeaking = false;
-    if (btnLabel) btnLabel.textContent = "🔊 Read Briefing Aloud";
-    if (statusEl) statusEl.textContent = "";
-  };
-
-  utterance.onerror = () => {
-    isSpeaking = false;
-    if (btnLabel) btnLabel.textContent = "🔊 Read Briefing Aloud";
-    if (statusEl) statusEl.textContent = "";
-  };
-
+  const utterance = new SpeechSynthesisUtterance(text);
+  // Prefer a natural (online) English voice over the default, which is robotic on many systems
+  const voices = window.speechSynthesis.getVoices().filter(v => v.lang && v.lang.startsWith('en'));
+  utterance.voice = voices.find(v => /natural|google|online/i.test(v.name) && v.lang === 'en-IN')
+    || voices.find(v => /natural|google|online/i.test(v.name))
+    || voices.find(v => v.lang === 'en-IN') || voices[0] || null;
+  utterance.lang = utterance.voice ? utterance.voice.lang : 'en-IN';
+  utterance.rate = 0.95;
+  utterance.onend = stopBriefingAudio;
+  utterance.onerror = stopBriefingAudio;
+  setTtsUi('Stop', 'Voice: browser (Gemini audio unavailable)');
   window.speechSynthesis.speak(utterance);
 }
 
@@ -1983,6 +2106,7 @@ function openCmoModal() {
 }
 
 function closeCmoModal() {
+  stopBriefingAudio();
   document.getElementById('cmoModal').classList.add('hidden');
 }
 
@@ -2159,6 +2283,21 @@ function filterMedicine(medId) {
 
 const MEDICINE_SHORT_NAMES = { 'MED-001': 'Salbutamol', 'MED-002': 'ORS', 'MED-003': 'Dexamethasone', 'MED-004': 'Amoxicillin', 'MED-005': 'Paracetamol', 'MED-006': 'Cetirizine' };
 
+// Side rail button styles (icon + label)
+const NAV_BASE = 'w-full py-2.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition hover:scale-105';
+const NAV_ON = `${NAV_BASE} bg-white text-clay-terracotta shadow-md`;
+const NAV_OFF = `${NAV_BASE} hover:bg-white/20 text-white/90`;
+
+// "How it works" strip: scroll to a step's section and flash it
+function jumpToStep(id) {
+  switchMainView('district');
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  el.classList.add('step-flash');
+  setTimeout(() => el.classList.remove('step-flash'), 1600);
+}
+
 function switchTab(tab) {
   const navItems = {
     'dashboard': document.getElementById('nav-dashboard'),
@@ -2173,9 +2312,9 @@ function switchTab(tab) {
   Object.entries(navItems).forEach(([key, el]) => {
     if (!el) return;
     if (key === tab) {
-      el.className = 'w-12 h-12 rounded-2xl bg-white text-clay-terracotta shadow-md flex items-center justify-center transition hover:scale-105';
+      el.className = NAV_ON;
     } else {
-      el.className = 'w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105';
+      el.className = NAV_OFF;
     }
   });
 
@@ -2377,8 +2516,8 @@ function switchMainView(view, loadDesk = true) {
     if (btnClinic) {
       btnClinic.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-clay-terracotta text-white shadow-clay-btn transition flex items-center space-x-1.5 cursor-pointer';
     }
-    if (navDashboard) navDashboard.className = 'w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105';
-    if (navClinic) navClinic.className = 'w-12 h-12 rounded-2xl bg-white text-clay-terracotta shadow-md flex items-center justify-center transition hover:scale-105';
+    if (navDashboard) navDashboard.className = NAV_OFF;
+    if (navClinic) navClinic.className = NAV_ON;
 
     if (loadDesk) loadClinicDesk(currentClinicFacilityId);
   } else {
@@ -2393,8 +2532,8 @@ function switchMainView(view, loadDesk = true) {
     if (btnClinic) {
       btnClinic.className = 'px-3.5 py-2 rounded-full font-black text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition flex items-center space-x-1.5 cursor-pointer';
     }
-    if (navDashboard) navDashboard.className = 'w-12 h-12 rounded-2xl bg-white text-clay-terracotta shadow-md flex items-center justify-center transition hover:scale-105';
-    if (navClinic) navClinic.className = 'w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105';
+    if (navDashboard) navDashboard.className = NAV_ON;
+    if (navClinic) navClinic.className = NAV_OFF;
 
     if (map) {
       setTimeout(() => map.invalidateSize(), 150);

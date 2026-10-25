@@ -6,13 +6,19 @@ no Claude fallback here; the client falls back to the browser's own speech recog
 """
 
 import array
+import asyncio
+import logging
 import math
+import os
 import struct
+from collections import OrderedDict
 from typing import Optional, Tuple
 
 from pydantic import BaseModel
 
-from app.llm import decode_media, generate_json
+from app.llm import _gemini, decode_media, generate_json
+
+logger = logging.getLogger(__name__)
 
 MAX_AUDIO_BYTES = 2 * 1024 * 1024  # ~60 s of 16 kHz mono 16-bit PCM
 ALLOWED_AUDIO_MIME = {"audio/wav", "audio/x-wav", "audio/wave"}
@@ -64,3 +70,59 @@ async def transcribe(audio: Tuple[bytes, str]) -> Optional[Tuple[Transcript, str
         "transcript empty."
     )
     return await generate_json(system, "Transcribe this voice note.", Transcript, media=audio)
+
+
+# ---- Text-to-speech for the CMO briefing ("Read aloud") ----
+# Gemini's speech models return a complete 24 kHz mono WAV. The model reads any style instruction
+# aloud, so only the briefing text is sent; the accent comes from language_code.
+TTS_MODELS = [os.getenv("TTS_MODEL") or "gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts"]
+TTS_VOICE = os.getenv("TTS_VOICE") or "Charon"
+TTS_TIMEOUT_S = float(os.getenv("TTS_TIMEOUT_S", "20"))
+MAX_TTS_CHARS = 700
+_tts_cache: "OrderedDict[str, bytes]" = OrderedDict()  # replaying the same briefing costs nothing
+TTS_CACHE_SIZE = 16
+
+
+def _pcm_to_wav(pcm: bytes, rate: int = 24000) -> bytes:
+    header = struct.pack("<4sI4s4sIHHIIHH4sI", b"RIFF", 36 + len(pcm), b"WAVE", b"fmt ", 16, 1, 1,
+                         rate, rate * 2, 2, 16, b"data", len(pcm))
+    return header + pcm
+
+
+async def synthesize(text: str) -> Optional[Tuple[bytes, str]]:
+    """Returns (wav_bytes, model) or None when no Gemini speech model answers."""
+    text = " ".join(text.split())[:MAX_TTS_CHARS]
+    if not text:
+        return None
+    if text in _tts_cache:
+        _tts_cache.move_to_end(text)
+        return _tts_cache[text], "cache"
+    client = _gemini()
+    if not client:
+        return None
+    from google.genai import types
+    config = types.GenerateContentConfig(
+        response_modalities=["AUDIO"],
+        speech_config=types.SpeechConfig(
+            language_code="en-IN",
+            voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=TTS_VOICE)),
+        ),
+    )
+    for model in TTS_MODELS:
+        try:
+            resp = await asyncio.wait_for(
+                client.aio.models.generate_content(model=model, contents=text, config=config),
+                timeout=TTS_TIMEOUT_S,
+            )
+            data = resp.candidates[0].content.parts[0].inline_data.data
+        except Exception as e:  # timeout, quota, empty candidate
+            logger.warning("Gemini TTS %s failed: %s", model, e)
+            continue
+        if not data:
+            continue
+        wav = data if data[:4] == b"RIFF" else _pcm_to_wav(data)
+        _tts_cache[text] = wav
+        if len(_tts_cache) > TTS_CACHE_SIZE:
+            _tts_cache.popitem(last=False)
+        return wav, model
+    return None

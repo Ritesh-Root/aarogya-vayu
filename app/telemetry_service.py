@@ -168,7 +168,7 @@ class LiveTelemetryService:
                 wind_speed_kmh=wind_kmh,
                 heatwave_alert=hottest >= coords["heatwave_threshold_c"],
                 smog_episode=(aqi >= 200 or pm25 >= 120.0 or (peak_aqi or 0) >= 200),
-                corridor=f"{coords['name']} (Live Real-Time Telemetry)",
+                corridor=coords["name"],
                 source=f"{LIVE_SOURCE_PREFIX} & Copernicus Atmospheric Monitoring Service (CAMS)"
                 + (" + NASA FIRMS" if fires is not None else ""),
                 recorded_at=curr_aq.get("time") or curr_w.get("time"),

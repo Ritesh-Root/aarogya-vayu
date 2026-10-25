@@ -164,6 +164,41 @@
       transform: scale(1.2);
       z-index: 9999 !important;
     }
+    /* Agent pipeline step tracker */
+    .pipe-step { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 1rem; background: #FDF7F2; transition: background-color 0.3s, opacity 0.3s; }
+    @media (min-width: 640px) { .pipe-step { background: transparent; flex-direction: column; align-items: flex-start; gap: 0.5rem; padding: 0.875rem; } }
+    .pipe-dot { flex: none; width: 2.25rem; height: 2.25rem; border-radius: 9999px; display: flex; align-items: center; justify-content: center; background: #F3E3D8; color: #5C4A44; transition: background-color 0.3s, color 0.3s, transform 0.3s; }
+    .pipe-name { display: block; font-size: 0.875rem; font-weight: 800; color: #2E221D; line-height: 1.25; }
+    .pipe-figure { display: block; font-size: 0.8125rem; color: #5C4A44; line-height: 1.3; overflow-wrap: anywhere; }
+    .pipe-step[data-state="idle"] { opacity: 0.6; }
+    .pipe-step[data-state="running"] .pipe-dot { background: #DE6B48; color: #fff; animation: pipePulse 1.1s ease-in-out infinite; }
+    .pipe-step[data-state="done"] { background: #E8F0EC; }
+    .pipe-step[data-state="done"] .pipe-dot { background: #2F6B52; color: #fff; }
+    .pipe-step[data-state="alert"] { background: #FBE4DE; }
+    .pipe-step[data-state="alert"] .pipe-dot { background: #B4321E; color: #fff; }
+    .pipe-step[data-state="waiting"] { background: #FFF1EB; }
+    .pipe-step[data-state="waiting"] .pipe-dot { background: #DE6B48; color: #fff; }
+    .pipe-step[data-state="skipped"] .pipe-dot { background: #EDE4DE; color: #8A766F; }
+    .pipe-step[data-state="alert"] .pipe-figure { color: #8F2A19; font-weight: 700; }
+    @keyframes pipePulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+    @media (prefers-reduced-motion: reduce) { .pipe-step[data-state="running"] .pipe-dot { animation: none; } }
+    .pipe-log-row { display: grid; grid-template-columns: 2.25rem 1fr; gap: 0.75rem; padding: 0.875rem 1rem; border-radius: 1rem; background: #FDF7F2; }
+    .pipe-log-row details summary { cursor: pointer; font-size: 0.8125rem; font-weight: 700; color: #C95836; margin-top: 0.375rem; }
+    .pipe-log-row details pre { margin-top: 0.5rem; padding: 0.75rem; border-radius: 0.75rem; background: #2E221D; color: #F9EAE1; font-size: 0.75rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+    /* Side rail labels */
+    .nav-label { display: none; font-size: 10px; font-weight: 800; line-height: 1; letter-spacing: .01em; }
+    @media (min-width: 640px) { .nav-label { display: block; } }
+
+    /* Numbered steps: "How it works" strip and the matching section chips */
+    .how-step { width: 100%; height: 100%; display: flex; gap: .75rem; align-items: flex-start; text-align: left; background: #FFFDF9; border: 1px solid rgba(222,107,72,.2); border-radius: 1rem; padding: .85rem 1rem; transition: border-color .15s, transform .15s, box-shadow .15s; cursor: pointer; }
+    .how-step:hover { border-color: #DE6B48; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(46,34,29,.08); }
+    .how-step:focus-visible { outline: 3px solid #DE6B48; outline-offset: 2px; }
+    .how-step strong { display: block; font-size: .875rem; font-weight: 900; color: #2E221D; line-height: 1.25; }
+    .how-step strong + span { display: block; font-size: .75rem; color: #5C4A44; margin-top: .2rem; line-height: 1.35; font-weight: 500; }
+    .how-num, .step-chip { flex-shrink: 0; width: 1.625rem; height: 1.625rem; border-radius: 9999px; background: #DE6B48; color: #fff; font-size: .8125rem; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+    .step-chip-light { background: rgba(255,255,255,.95); color: #C95836; margin-top: .125rem; }
+    .step-flash { box-shadow: 0 0 0 4px rgba(222,107,72,.45) !important; transition: box-shadow .3s; }
+
     /* Frontline Voice Equalizer Waves */
     .wave-bar {
       width: 3.5px;
@@ -201,44 +236,44 @@
   <div class="w-full h-full flex rounded-[2rem] overflow-hidden shadow-2xl bg-clay-bg border border-white/60">
 
     <!-- Left Curved Terracotta Navigation Rail -->
-    <aside class="w-16 sm:w-20 md:w-24 bg-gradient-to-b from-clay-terracotta to-clay-terracottaDark p-3 sm:p-4 flex flex-col items-center justify-between text-white shadow-xl relative z-20 flex-shrink-0 h-full">
+    <aside class="w-16 sm:w-20 md:w-24 bg-gradient-to-b from-clay-terracotta to-clay-terracottaDark p-2 sm:p-3 flex flex-col items-center justify-between text-white shadow-xl relative z-20 flex-shrink-0 h-full">
       
-      <!-- Top Logo / Hamburger -->
-      <div class="flex flex-col items-center space-y-6">
-        <button onclick="showInfoModal()" class="w-12 h-12 rounded-2xl bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition" title="System Menu & Architecture">
-          <i data-lucide="menu" class="w-6 h-6"></i>
-        </button>
+      <!-- Top: app mark -->
+      <div class="flex flex-col items-center" aria-hidden="true">
+        <div class="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-white" title="Aarogya-Vāyu">
+          <i data-lucide="wind" class="w-6 h-6"></i>
+        </div>
       </div>
 
-      <!-- Center Nav Icons -->
-      <nav class="flex flex-col items-center space-y-4">
-        <button id="nav-dashboard" onclick="switchTab('dashboard')" class="w-12 h-12 rounded-2xl bg-white text-clay-terracotta shadow-md flex items-center justify-center transition hover:scale-105" title="District Command Center">
-          <i data-lucide="home" class="w-5 h-5"></i>
+      <!-- Center Nav: icon + short label -->
+      <nav class="w-full flex flex-col items-center space-y-2" aria-label="Main">
+        <button id="nav-dashboard" onclick="switchTab('dashboard')" class="w-full py-2.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition hover:scale-105 bg-white text-clay-terracotta shadow-md" title="District view: every clinic, transfer and approval">
+          <i data-lucide="home" class="w-5 h-5"></i><span class="nav-label">Home</span>
         </button>
-        <button id="nav-clinic" onclick="switchTab('clinic')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="Clinic Daily Desk (Frontline Workspace)">
-          <i data-lucide="clipboard-check" class="w-5 h-5"></i>
+        <button id="nav-clinic" onclick="switchTab('clinic')" class="w-full py-2.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition hover:scale-105 hover:bg-white/20 text-white/90" title="Clinic view: one clinic's stock, deliveries and tasks">
+          <i data-lucide="clipboard-check" class="w-5 h-5"></i><span class="nav-label">Clinic</span>
         </button>
-        <button id="nav-agents" onclick="switchTab('agents')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="Multi-Agent Terminal">
-          <i data-lucide="bot" class="w-5 h-5"></i>
+        <button id="nav-agents" onclick="switchTab('agents')" class="w-full py-2.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition hover:scale-105 hover:bg-white/20 text-white/90" title="Find a transfer with the agent pipeline">
+          <i data-lucide="route" class="w-5 h-5"></i><span class="nav-label">Transfer</span>
         </button>
-        <button id="nav-cmo" onclick="switchTab('cmo')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="CMO Strategic Studio">
-          <i data-lucide="message-square" class="w-5 h-5"></i>
+        <button id="nav-cmo" onclick="switchTab('cmo')" class="w-full py-2.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition hover:scale-105 hover:bg-white/20 text-white/90" title="Ask a question about stock, cover or transfers">
+          <i data-lucide="message-square" class="w-5 h-5"></i><span class="nav-label">Ask</span>
         </button>
-        <button id="nav-vision" onclick="switchTab('vision')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="Gemini 3.8 Flash Vision Verification">
-          <i data-lucide="camera" class="w-5 h-5"></i>
+        <button id="nav-vision" onclick="switchTab('vision')" class="w-full py-2.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition hover:scale-105 hover:bg-white/20 text-white/90" title="Check a shelf photo against the stock register">
+          <i data-lucide="camera" class="w-5 h-5"></i><span class="nav-label">Photo</span>
         </button>
-        <button id="nav-ledger" onclick="switchTab('ledger')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="Cryptographic Audit Ledger">
-          <i data-lucide="shield-check" class="w-5 h-5"></i>
+        <button id="nav-ledger" onclick="switchTab('ledger')" class="w-full py-2.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition hover:scale-105 hover:bg-white/20 text-white/90" title="Tamper-evident audit log">
+          <i data-lucide="shield-check" class="w-5 h-5"></i><span class="nav-label">Audit</span>
         </button>
-        <button id="nav-news" onclick="switchTab('news')" class="w-12 h-12 rounded-2xl hover:bg-white/20 text-white/90 flex items-center justify-center transition hover:scale-105" title="Regional Health & Climate News Bureau">
-          <i data-lucide="newspaper" class="w-5 h-5"></i>
+        <button id="nav-news" onclick="switchTab('news')" class="w-full py-2.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition hover:scale-105 hover:bg-white/20 text-white/90" title="Health and climate news for this region">
+          <i data-lucide="newspaper" class="w-5 h-5"></i><span class="nav-label">News</span>
         </button>
       </nav>
 
-      <!-- Bottom Help / User Profile -->
+      <!-- Bottom Help -->
       <div class="flex flex-col items-center space-y-3">
-        <button onclick="showInfoModal()" class="w-10 h-10 rounded-xl bg-white/15 hover:bg-white/25 flex items-center justify-center text-white/80 transition" title="Help & Overview">
-          <i data-lucide="help-circle" class="w-5 h-5"></i>
+        <button onclick="showInfoModal()" class="w-full py-2 rounded-xl bg-white/15 hover:bg-white/25 flex flex-col items-center justify-center gap-1 text-white transition" title="How this app works">
+          <i data-lucide="help-circle" class="w-5 h-5"></i><span class="nav-label">Help</span>
         </button>
       </div>
     </aside>
@@ -251,7 +286,7 @@
         
         <div class="flex items-center space-x-3 flex-1 max-w-xl">
           <!-- Notification Bell in Clay Terracotta -->
-          <button onclick="openNotificationsModal()" class="w-12 h-12 rounded-2xl bg-clay-terracotta text-white flex items-center justify-center relative shadow-clay-btn hover:bg-clay-terracottaDark transition" title="Active Surge Alerts & Notifications">
+          <button onclick="openNotificationsModal()" class="w-12 h-12 rounded-2xl bg-clay-terracotta text-white flex items-center justify-center relative shadow-clay-btn hover:bg-clay-terracottaDark transition" title="Alerts" aria-label="Alerts">
             <i data-lucide="bell" class="w-5 h-5"></i>
             <span class="absolute top-2.5 right-2.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-white"></span>
           </button>
@@ -259,7 +294,7 @@
           <!-- Rounded Pill Search Bar -->
           <div class="relative flex-1">
             <i data-lucide="search" class="w-5 h-5 text-clay-muted absolute left-4 top-1/2 -translate-y-1/2"></i>
-            <input type="text" id="searchInput" placeholder="Search Primary Health Centres, medicines, or batch..." class="w-full bg-clay-inner border border-clay-salmon/20 rounded-full py-3.5 pl-12 pr-10 text-sm md:text-base text-clay-dark placeholder:text-clay-muted/80 focus:outline-none focus:ring-2 focus:ring-clay-salmon transition shadow-inner font-medium">
+            <input type="text" id="searchInput" placeholder="Search a clinic, medicine or batch…" class="w-full bg-clay-inner border border-clay-salmon/20 rounded-full py-3.5 pl-12 pr-10 text-sm md:text-base text-clay-dark placeholder:text-clay-muted/80 focus:outline-none focus:ring-2 focus:ring-clay-salmon transition shadow-inner font-medium">
             <button id="clearSearchBtn" onclick="clearSearch()" class="hidden absolute right-3.5 top-1/2 -translate-y-1/2 text-clay-muted hover:text-clay-dark text-sm p-1" title="Clear Search">&times;</button>
           </div>
         </div>
@@ -268,7 +303,7 @@
         <div class="flex items-center space-x-1.5 bg-clay-inner p-1.5 rounded-full border border-clay-salmon/20 shadow-inner">
           <span class="text-xs sm:text-sm text-clay-muted font-bold px-2.5 flex items-center gap-1">
             <span>📍</span>
-            <span class="hidden md:inline">Corridor:</span>
+            <span class="hidden md:inline">Region:</span>
           </span>
           <button id="btnRegionBbs" onclick="switchRegion('bhubaneswar')" class="px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-clay-terracotta text-white shadow-clay-btn transition flex items-center space-x-1.5">
             <span>Bhubaneswar (OD)</span>
@@ -279,30 +314,30 @@
         </div>
 
         <!-- Atmospheric Scenario Switcher (Warm Pill Buttons) -->
-        <div class="flex flex-wrap items-center gap-1.5 bg-clay-inner p-1.5 rounded-3xl sm:rounded-full border border-clay-salmon/20 max-w-full">
-          <span class="text-xs sm:text-sm text-clay-muted font-bold px-2.5">Surge Mode:</span>
-          <button id="scenarioLive" onclick="switchScenario('live')" class="px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-clay-btn transition flex items-center space-x-1.5 cursor-pointer" title="Use live Open-Meteo weather and Copernicus CAMS air-quality data">
+        <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 bg-clay-inner p-1.5 rounded-3xl sm:rounded-full border border-clay-salmon/20 w-full sm:w-auto max-w-full">
+          <span class="hidden sm:inline text-xs sm:text-sm text-clay-muted font-bold px-2.5">Conditions:</span>
+          <button id="scenarioLive" onclick="switchScenario('live')" class="px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-clay-btn transition flex items-center space-x-1.5 cursor-pointer" title="Today's real weather and air quality (Open-Meteo + Copernicus CAMS)">
             <span class="w-2 h-2 rounded-full bg-emerald-200 animate-pulse"></span>
-            <span>📡 Live Data</span>
+            <span>📡 Live today</span>
           </button>
-          <button id="scenarioSmog" onclick="switchScenario('smog')" class="px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition cursor-pointer">
-            🌫️ Smog Scenario
+          <button id="scenarioSmog" onclick="switchScenario('smog')" class="px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition cursor-pointer" title="Demo: what happens during hazardous winter smog">
+            🌫️ Smog (demo)
           </button>
-          <button id="scenarioHeat" onclick="switchScenario('heat')" class="px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition cursor-pointer">
-            ☀️ Heatwave Scenario
+          <button id="scenarioHeat" onclick="switchScenario('heat')" class="px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition cursor-pointer" title="Demo: what happens during a heatwave">
+            ☀️ Heatwave (demo)
           </button>
-          <button id="scenarioNormal" onclick="switchScenario('normal')" class="px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition cursor-pointer">
-            🌿 Baseline Scenario
+          <button id="scenarioNormal" onclick="switchScenario('normal')" class="px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition cursor-pointer" title="Demo: normal air and temperature">
+            🌿 Normal (demo)
           </button>
         </div>
 
         <!-- Main View Mode Switcher: District Command vs Clinic Daily Desk -->
         <div class="flex items-center bg-clay-inner p-1.5 rounded-full border border-clay-salmon/20 shadow-inner">
-          <button id="btnViewDistrict" onclick="switchMainView('district')" class="px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-clay-terracotta text-white shadow-clay-btn transition flex items-center space-x-1.5">
-            <span>🏛️ District Command</span>
+          <button id="btnViewDistrict" onclick="switchMainView('district')" title="For the district medical officer: all clinics, transfers and approvals" class="px-3.5 py-2 rounded-full font-black text-xs sm:text-sm bg-clay-terracotta text-white shadow-clay-btn transition flex items-center space-x-1.5">
+            <span>🏛️ District view</span>
           </button>
-          <button id="btnViewClinic" onclick="switchMainView('clinic')" class="px-3.5 py-2 rounded-full font-black text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition flex items-center space-x-1.5">
-            <span>🏥 Clinic Daily Desk</span>
+          <button id="btnViewClinic" onclick="switchMainView('clinic')" title="For clinic staff: one clinic's stock, deliveries and tasks" class="px-3.5 py-2 rounded-full font-black text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition flex items-center space-x-1.5">
+            <span>🏥 Clinic view</span>
           </button>
         </div>
 
@@ -313,20 +348,37 @@
         <div class="flex items-center space-x-3 flex-1 min-w-0">
           <span class="flex items-center space-x-1.5 bg-red-100 text-red-700 px-2.5 py-1 rounded-full text-xs font-black tracking-wide uppercase flex-shrink-0">
             <span class="w-2 h-2 rounded-full bg-red-600 animate-ping"></span>
-            <span class="hidden sm:inline">🚨 Live News</span>
+            <span class="hidden sm:inline">News</span>
           </span>
-          <div id="liveNewsTicker" onclick="openNewsModal()" class="flex-1 min-w-0 text-xs sm:text-sm font-bold text-clay-dark truncate cursor-pointer hover:text-clay-terracotta transition" title="Click to open Regional Health & Climate News Bureau">
+          <div id="liveNewsTicker" onclick="openNewsModal()" class="flex-1 min-w-0 text-xs sm:text-sm font-bold text-clay-dark truncate cursor-pointer hover:text-clay-terracotta transition" title="Open health and climate news">
             Loading latest regional health &amp; climate bulletins...
           </div>
         </div>
         <button onclick="openNewsModal()" class="ml-3 text-xs font-black text-clay-terracotta hover:text-clay-terracottaDark bg-clay-inner px-3.5 py-1.5 rounded-full border border-clay-salmon/20 flex-shrink-0 flex items-center space-x-1 shadow-sm transition cursor-pointer">
           <i data-lucide="newspaper" class="w-3.5 h-3.5 sm:mr-1"></i>
-          <span class="hidden sm:inline">News Bureau &rarr;</span>
+          <span class="hidden sm:inline">All news &rarr;</span>
         </button>
       </div>
 
       <!-- DISTRICT COMMAND CENTER VIEW CONTAINER -->
       <div id="districtViewContainer" class="flex flex-col gap-6 flex-1">
+
+        <!-- What this app does, in four steps; each step jumps to its section -->
+        <section id="howItWorks" class="bg-clay-inner rounded-3xl border border-clay-salmon/20 p-5 sm:p-6" aria-labelledby="howTitle">
+          <div class="flex flex-col xl:flex-row xl:items-center gap-4 xl:gap-8">
+            <div class="xl:max-w-md">
+              <h1 id="howTitle" class="text-xl sm:text-2xl font-black text-clay-dark tracking-tight leading-tight">Get medicine to rural clinics before smog or heat empties their shelves</h1>
+              <p class="text-sm text-clay-dark/80 mt-2 leading-relaxed">Aarogya-Vāyu spots clinics that will run out of a medicine within days and proposes moving spare stock from a clinic nearby. A doctor approves every transfer.</p>
+            </div>
+            <ol class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5 flex-1">
+              <li><button type="button" onclick="jumpToStep('stepAir')" class="how-step"><span class="how-num">1</span><span><strong>Read the air</strong><span>Live air quality and heat raise expected demand</span></span></button></li>
+              <li><button type="button" onclick="jumpToStep('stepReport')" class="how-step"><span class="how-num">2</span><span><strong>Clinics report stock</strong><span>By voice or text, in Hindi, Odia or English</span></span></button></li>
+              <li><button type="button" onclick="jumpToStep('agentPipeline')" class="how-step"><span class="how-num">3</span><span><strong>Find a transfer</strong><span>From a clinic within 35 km that has spare</span></span></button></li>
+              <li><button type="button" onclick="jumpToStep('stepApprove')" class="how-step"><span class="how-num">4</span><span><strong>Doctor approves</strong><span>Nothing moves without sign-off</span></span></button></li>
+            </ol>
+          </div>
+          <p class="text-xs sm:text-sm text-clay-muted mt-4 leading-relaxed"><strong class="text-clay-dark">Try it:</strong> pick <strong class="text-clay-dark">🌫️ Smog (demo)</strong> above, then press <strong class="text-clay-dark">Find stock</strong> next to a clinic under <em>Clinics running low</em>, and approve the transfer it proposes.</p>
+        </section>
 
         <!-- Main Master Grid: Left Canvas (Hero + Cards + Map) & Right Panel (CMO + Actions) -->
         <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 flex-1">
@@ -337,52 +389,22 @@
         <div class="xl:col-span-8 flex flex-col space-y-6">
 
           <!-- Hero Atmospheric Banner Card (Matching Reference Style) -->
-          <div class="relative rounded-[2.25rem] overflow-hidden shadow-clay-card bg-clay-inner border border-clay-salmon/20 p-2 sm:p-3">
+          <div id="stepAir" class="relative rounded-[2.25rem] overflow-hidden shadow-clay-card bg-clay-inner border border-clay-salmon/20 p-2 sm:p-3 scroll-mt-4">
             <div class="relative rounded-[1.85rem] overflow-hidden min-h-[230px] sm:min-h-[270px] flex flex-col justify-end">
               <!-- Hero Background Image Generated -->
               <img src="/static/images/hero_autumn.jpg" alt="Aarogya-Vāyu Climate Health Logistics" class="absolute inset-0 w-full h-full object-cover">
               <div class="absolute inset-0 bg-gradient-to-t from-clay-dark/85 via-clay-dark/25 to-transparent"></div>
 
-              <!-- Floating Environmental Badge Pills (Right Top) -->
-              <div class="absolute top-4 right-4 flex flex-col space-y-2 z-10">
-                <button onclick="switchScenario('normal')" class="w-11 h-11 rounded-2xl bg-clay-sageLight/95 backdrop-blur-md flex items-center justify-center text-clay-sage shadow-sm hover:scale-110 transition cursor-pointer" title="Switch to Baseline Clean Air">
-                  <i data-lucide="wind" class="w-5 h-5 text-emerald-700"></i>
-                </button>
-                <button onclick="switchScenario('smog')" class="w-11 h-11 rounded-2xl bg-[#FFF1DB]/95 backdrop-blur-md flex items-center justify-center text-amber-700 shadow-sm hover:scale-110 transition cursor-pointer" title="Activate Smog Inversion Scenario">
-                  <i data-lucide="umbrella" class="w-5 h-5"></i>
-                </button>
-                <button onclick="filterMedicine('MED-001')" class="w-11 h-11 rounded-2xl bg-clay-sageLight/95 backdrop-blur-md flex items-center justify-center text-emerald-800 shadow-sm hover:scale-110 transition cursor-pointer" title="Filter Essential EDL Medicines">
-                  <i data-lucide="leaf" class="w-5 h-5"></i>
-                </button>
-                <button onclick="switchTab('agents')" class="w-11 h-11 rounded-2xl bg-[#FFE4D6]/95 backdrop-blur-md flex items-center justify-center text-clay-terracotta shadow-sm hover:scale-110 transition cursor-pointer" title="Launch Multi-Agent Pipeline">
-                  <i data-lucide="bot" class="w-5 h-5"></i>
-                </button>
-              </div>
-
               <!-- Bottom Orange Rounded Banner Bar (Matching Reference Image) -->
               <div class="relative z-10 m-3 bg-gradient-to-r from-clay-terracotta to-[#E57A5C] rounded-2xl p-4 sm:p-5 text-white shadow-lg flex items-center justify-between">
                 <div>
-                  <div class="flex items-center space-x-2.5">
-                    <span class="w-3 h-3 rounded-full bg-amber-300 animate-ping"></span>
+                  <div class="flex items-start gap-2.5">
+                    <span class="step-chip step-chip-light" aria-label="Step 1">1</span>
                     <h2 id="bannerTitle" class="text-xl sm:text-2xl font-black tracking-tight">Bhubaneswar–Cuttack Health Corridor Active</h2>
                   </div>
-                  <p id="bannerDesc" class="text-xs sm:text-sm text-white/95 mt-1 font-medium">
-                    AQI 295 &bull; PM2.5: 185 µg/m³ &bull; +48% Acute Respiratory Demand &bull; Coastal Inversion
+                  <p id="bannerDesc" class="text-xs sm:text-sm text-white/95 mt-1.5 font-medium leading-relaxed sm:pl-[2.375rem]">
+                    Loading today's air quality…
                   </p>
-                  <div class="flex flex-wrap items-center gap-x-3.5 gap-y-1 mt-2 text-xs sm:text-sm text-white/90 font-mono">
-                    <span>AQI: <strong id="valAqi" class="text-white font-black">--</strong></span>
-                    <span>•</span>
-                    <span>PM2.5: <strong id="valPm25" class="text-white font-black">--</strong></span>
-                    <span>•</span>
-                    <span>Temp: <strong id="valTemp" class="text-white font-black">--</strong></span>
-                    <span class="hidden sm:inline">•</span>
-                    <span class="hidden sm:inline">Corridor: <strong id="valCorridor" class="text-white font-black">Bhubaneswar-Cuttack</strong></span>
-                  </div>
-                </div>
-                <div class="flex items-center space-x-2">
-                  <span class="text-xs sm:text-sm bg-white/20 text-white font-bold px-3.5 py-1.5 rounded-full backdrop-blur-sm">
-                    Track 3: Smart Health
-                  </span>
                 </div>
               </div>
             </div>
@@ -391,89 +413,39 @@
           <!-- Real-Time Corridor Telemetry & Risk KPIs -->
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
             <div class="bg-clay-inner rounded-2xl p-3.5 border border-clay-salmon/20 shadow-sm flex flex-col justify-between">
-              <span class="text-xs uppercase font-extrabold tracking-wider text-clay-muted">Surge Hotspots</span>
+              <span class="text-xs uppercase font-extrabold tracking-wider text-clay-muted">Clinics at risk</span>
               <div class="flex items-baseline space-x-1.5 mt-1.5">
                 <span id="statCriticalPhc" class="text-lg sm:text-xl font-black text-red-600">--</span>
               </div>
-              <span class="text-xs font-semibold text-clay-muted mt-0.5">Under 4 Days Cover</span>
+              <span class="text-xs font-semibold text-clay-muted mt-0.5">Under 4 days of medicine left</span>
             </div>
 
             <div class="bg-clay-inner rounded-2xl p-3.5 border border-clay-salmon/20 shadow-sm flex flex-col justify-between">
-              <span class="text-xs uppercase font-extrabold tracking-wider text-clay-muted">Redistribution Orders</span>
+              <span class="text-xs uppercase font-extrabold tracking-wider text-clay-muted">Transfers to approve</span>
               <div class="flex items-baseline space-x-1.5 mt-1.5">
                 <span id="statActiveTransfers" class="text-lg sm:text-xl font-black text-clay-terracotta">--</span>
               </div>
-              <span class="text-xs font-semibold text-clay-muted mt-0.5">Constrained Solver (FEFO)</span>
+              <span class="text-xs font-semibold text-clay-muted mt-0.5">Waiting for the doctor's sign-off</span>
             </div>
 
             <div class="bg-clay-inner rounded-2xl p-3.5 border border-clay-salmon/20 shadow-sm flex flex-col justify-between">
-              <span class="text-xs uppercase font-extrabold tracking-wider text-clay-muted">Expiry Salvaged</span>
+              <span class="text-xs uppercase font-extrabold tracking-wider text-clay-muted">Saved from expiry</span>
               <div class="flex items-baseline space-x-1.5 mt-1.5">
                 <span id="statExpirySaved" class="text-lg sm:text-xl font-black text-emerald-700">--</span>
               </div>
-              <span class="text-xs font-semibold text-clay-muted mt-0.5">Near-expiry units in approved transfers</span>
+              <span class="text-xs font-semibold text-clay-muted mt-0.5">Near-expiry units moved where needed</span>
             </div>
 
             <div class="bg-clay-inner rounded-2xl p-3.5 border border-clay-salmon/20 shadow-sm flex flex-col justify-between">
-              <span class="text-xs uppercase font-extrabold tracking-wider text-clay-muted">Avg Transit Distance</span>
+              <span class="text-xs uppercase font-extrabold tracking-wider text-clay-muted">Average distance</span>
               <div class="flex items-baseline space-x-1.5 mt-1.5">
                 <span id="statAvgDist" class="text-lg sm:text-xl font-black text-clay-dark">--</span>
               </div>
-              <span class="text-xs font-semibold text-clay-muted mt-0.5">Straight-line, ≤35 km</span>
+              <span class="text-xs font-semibold text-clay-muted mt-0.5">Per transfer, never over 35 km</span>
             </div>
           </div>
 
-          <!-- "Day Schedule" / Surge Priority Cards (4 Square Squircles) -->
-          <div>
-            <div class="flex items-center justify-between mb-3.5 px-1">
-              <h3 class="text-base sm:text-lg font-black text-clay-dark flex items-center space-x-2">
-                <span>Resilience Operations Schedule</span>
-              </h3>
-              <span class="text-xs sm:text-sm text-clay-muted font-bold">Today &bull; 4 Modules Active</span>
-            </div>
-
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              
-              <!-- Card 1: Respiratory Relief -->
-              <div onclick="filterMedicine('MED-001')" class="bg-clay-inner rounded-3xl p-3.5 border border-clay-salmon/20 shadow-sm hover:shadow-md transition cursor-pointer hover:-translate-y-1 flex flex-col items-center text-center">
-                <div class="w-full aspect-square rounded-2xl overflow-hidden mb-2.5 bg-[#FFF8ED]">
-                  <img src="/static/images/card_respiratory.jpg" alt="Respiratory" class="w-full h-full object-cover">
-                </div>
-                <h4 class="text-sm sm:text-base font-black text-clay-dark">Respiratory Surge</h4>
-                <p class="text-xs sm:text-sm text-clay-terracotta font-bold mt-1">10:00 AM &bull; Critical</p>
-              </div>
-
-              <!-- Card 2: Rehydration Kit -->
-              <div onclick="filterMedicine('MED-002')" class="bg-clay-inner rounded-3xl p-3.5 border border-clay-salmon/20 shadow-sm hover:shadow-md transition cursor-pointer hover:-translate-y-1 flex flex-col items-center text-center">
-                <div class="w-full aspect-square rounded-2xl overflow-hidden mb-2.5 bg-[#FFF3E8]">
-                  <img src="/static/images/card_heatwave.jpg" alt="Rehydration" class="w-full h-full object-cover">
-                </div>
-                <h4 class="text-sm sm:text-base font-black text-clay-dark">Rehydration Buffer</h4>
-                <p class="text-xs sm:text-sm text-emerald-700 font-bold mt-1">12:30 PM &bull; Stable</p>
-              </div>
-
-              <!-- Card 3: Medicine Delivery -->
-              <div onclick="switchTab('dashboard')" class="bg-clay-inner rounded-3xl p-3.5 border border-clay-salmon/20 shadow-sm hover:shadow-md transition cursor-pointer hover:-translate-y-1 flex flex-col items-center text-center">
-                <div class="w-full aspect-square rounded-2xl overflow-hidden mb-2.5 bg-[#E8F2EC]">
-                  <img src="/static/images/card_transfer.jpg" alt="Delivery" class="w-full h-full object-cover">
-                </div>
-                <h4 class="text-sm sm:text-base font-black text-clay-dark">Van Courier Route</h4>
-                <p class="text-xs sm:text-sm text-amber-700 font-bold mt-1">02:15 PM &bull; 18.2 km</p>
-              </div>
-
-              <!-- Card 4: Rural Health AI -->
-              <div onclick="switchTab('agents')" class="bg-clay-inner rounded-3xl p-3.5 border border-clay-salmon/20 shadow-sm hover:shadow-md transition cursor-pointer hover:-translate-y-1 flex flex-col items-center text-center">
-                <div class="w-full aspect-square rounded-2xl overflow-hidden mb-2.5 bg-[#FBF5E8]">
-                  <img src="/static/images/card_agent_network.jpg" alt="Health AI" class="w-full h-full object-cover">
-                </div>
-                <h4 class="text-sm sm:text-base font-black text-clay-dark">Gemini Multi-Agent AI</h4>
-                <p class="text-xs sm:text-sm text-indigo-700 font-bold mt-1">5-Agent Pipeline</p>
-              </div>
-
-            </div>
-          </div>
-
-          <!-- Interactive GIS Map & Frontline Voice Ingestion -->
+          <!-- Clinic map & voice stock reports -->
           <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
             
             <!-- Map Container (7 cols) -->
@@ -481,17 +453,17 @@
               <div class="flex flex-wrap items-center justify-between gap-2.5">
                 <div>
                   <h4 class="text-sm sm:text-base font-black text-clay-dark flex items-center space-x-1.5">
-                    <span>District Cluster Redistribution GIS</span>
+                    <span>Clinic map</span>
                     <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
                   </h4>
-                  <span id="networkSubtitle" class="text-xs font-semibold text-clay-muted">Bhubaneswar–Cuttack Dynamic Multi-Echelon Network</span>
+                  <span id="networkSubtitle" class="text-xs font-semibold text-clay-muted">Bhubaneswar–Cuttack · tap a clinic to see its stock</span>
                 </div>
                 <!-- Layer Filter Chips -->
                 <div class="flex flex-wrap items-center gap-1.5">
-                  <button id="mapLayerAll" onclick="setMapLayerFilter('all')" class="px-3 py-1.5 rounded-full text-xs font-bold bg-clay-terracotta text-white shadow-sm transition">All Layers</button>
-                  <button id="mapLayerFacs" onclick="setMapLayerFilter('facilities')" class="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-clay-dark border border-clay-salmon/30 hover:bg-clay-bg transition">🏥 Facilities</button>
-                  <button id="mapLayerCouriers" onclick="setMapLayerFilter('couriers')" class="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-clay-dark border border-clay-salmon/30 hover:bg-clay-bg transition">🚑 Couriers</button>
-                  <button id="mapLayerPlume" onclick="setMapLayerFilter('plume')" class="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-clay-dark border border-clay-salmon/30 hover:bg-clay-bg transition">🌫️ Smog Plume</button>
+                  <button id="mapLayerAll" onclick="setMapLayerFilter('all')" class="px-3 py-1.5 rounded-full text-xs font-bold bg-clay-terracotta text-white shadow-sm transition">Everything</button>
+                  <button id="mapLayerFacs" onclick="setMapLayerFilter('facilities')" class="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-clay-dark border border-clay-salmon/30 hover:bg-clay-bg transition">🏥 Clinics</button>
+                  <button id="mapLayerCouriers" onclick="setMapLayerFilter('couriers')" class="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-clay-dark border border-clay-salmon/30 hover:bg-clay-bg transition">🚑 Vans</button>
+                  <button id="mapLayerPlume" onclick="setMapLayerFilter('plume')" class="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-clay-dark border border-clay-salmon/30 hover:bg-clay-bg transition">🌫️ Smog</button>
                   <button id="mapLayerSensors" onclick="setMapLayerFilter('sensors')" class="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-clay-dark border border-clay-salmon/30 hover:bg-clay-bg transition">📡 Sensors</button>
                 </div>
               </div>
@@ -505,16 +477,16 @@
                   <div class="flex items-center justify-between font-black text-clay-dark border-b border-clay-salmon/20 pb-1.5">
                     <span class="flex items-center space-x-1.5">
                       <span class="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
-                      <span class="text-xs sm:text-sm font-extrabold">Atmospheric GIS HUD</span>
+                      <span class="text-xs sm:text-sm font-extrabold">Air right now</span>
                     </span>
                     <span id="hudLiveBadge" class="text-clay-terracotta font-mono text-[10px] font-black bg-clay-terracotta/10 px-1.5 py-0.5 rounded">LIVE</span>
                   </div>
                   <div class="text-slate-700 hidden sm:flex justify-between font-medium">
-                    <span>Plume Sector:</span>
+                    <span>Area:</span>
                     <strong id="hudCorridor" class="text-clay-dark font-extrabold">Lucknow-Unnao</strong>
                   </div>
                   <div class="text-slate-700 flex justify-between font-medium">
-                    <span>Boundary Trapping:</span>
+                    <span title="Height of the air layer that pollution mixes into; low means smog is trapped near the ground">Smog ceiling:</span>
                     <strong id="hudInversion" class="text-red-600 font-extrabold">--</strong>
                   </div>
                   <div class="text-slate-700 hidden sm:flex justify-between font-medium">
@@ -533,15 +505,15 @@
               <!-- Map Footer Controls & Real-Time Legend -->
               <div class="pt-1.5 flex flex-wrap items-center justify-between text-xs text-clay-muted gap-2.5">
                 <div class="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-xs font-semibold text-clay-dark">
-                  <span class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> <span>Critical Stockout</span></span>
-                  <span class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> <span>Surge Warning</span></span>
-                  <span class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> <span>Surplus Donor</span></span>
-                  <span class="flex items-center space-x-1.5"><span>🚑</span> <span>Dispatched Van</span></span>
-                  <span class="flex items-center space-x-1.5"><span>📡</span> <span>Monitoring Site</span></span>
+                  <span class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> <span>Running out</span></span>
+                  <span class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> <span>Running low</span></span>
+                  <span class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> <span>Has spare stock</span></span>
+                  <span class="flex items-center space-x-1.5"><span>🚑</span> <span>Van on the way</span></span>
+                  <span class="flex items-center space-x-1.5"><span>📡</span> <span>Air sensor</span></span>
                 </div>
                 <div class="flex items-center space-x-3">
                   <button onclick="simulateCourierTransitStep()" class="text-xs sm:text-sm text-clay-terracotta hover:text-clay-terracottaDark font-black flex items-center space-x-1.5" title="Move dispatched vans one step along their routes (simulation, no GPS feed)">
-                    <span>⚡ Simulate Van Step</span>
+                    <span>⚡ Move vans (demo)</span>
                   </button>
                   <button onclick="fitMapBounds()" class="text-xs sm:text-sm text-clay-terracotta hover:underline font-black">Center Map</button>
                 </div>
@@ -549,21 +521,22 @@
             </div>
 
             <!-- Frontline Voice Intake Card (5 cols) -->
-            <div class="lg:col-span-5 bg-clay-inner rounded-3xl p-5 border border-clay-salmon/20 shadow-sm flex flex-col justify-between">
+            <div id="stepReport" class="lg:col-span-5 bg-clay-inner rounded-3xl p-5 border border-clay-salmon/20 shadow-sm flex flex-col justify-between scroll-mt-4">
               <div>
                 <div class="flex items-center justify-between mb-2.5">
-                  <h4 class="text-sm sm:text-base font-black text-clay-dark flex items-center space-x-1.5">
-                    <span>🎙️ Frontline Voice Intake</span>
+                  <h4 class="text-sm sm:text-base font-black text-clay-dark flex items-center gap-2">
+                    <span class="step-chip" aria-label="Step 2">2</span>
+                    <span>Report stock by voice</span>
                   </h4>
                   <span class="text-xs bg-clay-terracotta/10 text-clay-terracotta font-black px-2.5 py-1 rounded-full">Gemini 3.8 Flash</span>
                 </div>
                 <p class="text-xs sm:text-sm text-clay-muted font-medium mb-3.5 leading-relaxed">
-                  Frontline health staff record 10-second updates in English or Hindi. An offline rule-based parser takes over if the AI is unreachable.
+                  Clinic staff say or type a short stock update in Hindi, Odia or English. Gemini picks out the clinic, medicine and count; if the AI is offline, a simple rule-based reader takes over. Try a sample, or press the mic.
                 </p>
 
                 <div class="space-y-3">
                   <select id="voiceFacilitySelect" class="w-full bg-white border border-clay-salmon/30 rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm text-clay-dark focus:outline-none focus:ring-2 focus:ring-clay-salmon font-semibold shadow-sm">
-                    <option value="">Auto-Detect from Voice Transcript</option>
+                    <option value="">Clinic: detect it from the report</option>
                   </select>
                   <textarea id="voiceTranscript" rows="3" class="w-full bg-white border border-clay-salmon/30 rounded-2xl p-3.5 text-xs sm:text-sm text-clay-dark placeholder-clay-muted focus:outline-none focus:ring-2 focus:ring-clay-salmon font-medium" placeholder="e.g. This is PHC Kakori reporting. We only have 15 respules of Salbutamol left and treated 40 acute respiratory patients yesterday."></textarea>
 
@@ -599,9 +572,9 @@
 
                   <div class="flex items-center space-x-2.5 pt-1">
                     <button id="btnSubmitVoice" onclick="submitVoiceIntake()" class="flex-1 bg-clay-terracotta hover:bg-clay-terracottaDark text-white font-black py-3 px-4 rounded-full text-xs sm:text-sm shadow-clay-btn transition flex items-center justify-center space-x-1.5">
-                      <span>Process &amp; Commit Record</span>
+                      <span>Read report</span>
                     </button>
-                    <button onclick="recordVoiceNote()" id="btnMic" class="p-3 bg-white text-clay-terracotta hover:bg-clay-terracotta hover:text-white rounded-full border border-clay-salmon/30 transition">
+                    <button onclick="recordVoiceNote()" id="btnMic" title="Record a voice note" aria-label="Record a voice note" class="p-3 bg-white text-clay-terracotta hover:bg-clay-terracotta hover:text-white rounded-full border border-clay-salmon/30 transition">
                       <i data-lucide="mic" class="w-4 h-4"></i>
                     </button>
                   </div>
@@ -638,60 +611,95 @@
 
           </div>
 
-          <!-- Multi-Agent Live Terminal -->
-          <div class="bg-clay-inner rounded-3xl p-5 border border-clay-salmon/20 shadow-sm space-y-4">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div class="flex items-center space-x-3">
-                <span class="relative flex h-3.5 w-3.5">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
-                </span>
-                <div>
-                  <div class="flex items-center space-x-2 flex-wrap">
-                    <h3 class="text-base sm:text-lg font-black text-clay-dark tracking-tight">Gemini Multi-Agent Terminal</h3>
-                    <span class="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300/60 px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider">LIVE ORCHESTRATION</span>
-                  </div>
-                  <p class="text-xs text-clay-muted font-medium">Sentinel (Open-Meteo + Copernicus CAMS) &bull; Frontline Intake (EDL grounding) &bull; Demand (rule-based forecast) &bull; Logistics (Gemini function call + constrained solver) &bull; Governance (CMO sign-off)</p>
-                </div>
+          <!-- Agent Pipeline: step tracker, outcome and plain-language log -->
+          <section id="agentPipeline" class="bg-clay-card rounded-3xl p-5 sm:p-6 border border-clay-salmon/20 space-y-5">
+            <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              <div class="max-w-2xl">
+                <h3 class="text-lg sm:text-xl font-black text-clay-dark tracking-tight flex items-center gap-2"><span class="step-chip" aria-label="Step 3">3</span><span>Find a transfer</span></h3>
+                <p class="text-sm text-clay-muted mt-1 leading-relaxed">Five AI agents turn today's air quality and the clinic's stock report into one transfer proposal. Gemini decides when to call the transfer solver; the solver, not the model, sets the quantity, and the doctor approves it.</p>
               </div>
-              <div class="flex items-center space-x-2">
-                <button id="btnRunAgents" onclick="runAgentPipeline()" class="bg-clay-terracotta hover:bg-clay-terracottaDark text-white font-black text-xs sm:text-sm px-5 py-2.5 rounded-full shadow-clay-btn transition flex items-center space-x-2 group">
-                  <i data-lucide="play" class="w-4 h-4 fill-current group-hover:scale-110 transition-transform"></i>
-                  <span>Run Agent Pipeline (Live)</span>
-                </button>
-              </div>
+              <button id="btnRunAgents" onclick="runAgentPipeline()" class="shrink-0 bg-clay-terracotta hover:bg-clay-terracottaDark active:scale-[0.98] text-white font-black text-sm px-5 py-3 rounded-full transition flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-wait">
+                <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+                <span>Run Agent Pipeline</span>
+              </button>
             </div>
-            
-            <!-- Terminal Console Window with macOS-style Header -->
-            <div class="rounded-2xl overflow-hidden border border-slate-800 shadow-2xl bg-[#0c1017]">
-              <!-- Console Chrome Bar -->
-              <div class="bg-[#161c28] px-4 py-2.5 flex flex-wrap gap-2 items-center justify-between border-b border-slate-800 select-none">
-                <div class="flex items-center space-x-2">
-                  <div class="flex items-center space-x-1.5">
-                    <span class="w-3 h-3 rounded-full bg-rose-500/80 inline-block shadow-sm"></span>
-                    <span class="w-3 h-3 rounded-full bg-amber-400/80 inline-block shadow-sm"></span>
-                    <span class="w-3 h-3 rounded-full bg-emerald-400/80 inline-block shadow-sm"></span>
-                  </div>
-                  <span class="text-slate-400 text-xs font-mono font-semibold pl-2">agent-orchestrator@aarogya-vayu:~ (Gemini 3.8 Flash + constrained solver)</span>
-                </div>
-                <div class="flex items-center space-x-2 text-[11px] font-mono text-slate-400">
-                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span class="hidden sm:inline text-emerald-400 font-bold">5 AGENTS</span>
-                  <span class="text-slate-600">|</span>
-                  <span id="agentLatency" class="text-slate-300">latency: --</span>
-                </div>
-              </div>
 
-              <!-- Terminal Body -->
-              <div id="agentTerminalBody" class="p-4 sm:p-5 font-mono text-xs sm:text-sm text-slate-200 space-y-3 min-h-[300px] max-h-[460px] overflow-y-auto custom-scrollbar leading-relaxed">
-                <div class="space-y-1.5 text-slate-400 text-xs">
-                  <p><span class="text-emerald-400">✓</span> LLM: Gemini 3.8 Flash primary, Claude fallback</p>
-                  <p><span class="text-emerald-400">✓</span> Environmental Sentinel: Open-Meteo + Copernicus CAMS live feed (72h forecast)</p>
-                  <p><span class="text-emerald-400">✓</span> Frontline Intake: Gemini speech-to-text (English/Hindi/Odia) + Gemini structured parsing to EDL codes</p>
-                  <p><span class="text-emerald-400">✓</span> Transfer Solver: deterministic greedy allocator (35 km radius, 14-day donor reserve, FEFO)</p>
-                  <p class="pt-2 text-slate-400 italic">// Standby. Click <span class="text-clay-terracotta font-bold">"Run Agent Pipeline"</span> above to trigger real-time multi-agent negotiation and transfer execution.</p>
-                </div>
+            <!-- Step tracker: each agent lights up as its result arrives -->
+            <ol id="pipeSteps" class="grid grid-cols-1 sm:grid-cols-5 gap-2 sm:gap-0 sm:bg-clay-inner sm:rounded-2xl sm:p-2" aria-label="Pipeline steps">
+              <li data-step="air" class="pipe-step" data-state="idle">
+                <span class="pipe-dot"><i data-lucide="wind" class="w-4 h-4"></i></span>
+                <span class="min-w-0">
+                  <span class="pipe-name">Air quality</span>
+                  <span class="pipe-figure">Open-Meteo + CAMS</span>
+                </span>
+              </li>
+              <li data-step="intake" class="pipe-step" data-state="idle">
+                <span class="pipe-dot"><i data-lucide="mic" class="w-4 h-4"></i></span>
+                <span class="min-w-0">
+                  <span class="pipe-name">Field report</span>
+                  <span class="pipe-figure">Matched to drug list</span>
+                </span>
+              </li>
+              <li data-step="demand" class="pipe-step" data-state="idle">
+                <span class="pipe-dot"><i data-lucide="trending-up" class="w-4 h-4"></i></span>
+                <span class="min-w-0">
+                  <span class="pipe-name">Demand</span>
+                  <span class="pipe-figure">Days of cover left</span>
+                </span>
+              </li>
+              <li data-step="transfer" class="pipe-step" data-state="idle">
+                <span class="pipe-dot"><i data-lucide="route" class="w-4 h-4"></i></span>
+                <span class="min-w-0">
+                  <span class="pipe-name">Transfer</span>
+                  <span class="pipe-figure">Donor within 35 km</span>
+                </span>
+              </li>
+              <li data-step="cmo" class="pipe-step" data-state="idle">
+                <span class="pipe-dot"><i data-lucide="shield-check" class="w-4 h-4"></i></span>
+                <span class="min-w-0">
+                  <span class="pipe-name">CMO sign-off</span>
+                  <span class="pipe-figure">Human approval</span>
+                </span>
+              </li>
+            </ol>
+
+            <!-- Outcome: the answer, stated in one sentence with its figures -->
+            <div id="pipeOutcome" class="hidden rounded-2xl p-5 sm:p-6" aria-live="polite"></div>
+
+            <!-- Plain-language log of what each agent did -->
+            <h4 class="text-sm font-black text-clay-dark -mb-2">What each agent did</h4>
+            <div id="agentTerminalBody" class="space-y-2 max-h-[520px] overflow-y-auto custom-scrollbar">
+              <p class="text-sm text-clay-muted bg-clay-inner rounded-2xl p-4 leading-relaxed">Press <strong class="text-clay-dark">Run Agent Pipeline</strong> to check the clinic picked in <em>Report stock by voice</em>, or press <strong class="text-clay-dark">Find stock</strong> next to any clinic under <em>Clinics running low</em>.</p>
+            </div>
+            <p id="agentLatency" class="text-xs text-clay-muted"></p>
+          </section>
+
+          <!-- Shelf photo check (Gemini vision) -->
+          <div id="stepPhoto" class="bg-clay-inner rounded-3xl p-5 border border-clay-salmon/20 shadow-sm space-y-3 scroll-mt-4">
+            <div class="flex items-center justify-between">
+              <span class="text-sm sm:text-base font-black text-clay-dark flex items-center space-x-1.5">
+                <i data-lucide="camera" class="w-4 h-4 text-cyan-600"></i>
+                <span>Check a shelf photo</span>
+              </span>
+              <span class="text-xs bg-cyan-100 text-cyan-800 font-extrabold px-2.5 py-1 rounded-full">Gemini vision</span>
+            </div>
+            <p class="text-xs sm:text-sm text-clay-muted font-medium">
+              Snap the shelf and Gemini counts the boxes, reads the batch and expiry, and compares the count with the stock register. Advisory only: staff confirm any change.
+            </p>
+            <select id="visionFacilitySelect" aria-label="Facility register to compare with" class="w-full bg-white border border-cyan-300/60 rounded-2xl px-3 py-2 text-xs sm:text-sm text-clay-dark font-semibold focus:outline-none focus:ring-2 focus:ring-cyan-400">
+              <!-- Populated with the region's facilities -->
+            </select>
+            <input type="file" id="visionFileInput" accept="image/jpeg,image/png,image/webp" capture="environment" class="hidden" onchange="runVisionVerification(this.files[0]); this.value='';">
+            <button onclick="document.getElementById('visionFileInput').click()" id="btnVision" class="w-full bg-white hover:bg-clay-bg text-cyan-800 border border-cyan-300 font-bold py-2.5 rounded-2xl text-xs sm:text-sm shadow-sm transition flex items-center justify-center space-x-2">
+              <span>Upload or take a shelf photo</span>
+            </button>
+            <div id="visionResultBox" class="hidden mt-2 p-3.5 bg-white rounded-2xl border border-cyan-300 text-xs sm:text-sm space-y-1.5">
+              <div class="flex justify-between font-extrabold text-cyan-900">
+                <span id="visionStatusLabel">Scan result</span>
+                <span id="visionCountLabel" class="text-emerald-600 font-black"></span>
               </div>
+              <p id="visionFacilityText" class="text-xs text-cyan-900 font-semibold"></p>
+              <p id="visionSummaryText" class="text-clay-muted italic text-xs font-medium"></p>
             </div>
           </div>
 
@@ -710,123 +718,40 @@
               </div>
               <div>
                 <h3 class="text-base sm:text-lg font-black text-clay-dark">Dr. S. K. Saxena</h3>
-                <p class="text-xs sm:text-sm text-clay-muted font-medium">Chief Medical Officer &bull; District Health Society (demo persona)</p>
+                <p class="text-xs sm:text-sm text-clay-muted font-medium">Chief Medical Officer: approves transfers (demo persona; you act as this doctor)</p>
               </div>
             </div>
-            <button onclick="openCmoModal()" class="bg-clay-terracotta hover:bg-clay-terracottaDark text-white text-xs sm:text-sm font-extrabold px-4 py-2.5 rounded-full shadow-clay-btn transition">
-              CMO Studio
+            <button onclick="openCmoModal()" class="bg-clay-terracotta hover:bg-clay-terracottaDark text-white text-xs sm:text-sm font-extrabold px-4 py-2.5 rounded-full shadow-clay-btn transition whitespace-nowrap" title="Ask about stock, cover or transfers in plain language">
+              Ask a question
             </button>
           </div>
 
-          <!-- "Critical Facilities Watchlist" (Matching "October Holidays" in Reference) -->
+          <!-- Clinics running low -->
           <div class="bg-clay-inner rounded-3xl p-5 border border-clay-salmon/20 shadow-sm space-y-4">
-            <div class="flex items-center justify-between">
-              <h3 class="text-base sm:text-lg font-black text-clay-dark">Surge Stockout Watch</h3>
-              <span class="text-xs text-clay-terracotta font-extrabold">Critical (&lt; 4d Cover)</span>
+            <div>
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="text-base sm:text-lg font-black text-clay-dark">Clinics running low</h3>
+                <span class="text-xs text-clay-terracotta font-extrabold whitespace-nowrap">Under 4 days left</span>
+              </div>
+              <p class="text-xs sm:text-sm text-clay-muted mt-1 leading-relaxed"><strong class="text-clay-dark">Find stock</strong> looks for a clinic within 35 km that can spare some.</p>
             </div>
 
-            <!-- List items with thumbnail, title, metric and pill button -->
             <div id="criticalWatchlist" class="space-y-3">
               
-              <!-- Item 1 -->
-              <div class="flex items-center justify-between bg-white p-3.5 rounded-2xl border border-clay-salmon/20 shadow-sm">
-                <div class="flex items-center space-x-3">
-                  <div class="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center text-red-600 font-black text-sm">
-                    PHC
-                  </div>
-                  <div>
-                    <h4 class="text-sm font-black text-clay-dark">PHC Kakori</h4>
-                    <p class="text-xs text-red-500 font-bold">Salbutamol &bull; 1.6 Days Cover</p>
-                  </div>
-                </div>
-                <div class="text-right flex items-center space-x-2">
-                  <span class="text-sm font-black text-clay-dark">15 Units</span>
-                  <button onclick="runTransferFor('PHC-LKO-01')" class="text-xs bg-clay-terracotta hover:bg-clay-terracottaDark text-white px-3.5 py-1.5 rounded-full font-bold shadow-sm transition">
-                    Solve
-                  </button>
-                </div>
-              </div>
-
-              <!-- Item 2 -->
-              <div class="flex items-center justify-between bg-white p-3.5 rounded-2xl border border-clay-salmon/20 shadow-sm">
-                <div class="flex items-center space-x-3">
-                  <div class="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center text-red-600 font-black text-sm">
-                    CHC
-                  </div>
-                  <div>
-                    <h4 class="text-sm font-black text-clay-dark">CHC Sarojini Nagar</h4>
-                    <p class="text-xs text-red-500 font-bold">Salbutamol &bull; 1.3 Days Cover</p>
-                  </div>
-                </div>
-                <div class="text-right flex items-center space-x-2">
-                  <span class="text-sm font-black text-clay-dark">28 Units</span>
-                  <button onclick="runTransferFor('CHC-LKO-06')" class="text-xs bg-clay-terracotta hover:bg-clay-terracottaDark text-white px-3.5 py-1.5 rounded-full font-bold shadow-sm transition">
-                    Solve
-                  </button>
-                </div>
-              </div>
-
-              <!-- Item 3 -->
-              <div class="flex items-center justify-between bg-white p-3.5 rounded-2xl border border-clay-salmon/20 shadow-sm">
-                <div class="flex items-center space-x-3">
-                  <div class="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 font-black text-sm">
-                    PHC
-                  </div>
-                  <div>
-                    <h4 class="text-sm font-black text-clay-dark">PHC Chinhat</h4>
-                    <p class="text-xs text-amber-600 font-bold">Dexamethasone &bull; 4.2 Days Cover</p>
-                  </div>
-                </div>
-                <div class="text-right flex items-center space-x-2">
-                  <span class="text-sm font-black text-clay-dark">45 Units</span>
-                  <button onclick="runTransferFor('PHC-LKO-05')" class="text-xs bg-clay-terracotta/10 text-clay-terracotta hover:bg-clay-terracotta hover:text-white px-3.5 py-1.5 rounded-full font-bold transition">
-                    View
-                  </button>
-                </div>
-              </div>
-
+              <div class="text-center py-4 text-clay-muted text-sm font-medium">Loading clinics…</div>
             </div>
           </div>
 
-          <!-- "Redistribution Actions" (Matching "Party planning" in Reference) -->
-          <div class="bg-clay-inner rounded-3xl p-5 border border-clay-salmon/20 shadow-sm space-y-3.5">
-            <div class="flex items-center justify-between">
-              <h3 class="text-base sm:text-lg font-black text-clay-dark">Dispatch Authorization</h3>
-              <span class="text-xs text-emerald-700 font-extrabold">Pending CMO sign-off</span>
+          <!-- Step 4: transfers waiting for the doctor's approval -->
+          <div id="stepApprove" class="bg-clay-inner rounded-3xl p-5 border border-clay-salmon/20 shadow-sm space-y-3.5 scroll-mt-4">
+            <div>
+              <h3 class="text-base sm:text-lg font-black text-clay-dark flex items-center gap-2"><span class="step-chip" aria-label="Step 4">4</span><span>Waiting for your approval</span></h3>
+              <p class="text-xs sm:text-sm text-clay-muted mt-1 leading-relaxed">Each proposed transfer needs the doctor's sign-off before any stock moves.</p>
             </div>
 
             <!-- Action Card Stream -->
             <div id="recommendationsList" class="space-y-3">
-              <div class="text-center py-4 text-clay-muted text-sm font-medium">Loading active transfer orders...</div>
-            </div>
-          </div>
-
-          <!-- Gemini 3.8 Flash Vision Shelf Card -->
-          <div class="bg-clay-inner rounded-3xl p-5 border border-clay-salmon/20 shadow-sm space-y-3">
-            <div class="flex items-center justify-between">
-              <span class="text-sm sm:text-base font-black text-clay-dark flex items-center space-x-1.5">
-                <i data-lucide="camera" class="w-4 h-4 text-cyan-600"></i>
-                <span>Gemini 3.8 Flash Vision Verification</span>
-              </span>
-              <span class="text-xs bg-cyan-100 text-cyan-800 font-extrabold px-2.5 py-1 rounded-full">LIVE VISION</span>
-            </div>
-            <p class="text-xs sm:text-sm text-clay-muted font-medium">
-              Nurse shelf photo cross-check against the stock register &bull; batch &amp; expiry reading (advisory)
-            </p>
-            <select id="visionFacilitySelect" aria-label="Facility register to compare with" class="w-full bg-white border border-cyan-300/60 rounded-2xl px-3 py-2 text-xs sm:text-sm text-clay-dark font-semibold focus:outline-none focus:ring-2 focus:ring-cyan-400">
-              <!-- Populated with the region's facilities -->
-            </select>
-            <input type="file" id="visionFileInput" accept="image/jpeg,image/png,image/webp" capture="environment" class="hidden" onchange="runVisionVerification(this.files[0]); this.value='';">
-            <button onclick="document.getElementById('visionFileInput').click()" id="btnVision" class="w-full bg-white hover:bg-clay-bg text-cyan-800 border border-cyan-300 font-bold py-2.5 rounded-2xl text-xs sm:text-sm shadow-sm transition flex items-center justify-center space-x-2">
-              <span>Upload / Snap Shelf Photo</span>
-            </button>
-            <div id="visionResultBox" class="hidden mt-2 p-3.5 bg-white rounded-2xl border border-cyan-300 text-xs sm:text-sm space-y-1.5">
-              <div class="flex justify-between font-extrabold text-cyan-900">
-                <span id="visionStatusLabel">Scan result</span>
-                <span id="visionCountLabel" class="text-emerald-600 font-black"></span>
-              </div>
-              <p id="visionFacilityText" class="text-xs text-cyan-900 font-semibold"></p>
-              <p id="visionSummaryText" class="text-clay-muted italic text-xs font-medium"></p>
+              <div class="text-center py-4 text-clay-muted text-sm font-medium">Loading proposed transfers…</div>
             </div>
           </div>
 
@@ -908,9 +833,9 @@
                 <div>
                   <h3 class="text-base font-extrabold text-clay-dark flex items-center space-x-2">
                     <i data-lucide="boxes" class="w-5 h-5 text-clay-terracotta"></i>
-                    <span>Facility Store Ledger & Segregated Balances</span>
+                    <span>Stock on the shelf</span>
                   </h3>
-                  <p class="text-xs text-clay-muted mt-0.5">Physical count, available buffer, and active consignments</p>
+                  <p class="text-xs text-clay-muted mt-0.5">Counted stock, what is free to use, and what is reserved for transfers</p>
                 </div>
 
                 <div class="relative w-full sm:w-64">
@@ -936,7 +861,7 @@
                   <div class="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
                     <i data-lucide="arrow-down-left" class="w-4 h-4"></i>
                   </div>
-                  <h3 class="text-sm font-extrabold text-clay-dark">Inbound Consignments</h3>
+                  <h3 class="text-sm font-extrabold text-clay-dark">Deliveries coming in</h3>
                 </div>
                 <span id="clinicInboundCountBadge" class="px-2 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800">0 Incoming</span>
               </div>
@@ -954,7 +879,7 @@
                   <div class="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
                     <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
                   </div>
-                  <h3 class="text-sm font-extrabold text-clay-dark">Outbound Consignments</h3>
+                  <h3 class="text-sm font-extrabold text-clay-dark">Stock going out</h3>
                 </div>
                 <span id="clinicOutboundCountBadge" class="px-2 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-800">0 Outgoing</span>
               </div>
@@ -982,8 +907,8 @@
             CMO
           </div>
           <div>
-            <h3 class="text-xl sm:text-2xl font-black text-clay-dark">Chief Medical Officer Strategic Studio</h3>
-            <p class="text-xs sm:text-sm text-clay-muted font-medium">Gemini 3.8 Flash (Claude fallback) &bull; Natural Language What-If Strategic Simulation</p>
+            <h3 class="text-xl sm:text-2xl font-black text-clay-dark">Ask a question</h3>
+            <p class="text-xs sm:text-sm text-clay-muted font-medium">Ask in English or Hindi. Answers use only this system’s own stock, cover and transfer figures (Gemini 3.8 Flash, Claude fallback).</p>
           </div>
         </div>
         <button onclick="closeCmoModal()" class="text-clay-muted hover:text-clay-dark text-3xl font-bold leading-none cursor-pointer">&times;</button>
@@ -1024,7 +949,7 @@
         <div class="flex items-center justify-between pt-2.5 border-t border-clay-salmon/20">
           <button id="btnTtsSpeak" onclick="speakCurrentCmoBriefing()" class="inline-flex items-center space-x-2 text-xs sm:text-sm text-clay-terracotta hover:text-clay-terracottaDark font-bold bg-clay-terracotta/10 hover:bg-clay-terracotta/20 px-4 py-2 rounded-full transition cursor-pointer">
             <i data-lucide="volume-2" class="w-4 h-4"></i>
-            <span id="btnTtsLabel">🔊 Read Briefing Aloud</span>
+            <span id="btnTtsLabel">Read aloud</span>
           </button>
           <span id="cmoTtsStatus" class="text-xs text-clay-muted italic"></span>
         </div>
@@ -1106,7 +1031,7 @@
           </div>
           <div>
             <div class="flex items-center space-x-2">
-              <h3 class="text-lg sm:text-xl font-black text-clay-dark">Regional Health &amp; Climate Intelligence Bureau</h3>
+              <h3 class="text-lg sm:text-xl font-black text-clay-dark">Health &amp; climate news</h3>
               <span id="newsRegionBadge" class="bg-clay-terracotta/10 text-clay-terracotta text-xs font-black px-2.5 py-0.5 rounded-full border border-clay-salmon/20">
                 Bhubaneswar–Cuttack (OD)
               </span>
@@ -1172,7 +1097,7 @@
             <i data-lucide="shield-check" class="w-6 h-6"></i>
           </div>
           <div>
-            <h3 class="text-lg sm:text-xl font-black text-clay-dark">Tamper-Evident Cryptographic Audit Ledger</h3>
+            <h3 class="text-lg sm:text-xl font-black text-clay-dark">Audit log</h3>
             <p class="text-xs sm:text-sm text-clay-muted font-medium">SHA-256 Hash Chaining &bull; Editing any past entry breaks verification</p>
           </div>
         </div>
@@ -1250,51 +1175,37 @@
             <i data-lucide="help-circle" class="w-6 h-6"></i>
           </div>
           <div>
-            <h3 class="text-lg sm:text-xl font-black text-clay-dark">Aarogya-Vāyu | System Architecture &amp; Demo Guide</h3>
-            <p class="text-xs sm:text-sm text-clay-muted font-medium">Build with AI &bull; Track 3: Smart Health &amp; Supply Chain Resilience</p>
+            <h3 class="text-lg sm:text-xl font-black text-clay-dark">How Aarogya-Vāyu works</h3>
+            <p class="text-xs sm:text-sm text-clay-muted font-medium">Build with AI: Code for Communities &bull; Track 3: Smart Health &amp; Supply Chain Resilience</p>
           </div>
         </div>
         <button onclick="closeInfoModal()" class="text-slate-400 hover:text-slate-600 text-3xl font-bold leading-none cursor-pointer">&times;</button>
       </div>
 
       <div class="space-y-4 text-xs sm:text-sm text-clay-dark leading-relaxed">
-        <div class="p-4 bg-clay-inner rounded-2xl border border-clay-salmon/20">
-          <h4 class="font-black text-clay-terracotta text-sm sm:text-base mb-1.5">Autonomous Multi-Agent Resilience Pipeline</h4>
-          <p class="text-clay-muted leading-relaxed font-medium">
-            Aarogya-Vāyu chains specialised agents in a Python orchestrator, with Gemini doing the language work and deterministic code doing the maths:
-          </p>
-          <ul class="list-disc list-inside mt-2.5 space-y-1.5 text-xs sm:text-sm text-clay-dark font-medium">
-            <li><strong>Atmospheric Sentinel Agent:</strong> Reads live Open-Meteo weather and Copernicus CAMS air quality (with 72h forecast and boundary-layer height) to detect smog trapping and heatwaves.</li>
-            <li><strong>Frontline Intake Agent:</strong> Gemini 3.8 Flash extracts stock reports from voice transcripts (Claude fallback, then an offline rule-based parser).</li>
-            <li><strong>Logistics Optimization Agent:</strong> Gemini function calling chooses the solver arguments; a deterministic constrained solver computes the transfer to cut stockout risk and expiry waste.</li>
-            <li><strong>Governance &amp; Audit Agent:</strong> SHA-256 hash chaining makes the decision log tamper-evident; every transfer needs human CMO sign-off.</li>
+        <p class="text-sm sm:text-base font-medium">When smog or a heatwave hits, breathing and dehydration cases rise within days. Some rural clinics run out of medicine while a clinic nearby has spare stock that may expire. Aarogya-Vāyu finds those clinics and proposes a transfer; the district's Chief Medical Officer approves it.</p>
+
+        <ol class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <li class="p-4 bg-clay-inner rounded-2xl border border-clay-salmon/20"><strong class="text-clay-terracotta">1. Read the air.</strong> Live weather and air quality (Open-Meteo, Copernicus CAMS) raise the expected demand for each medicine. The <em>Conditions</em> buttons switch to a smog, heatwave or normal demo.</li>
+          <li class="p-4 bg-clay-inner rounded-2xl border border-clay-salmon/20"><strong class="text-clay-terracotta">2. Clinics report stock.</strong> In <em>Report stock by voice</em>, try a sample or press the mic. Gemini picks out the clinic, medicine and count.</li>
+          <li class="p-4 bg-clay-inner rounded-2xl border border-clay-salmon/20"><strong class="text-clay-terracotta">3. Find a transfer.</strong> Press <em>Find stock</em> next to a clinic, or <em>Run Agent Pipeline</em>. Gemini calls the transfer solver; the solver picks the donor and quantity (within 35 km, keeping 14 days at the donor, oldest batch first).</li>
+          <li class="p-4 bg-clay-inner rounded-2xl border border-clay-salmon/20"><strong class="text-clay-terracotta">4. Doctor approves.</strong> Under <em>Waiting for your approval</em>, press <em>Approve &amp; Reserve Stock</em>. A dispatch note is issued and the step is written to the audit log.</li>
+        </ol>
+
+        <div class="p-4 bg-white rounded-2xl border border-clay-salmon/30">
+          <h5 class="font-black text-clay-dark text-sm mb-1.5">Also on the left menu</h5>
+          <ul class="space-y-1.5 text-clay-muted font-medium">
+            <li><strong class="text-clay-dark">Clinic:</strong> one clinic's own screen: stock on the shelf, deliveries coming in and going out.</li>
+            <li><strong class="text-clay-dark">Ask:</strong> questions in plain language, such as "Which clinics will run out first?"</li>
+            <li><strong class="text-clay-dark">Photo:</strong> Gemini counts boxes in a shelf photo and compares the count with the register.</li>
+            <li><strong class="text-clay-dark">Audit:</strong> every action is chained with SHA-256, so editing any past entry makes verification fail.</li>
           </ul>
         </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-          <div class="p-4 bg-white rounded-2xl border border-clay-salmon/30 shadow-sm">
-            <h5 class="font-black text-clay-terracotta text-sm mb-1.5">🎮 Live Interactive Features</h5>
-            <ul class="text-xs sm:text-sm space-y-1.5 text-clay-muted font-medium">
-              <li>&bull; Click <strong>Run Agent Pipeline</strong> to observe live multi-agent collaboration.</li>
-              <li>&bull; Click <strong>Solve</strong> on any facility to route emergency stock.</li>
-              <li>&bull; Test <strong>Frontline Voice Intake</strong> with sample transcripts.</li>
-              <li>&bull; Switch between <strong>Smog, Heatwave, and Baseline</strong>.</li>
-            </ul>
-          </div>
-          <div class="p-4 bg-white rounded-2xl border border-clay-salmon/30 shadow-sm">
-            <h5 class="font-black text-clay-terracotta text-sm mb-1.5">🔍 Verification &amp; Compliance</h5>
-            <ul class="text-xs sm:text-sm space-y-1.5 text-clay-muted font-medium">
-              <li>&bull; Open <strong>CMO Studio</strong> for strategic what-if evaluations.</li>
-              <li>&bull; Click <strong>Upload / Snap Shelf Photo</strong> to have Gemini 3.8 Flash read a real shelf photo.</li>
-              <li>&bull; Click the <strong>Shield icon</strong> to view the SHA-256 ledger.</li>
-              <li>&bull; Click <strong>Approve &amp; Dispatch</strong> to issue official transfer challans.</li>
-            </ul>
-          </div>
-        </div>
+        <p class="text-xs text-clay-muted">Clinic inventories are sample data; air quality and weather are live.</p>
       </div>
 
       <div class="flex justify-end pt-2">
-        <button onclick="closeInfoModal()" class="px-6 py-2.5 bg-clay-terracotta text-white rounded-full text-sm font-black shadow-clay-btn transition cursor-pointer">Got it, Let's Explore</button>
+        <button onclick="closeInfoModal()" class="px-6 py-2.5 bg-clay-terracotta text-white rounded-full text-sm font-black shadow-clay-btn transition cursor-pointer">Got it</button>
       </div>
     </div>
   </div>
