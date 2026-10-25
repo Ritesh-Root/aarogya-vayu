@@ -257,13 +257,19 @@ async def sync_live_env(reg: str, force: bool = False) -> None:
 # The server derives the environment and the transfer proposals from that, so one visitor
 # pressing Smog no longer changes what everyone else sees. Requests without ?scenario= keep
 # the older shared per-region mode (used by tests and older clients).
-SCENARIOS = ("live", "smog", "heat", "normal")
+SCENARIOS = ("live", "smog", "heat", "flood", "cold", "normal")
 SCENARIO_PRESETS: Dict[str, Dict[str, EnvironmentalReading]] = {
     "bhubaneswar": {
         "smog": EnvironmentalReading(aqi=385, pm25=265.0, temperature_c=17.5, humidity_pct=78.0, heatwave_alert=False,
                                      smog_episode=True, corridor="Bhubaneswar–Cuttack Inversion Corridor"),
         "heat": EnvironmentalReading(aqi=140, pm25=65.0, temperature_c=43.5, humidity_pct=35.0, heatwave_alert=True,
                                      smog_episode=False, corridor="Coastal Odisha Heatwave Corridor (Severe Dehydration Risk)"),
+        "flood": EnvironmentalReading(aqi=40, pm25=18.0, temperature_c=27.5, humidity_pct=94.0, heatwave_alert=False,
+                                      smog_episode=False, flood_alert=True, rain_24h_mm=220.0, min_temp_c=24.0,
+                                      corridor="Mahanadi delta, Odisha (cyclone rain)"),
+        "cold": EnvironmentalReading(aqi=160, pm25=70.0, temperature_c=14.0, humidity_pct=70.0, heatwave_alert=False,
+                                     smog_episode=False, cold_wave_alert=True, min_temp_c=4.0,
+                                     corridor="Khordha-Cuttack, Odisha"),
         "normal": EnvironmentalReading(aqi=75, pm25=28.0, temperature_c=26.0, humidity_pct=60.0, heatwave_alert=False,
                                        smog_episode=False, corridor="Bhubaneswar Coastal Baseline Operations"),
     },
@@ -272,6 +278,12 @@ SCENARIO_PRESETS: Dict[str, Dict[str, EnvironmentalReading]] = {
                                      smog_episode=True, corridor="Lucknow-Unnao Indo-Gangetic Smog Corridor (Severe Inversion)"),
         "heat": EnvironmentalReading(aqi=140, pm25=65.0, temperature_c=43.5, humidity_pct=35.0, heatwave_alert=True,
                                      smog_episode=False, corridor="Central Awadh Heatwave Corridor (Severe Dehydration Risk)"),
+        "flood": EnvironmentalReading(aqi=35, pm25=15.0, temperature_c=29.0, humidity_pct=92.0, heatwave_alert=False,
+                                      smog_episode=False, flood_alert=True, rain_24h_mm=140.0, min_temp_c=25.0,
+                                      corridor="Lucknow-Unnao (Ghaghra-Sharda floods)"),
+        "cold": EnvironmentalReading(aqi=180, pm25=85.0, temperature_c=9.0, humidity_pct=88.0, heatwave_alert=False,
+                                     smog_episode=False, cold_wave_alert=True, min_temp_c=3.0,
+                                     corridor="Lucknow-Unnao"),
         "normal": EnvironmentalReading(aqi=75, pm25=28.0, temperature_c=26.0, humidity_pct=60.0, heatwave_alert=False,
                                        smog_episode=False, corridor="Baseline Seasonal Conditions"),
     },
@@ -453,7 +465,7 @@ async def get_system_capabilities():
             "demand_forecast": "Rule-based lag-curve forecaster driven by live surge multipliers (not a trained ML model)",
             "facilities": "Named after real PHC/CHC sites; coordinates, population and staffing are demo values, not an official registry",
             "inventory": "SYNTHETIC demo stock register (no public API exposes PHC stock)",
-            "scenario_presets": "SIMULATED: Smog/Heatwave/Normal buttons replace live telemetry for that browser only (sent as ?scenario=); other visitors are unaffected",
+            "scenario_presets": "SIMULATED: Smog/Heatwave/Flood/Cold wave/Normal buttons replace live telemetry for that browser only (sent as ?scenario=); other visitors are unaffected",
         }
     }
 

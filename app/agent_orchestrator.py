@@ -128,13 +128,17 @@ class MultiAgentResilienceOrchestrator:
             parts.append(f"Max forecast temperature {env.forecast_max_temp_72h}°C in 72h.")
         if env.fire_hotspots is not None:
             parts.append(f"NASA FIRMS: {env.fire_hotspots} VIIRS fire detections within ~165 km (48h).")
+        if env.rain_24h_mm is not None and env.rain_24h_mm >= 64.5:
+            parts.append(f"Heavy rain: up to {env.rain_24h_mm} mm in 24 h; diarrhoea and fever cases rise in the days after.")
+        if env.min_temp_c is not None and env.min_temp_c <= 10:
+            parts.append(f"Cold: minimum temperature {env.min_temp_c}°C; chest infections rise during cold spells.")
         parts.append("Respiratory admissions typically lag PM2.5 peaks by 1–3 days.")
         if not is_live:
             parts.insert(0, "SCENARIO MODE (simulated reading, not live telemetry):")
 
         if env.smog_episode and trapping:
             condition = "SEVERE_COMPOUND_INVERSION"
-        elif env.smog_episode or env.heatwave_alert:
+        elif env.smog_episode or env.heatwave_alert or env.flood_alert or env.cold_wave_alert:
             condition = "ELEVATED_SURGE"
         elif max(env.aqi, env.forecast_peak_aqi_72h or 0) > 150:
             condition = "WATCH"
@@ -149,6 +153,10 @@ class MultiAgentResilienceOrchestrator:
             "telemetry": {
                 "aqi": env.aqi,
                 "pm25": env.pm25,
+                "rain_24h_mm": env.rain_24h_mm,
+                "min_temp_c": env.min_temp_c,
+                "flood_alert": env.flood_alert,
+                "cold_wave_alert": env.cold_wave_alert,
                 "wind_speed_kmh": wind,
                 "boundary_layer_m": blh,
                 "aod": env.aod,
@@ -162,6 +170,8 @@ class MultiAgentResilienceOrchestrator:
             "surge_multipliers": {
                 "respiratory": multipliers["AQI / Smog"],
                 "heat_dehydration": multipliers["Heatwave / Drought"],
+                "flood_heavy_rain": multipliers["Flood / Heavy rain"],
+                "cold_wave": multipliers["Cold wave"],
             },
         }
 
@@ -356,7 +366,9 @@ class MultiAgentResilienceOrchestrator:
             f"You are the Strategic Insight Agent for Aarogya-Vayu, a climate-resilient rural health logistics platform for {state_title}, India. "
             f"You advise the Chief Medical Officer (CMO) of the {corridor_title}.\n"
             f"Telemetry ({'live' if is_live_reading(env) else 'scenario'}): AQI {env.aqi}, PM2.5 {env.pm25} µg/m³, {env.temperature_c}°C, "
-            f"smog episode {env.smog_episode}, heatwave {env.heatwave_alert}.\n"
+            f"smog episode {env.smog_episode}, heatwave {env.heatwave_alert}, flood/heavy rain {env.flood_alert}"
+            f"{f' ({env.rain_24h_mm} mm/24 h)' if env.rain_24h_mm is not None else ''}, cold wave {env.cold_wave_alert}"
+            f"{f' (min {env.min_temp_c}°C)' if env.min_temp_c is not None else ''}.\n"
             f"Demand surge multipliers by medicine class (rule-based): {mult_line}.\n"
             f"Facilities at risk, soonest stockout first:\n{risk_lines}\n"
             f"Proposed transfers awaiting CMO approval:\n{rec_lines}\n"

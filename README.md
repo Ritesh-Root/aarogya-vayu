@@ -86,7 +86,7 @@ flowchart LR
 
 | | Step | What happens | Where in the code |
 |:-:|---|---|---|
-| 🌫️ | **Read the air** | Live weather and air quality (Open-Meteo + Copernicus CAMS) set a demand multiplier for each medicine: smog raises breathing medicines, heat raises ORS and fever medicine. | `app/telemetry_service.py`, `app/surge_engine.py` |
+| 🌫️ | **Read the weather** | Live air quality, heat, rainfall and minimum temperature (Open-Meteo + Copernicus CAMS) set a demand multiplier for each medicine: smog raises breathing medicines, heat and floods raise ORS and fever medicine, cold waves raise antibiotics. | `app/telemetry_service.py`, `app/surge_engine.py` |
 | 🎙️ | **Clinics report stock** | Staff speak or type a short update. Gemini transcribes it and picks out the clinic, medicine and count, matched to the state Essential Drug List. If no number is said, it asks instead of guessing. | `app/speech_service.py`, `app/voice_service.py` |
 | 📈 | **Demand** | Days of cover = stock ÷ (normal daily use × multiplier), plus a 7-day stockout probability. Anything under 4 days is flagged. | `app/surge_engine.py` |
 | 🚚 | **Find a transfer** | Gemini decides to call `calculate_optimal_transfer`; a deterministic allocator picks the donor and the quantity under hard rules. | `app/agent_orchestrator.py`, `app/optimizer.py` |
@@ -105,6 +105,7 @@ Open **[aarogya-vayu.vercel.app](https://aarogya-vayu.vercel.app)** and:
 - [ ] Press **Ask** in the side menu and ask *"Which clinics will run out first?"* Then press **Read aloud** to hear Gemini's voice.
 - [ ] Press **Photo** and upload [`docs/samples/shelf_salbutamol.jpg`](docs/samples/shelf_salbutamol.jpg). Gemini counts the boxes and checks them against the register.
 - [ ] Press **Audit**, then **Verify**. Every action is hash-chained.
+- [ ] Try **🌧️ Flood (demo)** and **❄️ Cold wave (demo)**: the alerts move to ORS and fever medicine, then to antibiotics.
 - [ ] Press **Clinic** in the side menu, then **हिन्दी**. The clinic's own screen switches to Hindi.
 - [ ] Your **Conditions** choice is yours alone: it is remembered in your browser and doesn't change what other visitors see.
 
@@ -221,16 +222,18 @@ When a transfer is approved, the donor's and the recipient's stock change by exa
 
 <br>
 
-Every medicine is checked in every scenario; the weather decides how much faster each one is used.
+Every medicine is checked in every scenario; the weather decides how much faster each one is used. Each medicine takes the strongest of the hazards that drive it.
 
-| Medicine | Driven by | Smog (AQI 385) | Heatwave | Normal |
-|---|---|:-:|:-:|:-:|
-| Salbutamol (nebuliser) | Air quality | ×1.62 | ×1.0 | ×1.0 |
-| Dexamethasone (injection) | Air quality | ×1.62 | ×1.0 | ×1.0 |
-| Cetirizine | Smog and dust | ×1.62 | ×1.0 | ×1.0 |
-| Amoxicillin + clavulanate | Chest infections after smog | ×1.53 | ×1.0 | ×1.0 |
-| Paracetamol IV | Heat or infection | ×1.43 | ×1.60 | ×1.0 |
-| ORS | Heat | ×1.0 | ×1.75+ | ×1.0 |
+| Medicine | Driven by | Smog (AQI 385) | Heatwave | Flood (very heavy / extremely heavy rain) | Cold wave (≤ 4 °C / ≤ 2 °C) | Normal |
+|---|---|:-:|:-:|:-:|:-:|:-:|
+| Salbutamol (nebuliser) | Air quality, cold | ×1.62 | ×1.0 | ×1.0 | ×1.15 / ×1.3 | ×1.0 |
+| Dexamethasone (injection) | Air quality, cold | ×1.62 | ×1.0 | ×1.0 | ×1.15 / ×1.3 | ×1.0 |
+| Cetirizine | Smog and dust | ×1.62 | ×1.0 | ×1.0 | ×1.0 | ×1.0 |
+| Amoxicillin + clavulanate | Chest infections after smog or in cold | ×1.53 | ×1.0 | ×1.0 | ×1.25 / ×1.5 | ×1.0 |
+| Paracetamol IV | Fever: heat, infection, floods, cold | ×1.43 | ×1.60 | ×1.2 / ×1.4 | ×1.15 / ×1.3 | ×1.0 |
+| ORS | Heat, diarrhoea after floods | ×1.0 | ×1.75+ | ×1.5 / ×2.0 | ×1.0 | ×1.0 |
+
+Rain and cold use the India Meteorological Department's own categories ([SOP for Weather Forecasting and Warning](https://mausam.imd.gov.in/imd_latest/contents/pdf/forecasting_sop.pdf)): heavy rain 64.5 mm, very heavy 115.6 mm and extremely heavy 204.5 mm in 24 hours; a cold wave on the plains at a minimum of 4 °C or below, severe at 2 °C. Live, the app reads the heaviest 24-hour rainfall and the lowest minimum from yesterday to three days ahead.
 
 Thresholds are in `app/surge_engine.py`. The engine plans against the worse of today and the 72-hour forecast.
 
@@ -242,8 +245,13 @@ Thresholds are in `app/surge_engine.py`. The engine plans against the worse of t
 | Zheng et al. 2015, *PLoS ONE* ([doi](https://doi.org/10.1371/journal.pone.0138146)), meta-analysis of 37 studies | Asthma ER visits and admissions **+2.3% per 10 µg/m³ PM2.5**; effects strongest at lag ≥ 2 days | Supports the direction and the 1–3 day lag |
 | Kawano et al. 2026, *npj Clean Air* ([link](https://www.nature.com/articles/s44407-026-00053-w)), 1.1 M ambulance dispatches in India | **+3.8%** same-day pediatric dispatches per 10 µg/m³, still raised over 7 days | Supports a same-day rise that lasts about a week |
 | Azhar et al. 2014, *PLoS ONE* ([doi](https://doi.org/10.1371/journal.pone.0091831)), Ahmedabad 2010 heatwave | Deaths **×1.76–2.12** in the hottest week (46.8 °C) | Our ×2.10 above 44 °C matches deaths, not ORS demand; no study measures ORS demand directly |
+| Bush et al. 2014, *EHP* ([doi](https://doi.org/10.1289/ehp.1306807)), Chennai | Gut-illness admissions **×1.60** in the 15 days after very heavy rain (×2.72 in under-fives), peaking days 6–15 | Basis for ORS ×1.5 after heavy rain |
+| Hashizume et al. 2008, *J Water Health* ([doi](https://doi.org/10.2166/wh.2008.062)), Dhaka 1998 flood | Non-cholera diarrhoea visits **about ×2** during the flood | Basis for ORS ×2.0 in extremely heavy rain / real flooding |
+| Kraay et al. 2020, *EHP* ([doi](https://doi.org/10.1289/EHP6181)), meta-analysis | Diarrhoea after floods ×1.23–1.56; strongest 4 days to 1 week after | Supports the size and the lag |
+| Kakarla et al. 2019, *Epidemiol Infect* ([doi](https://doi.org/10.1017/S0950268819000608)), India IDSP | Dengue risk peaks **9–20 weeks** after heavy rain | Not modelled yet: our flood multipliers cover the acute phase only |
+| Feng et al. 2023, *Sci Total Environ* ([doi](https://doi.org/10.1016/j.scitotenv.2022.160726)); Wu et al. 2024, *Environ Res* ([doi](https://doi.org/10.1016/j.envres.2023.117958)) | Respiratory admissions **×1.23** on cold-spell days; pneumonia up to **×1.69** at the peak | Basis for antibiotics ×1.25 / ×1.5 — **both studies are from China; no Indian study of cold spells and illness visits exists** |
 
-**In short:** the direction and timing are supported; the top smog multipliers are set above what Delhi ER data shows, and the heat multipliers are based on mortality, not medicine use. They are planning assumptions (erring toward warning early), to be calibrated against real consumption in a pilot. The 85% / 80% / 70% shares for amoxicillin and paracetamol are design assumptions with no direct source.
+**In short:** the direction and timing are supported; the top smog multipliers are set above what Delhi ER data shows, the heat multipliers are based on mortality, not medicine use, and the cold-wave numbers come from Chinese data. No study measures medicine use directly, so every multiplier assumes use rises in step with cases. They are planning assumptions (erring toward warning early), to be calibrated against real consumption in a pilot. The 85% / 80% / 70% shares for amoxicillin and paracetamol are design assumptions with no direct source.
 
 </details>
 
@@ -282,7 +290,7 @@ cd aarogya-vayu
 cp .env.example .env          # add GEMINI_API_KEY (free at https://aistudio.google.com/)
 
 uv sync                       # or: python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
-uv run pytest -q              # 53 tests; no API keys needed (AI calls fall back offline)
+uv run pytest -q              # 55 tests; no API keys needed (AI calls fall back offline)
 uv run uvicorn app.main:app --port 8000
 ```
 
@@ -311,7 +319,7 @@ app/
   audit_ledger.py        SHA-256 hash-chained audit log
 static/                  Single-page app (Tailwind, Leaflet, Lucide)
 data/                    Sample facilities, inventory and medicines (two regions)
-tests/                   53 tests: allocator invariants, API, scenarios, clinic workflow
+tests/                   55 tests: allocator invariants, API, scenarios, clinic workflow
 scripts/simulate_impact.py  Before/after simulation (writes docs/impact.svg and docs/impact.json)
 ```
 
@@ -348,7 +356,7 @@ A rough estimate for one district of 20 clinics, at Google's published Gemini AP
 | Next | Why |
 |---|---|
 | Pilot on one district's real e-Aushadhi export (read-only) | Replace sample inventory with real stock |
-| Outbreak and flood scenarios (dengue, diarrhoea) | Cover surges that aren't caused by air or heat |
+| Dengue and malaria after the monsoon | Vector-borne fevers peak 1–3 months after heavy rain; floods currently cover the acute diarrhoea phase only |
 | Road distance and 108/102 ambulance return trips | More realistic transport |
 | Learned demand forecast | Once a pilot provides real consumption history |
 | Offline voice and SMS alerts | Clinics with poor connectivity |

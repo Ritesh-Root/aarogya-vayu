@@ -35,6 +35,10 @@ FIRMS_BBOX_DEG = 1.5  # ~165 km around the corridor centroid
 FORECAST_HOURS = 72
 LIVE_SOURCE_PREFIX = "Open-Meteo"
 FAILURE_RETRY_S = 60  # after a failed fetch, serve the fallback for this long instead of re-waiting on timeouts
+# IMD thresholds (SOP for Weather Forecasting and Warning): "very heavy rain" in 24 h, and the
+# cold-wave minimum for the plains (actual minimum <= 4 °C)
+FLOOD_RAIN_MM = 115.6
+COLD_WAVE_MIN_C = 4.0
 STALE_AFTER_S = 3600  # a cached reading older than this is no longer presented as live
 
 
@@ -113,7 +117,8 @@ class LiveTelemetryService:
             w_data = _get_json(
                 f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}"
                 f"&current=temperature_2m,relative_humidity_2m,wind_speed_10m"
-                f"&hourly=temperature_2m,boundary_layer_height&forecast_days=4"
+                f"&hourly=temperature_2m,boundary_layer_height&daily=precipitation_sum,temperature_2m_min"
+                f"&past_days=1&forecast_days=4"
                 f"&timezone=Asia%2FKolkata"
             )
             aq_data = _get_json(
@@ -159,6 +164,11 @@ class LiveTelemetryService:
             fires = self._fetch_fire_hotspots(lat, lng)
 
             hottest = max(temp_c, max_temp_72h or temp_c)
+            daily = w_data.get("daily", {})
+            rain_days = [float(v) for v in daily.get("precipitation_sum", []) if v is not None]
+            tmin_days = [float(v) for v in daily.get("temperature_2m_min", []) if v is not None]
+            rain_24h = max(rain_days) if rain_days else None
+            min_temp = min(tmin_days) if tmin_days else None
             reading = EnvironmentalReading(
                 aqi=aqi,
                 pm25=pm25,
@@ -168,6 +178,10 @@ class LiveTelemetryService:
                 wind_speed_kmh=wind_kmh,
                 heatwave_alert=hottest >= coords["heatwave_threshold_c"],
                 smog_episode=(aqi >= 200 or pm25 >= 120.0 or (peak_aqi or 0) >= 200),
+                flood_alert=rain_24h is not None and rain_24h >= FLOOD_RAIN_MM,
+                cold_wave_alert=min_temp is not None and min_temp <= COLD_WAVE_MIN_C,
+                rain_24h_mm=rain_24h,
+                min_temp_c=min_temp,
                 corridor=coords["name"],
                 source=f"{LIVE_SOURCE_PREFIX} & Copernicus Atmospheric Monitoring Service (CAMS)"
                 + (" + NASA FIRMS" if fires is not None else ""),

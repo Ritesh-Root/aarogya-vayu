@@ -326,6 +326,12 @@
           <button id="scenarioHeat" onclick="switchScenario('heat')" class="px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition cursor-pointer" title="Demo: what happens during a heatwave">
             ☀️ Heatwave (demo)
           </button>
+          <button id="scenarioFlood" onclick="switchScenario('flood')" class="px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition cursor-pointer" title="Demo: very heavy rain and flooding (diarrhoea and fever rise)">
+            🌧️ Flood (demo)
+          </button>
+          <button id="scenarioCold" onclick="switchScenario('cold')" class="px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition cursor-pointer" title="Demo: cold wave (chest infections rise)">
+            ❄️ Cold wave (demo)
+          </button>
           <button id="scenarioNormal" onclick="switchScenario('normal')" class="px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition cursor-pointer" title="Demo: normal air and temperature">
             🌿 Normal (demo)
           </button>
@@ -367,11 +373,11 @@
         <section id="howItWorks" class="bg-clay-inner rounded-3xl border border-clay-salmon/20 p-5 sm:p-6" aria-labelledby="howTitle">
           <div class="flex flex-col xl:flex-row xl:items-center gap-4 xl:gap-8">
             <div class="xl:max-w-md">
-              <h1 id="howTitle" class="text-xl sm:text-2xl font-black text-clay-dark tracking-tight leading-tight">Get medicine to rural clinics before smog or heat empties their shelves</h1>
-              <p class="text-sm text-clay-dark/80 mt-2 leading-relaxed">Aarogya-Vāyu spots clinics that will run out of a medicine within days and proposes moving spare stock from a clinic nearby. A doctor approves every transfer.</p>
+              <h1 id="howTitle" class="text-xl sm:text-2xl font-black text-clay-dark tracking-tight leading-tight">Get medicine to rural clinics before a climate shock empties their shelves</h1>
+              <p class="text-sm text-clay-dark/80 mt-2 leading-relaxed">Smog, heatwaves, floods and cold waves each drive up demand for different medicines. Aarogya-Vāyu spots clinics that will run out within days and proposes moving spare stock from a clinic nearby. A doctor approves every transfer.</p>
             </div>
             <ol class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5 flex-1">
-              <li><button type="button" onclick="jumpToStep('stepAir')" class="how-step"><span class="how-num">1</span><span><strong>Read the air</strong><span>Live air quality and heat raise expected demand</span></span></button></li>
+              <li><button type="button" onclick="jumpToStep('stepAir')" class="how-step"><span class="how-num">1</span><span><strong>Read the weather</strong><span>Smog, heat, heavy rain and cold raise expected demand</span></span></button></li>
               <li><button type="button" onclick="jumpToStep('stepReport')" class="how-step"><span class="how-num">2</span><span><strong>Clinics report stock</strong><span>By voice or text, in Hindi, Odia or English</span></span></button></li>
               <li><button type="button" onclick="jumpToStep('agentPipeline')" class="how-step"><span class="how-num">3</span><span><strong>Find a transfer</strong><span>From a clinic within 35 km that has spare</span></span></button></li>
               <li><button type="button" onclick="jumpToStep('stepApprove')" class="how-step"><span class="how-num">4</span><span><strong>Doctor approves</strong><span>Nothing moves without sign-off</span></span></button></li>
@@ -629,7 +635,7 @@
               <li data-step="air" class="pipe-step" data-state="idle">
                 <span class="pipe-dot"><i data-lucide="wind" class="w-4 h-4"></i></span>
                 <span class="min-w-0">
-                  <span class="pipe-name">Air quality</span>
+                  <span class="pipe-name">Weather &amp; air</span>
                   <span class="pipe-figure">Open-Meteo + CAMS</span>
                 </span>
               </li>
@@ -1186,7 +1192,7 @@
         <p class="text-sm sm:text-base font-medium">When smog or a heatwave hits, breathing and dehydration cases rise within days. Some rural clinics run out of medicine while a clinic nearby has spare stock that may expire. Aarogya-Vāyu finds those clinics and proposes a transfer; the district's Chief Medical Officer approves it.</p>
 
         <ol class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <li class="p-4 bg-clay-inner rounded-2xl border border-clay-salmon/20"><strong class="text-clay-terracotta">1. Read the air.</strong> Live weather and air quality (Open-Meteo, Copernicus CAMS) raise the expected demand for each medicine. The <em>Conditions</em> buttons switch to a smog, heatwave or normal demo.</li>
+          <li class="p-4 bg-clay-inner rounded-2xl border border-clay-salmon/20"><strong class="text-clay-terracotta">1. Read the weather.</strong> Live air quality, heat, rainfall and minimum temperature (Open-Meteo, Copernicus CAMS) raise the expected demand for each medicine: smog for breathing medicines, heat and floods for ORS and fever medicine, cold for antibiotics. The <em>Conditions</em> buttons switch to a smog, heatwave, flood, cold-wave or normal demo, for your browser only.</li>
           <li class="p-4 bg-clay-inner rounded-2xl border border-clay-salmon/20"><strong class="text-clay-terracotta">2. Clinics report stock.</strong> In <em>Report stock by voice</em>, try a sample or press the mic. Gemini picks out the clinic, medicine and count.</li>
           <li class="p-4 bg-clay-inner rounded-2xl border border-clay-salmon/20"><strong class="text-clay-terracotta">3. Find a transfer.</strong> Press <em>Find stock</em> next to a clinic, or <em>Run Agent Pipeline</em>. Gemini calls the transfer solver; the solver picks the donor and quantity (within 35 km, keeping 14 days at the donor, oldest batch first).</li>
           <li class="p-4 bg-clay-inner rounded-2xl border border-clay-salmon/20"><strong class="text-clay-terracotta">4. Doctor approves.</strong> Under <em>Waiting for your approval</em>, press <em>Approve &amp; Reserve Stock</em>. A dispatch note is issued and the step is written to the audit log.</li>

@@ -2,7 +2,7 @@
 // API call, so one visitor pressing Smog doesn't change what everyone else sees. Until a visitor picks
 // one, nothing is sent and the server's own default applies.
 const SCENARIO_KEY = 'aarogya.scenario';
-const SCENARIO_NAMES = ['live', 'smog', 'heat', 'normal'];
+const SCENARIO_NAMES = ['live', 'smog', 'heat', 'flood', 'cold', 'normal'];
 let currentScenario = null;
 try {
   const saved = localStorage.getItem(SCENARIO_KEY);
@@ -345,7 +345,7 @@ async function fetchEnvironmental() {
 
     // Exactly one surge-mode button is highlighted, matching the server's mode for this region
     const isLiveMode = data.mode === 'live';
-    const activeScenario = isLiveMode ? 'live' : (t.smog_episode ? 'smog' : (t.heatwave_alert ? 'heat' : 'normal'));
+    const activeScenario = isLiveMode ? 'live' : (data.scenario || (t.smog_episode ? 'smog' : (t.heatwave_alert ? 'heat' : (t.flood_alert ? 'flood' : (t.cold_wave_alert ? 'cold' : 'normal')))));
     highlightScenarioButton(activeScenario);
 
     // Banner uses the short area name: "Lucknow-Unnao (UP)" rather than the full corridor description
@@ -354,13 +354,21 @@ async function fetchEnvironmental() {
     const pct = key => Math.round(((mults[key] || 1) - 1) * 100);
     if (isLiveMode && data.is_live) {
       if (bannerTitle) bannerTitle.innerHTML = `<span class="inline-flex flex-wrap items-center gap-x-2 gap-y-1"><span>Today's air: ${corridorName}</span><span class="whitespace-nowrap text-[10px] leading-none bg-emerald-500/40 text-emerald-50 border border-emerald-300/50 px-2 py-1 rounded-full uppercase tracking-wider font-extrabold">Live</span></span>`;
-      if (bannerDesc) bannerDesc.textContent = `AQI ${t.aqi} (${aqiCategory(t.aqi)}) · PM2.5 ${t.pm25} µg/m³ · ${t.temperature_c}°C · humidity ${t.humidity_pct ?? 'n/a'}% · wind ${t.wind_speed_kmh ?? 'n/a'} km/h. Source: Open-Meteo and Copernicus CAMS.`;
+      const hazards = [t.flood_alert ? `very heavy rain (${t.rain_24h_mm} mm/24 h)` : '', t.cold_wave_alert ? `cold wave (min ${t.min_temp_c}°C)` : '']
+        .filter(Boolean).join(' and ');
+      if (bannerDesc) bannerDesc.textContent = `AQI ${t.aqi} (${aqiCategory(t.aqi)}) · PM2.5 ${t.pm25} µg/m³ · ${t.temperature_c}°C · humidity ${t.humidity_pct ?? 'n/a'}% · wind ${t.wind_speed_kmh ?? 'n/a'} km/h${hazards ? ` · Alert: ${hazards}` : ''}. Source: Open-Meteo and Copernicus CAMS.`;
     } else if (isLiveMode) {
       if (bannerTitle) bannerTitle.textContent = `${area}: live air data unavailable`;
       if (bannerDesc) bannerDesc.textContent = `Showing a stored baseline, not live data · AQI ${t.aqi} · ${t.temperature_c}°C`;
     } else if (t.smog_episode) {
       if (bannerTitle) bannerTitle.textContent = `Demo: winter smog over ${area}`;
       if (bannerDesc) bannerDesc.textContent = `AQI ${t.aqi} · PM2.5 ${t.pm25} µg/m³ · demand for breathing medicines up ${pct('AQI / Smog')}%. Hospital visits rise 1–3 days after a PM2.5 peak.`;
+    } else if (t.flood_alert) {
+      if (bannerTitle) bannerTitle.textContent = `Demo: flood and heavy rain, ${area}`;
+      if (bannerDesc) bannerDesc.textContent = `${t.rain_24h_mm ?? 'n/a'} mm of rain in 24 h · ORS demand up ${pct('Heatwave / Drought')}%, fever medicine up ${pct('Heat / Infection')}%. Diarrhoea and fever cases rise in the days after.`;
+    } else if (t.cold_wave_alert) {
+      if (bannerTitle) bannerTitle.textContent = `Demo: cold wave over ${area}`;
+      if (bannerDesc) bannerDesc.textContent = `Minimum ${t.min_temp_c ?? t.temperature_c}°C · antibiotic demand up ${pct('Secondary Respiratory')}% for chest infections; AQI ${t.aqi}.`;
     } else if (t.heatwave_alert) {
       if (bannerTitle) bannerTitle.textContent = `Demo: heatwave over ${area}`;
       if (bannerDesc) bannerDesc.textContent = `${t.temperature_c}°C · demand for ORS (rehydration salts) up ${pct('Heatwave / Drought')}%.`;
@@ -400,6 +408,16 @@ function updateAtmosphericPlume(t) {
     fillColor = '#DE6B48';
     fillOpacity = 0.32;
     label = `🌫️ ${corridorName} Smog Inversion Corridor • Mixing Height: ${blhText} • AQI ${t.aqi} • PM2.5: ${t.pm25} µg/m³`;
+  } else if (t.flood_alert) {
+    strokeColor = '#1D4ED8';
+    fillColor = '#3B82F6';
+    fillOpacity = 0.28;
+    label = `🌧️ ${corridorName} Flood Zone • Rain: ${t.rain_24h_mm ?? 'n/a'} mm/24 h • Diarrhoea & fever risk`;
+  } else if (t.cold_wave_alert) {
+    strokeColor = '#0E7490';
+    fillColor = '#67E8F9';
+    fillOpacity = 0.26;
+    label = `❄️ ${corridorName} Cold Wave • Min: ${t.min_temp_c ?? t.temperature_c}°C • Chest infection risk`;
   } else if (t.heatwave_alert) {
     strokeColor = '#DC2626';
     fillColor = '#F97316';
@@ -459,7 +477,7 @@ function updateAtmosphericPlume(t) {
     if (blh !== null) {
       hudInversion.textContent = `${blh.toLocaleString()} m (${blh < 300 ? 'smog trapped' : (blh < 800 ? 'slow to clear' : 'clears normally')})`;
     } else {
-      hudInversion.textContent = t.smog_episode ? "Smog demo" : (t.heatwave_alert ? "Heatwave demo" : "Clears normally");
+      hudInversion.textContent = t.smog_episode ? "Smog demo" : (t.heatwave_alert ? "Heatwave demo" : (t.flood_alert ? "Flood demo" : (t.cold_wave_alert ? "Cold wave demo" : "Clears normally")));
     }
   }
 }
@@ -1582,7 +1600,7 @@ const PIPE_STEP_OF = {
   LogisticsAgent: 'transfer',
   GovernanceAgent: 'cmo'
 };
-const PIPE_LABEL = { air: 'Air quality agent', intake: 'Field report agent', demand: 'Demand agent', transfer: 'Transfer agent', cmo: 'Governance' };
+const PIPE_LABEL = { air: 'Weather & air agent', intake: 'Field report agent', demand: 'Demand agent', transfer: 'Transfer agent', cmo: 'Governance' };
 const PIPE_ICON = { air: 'wind', intake: 'mic', demand: 'trending-up', transfer: 'route', cmo: 'shield-check' };
 const PIPE_ACTION = { TOOL_CALL: 'called the transfer solver', TOOL_RESULT: 'solver result', GROUNDING_MATCH: 'matched the drug list' };
 
@@ -1615,7 +1633,8 @@ function pipelineStepSummary(data, traces) {
   return {
     air: {
       state: ['SEVERE_COMPOUND_INVERSION', 'ELEVATED_SURGE'].includes(condition) ? 'alert' : 'done',
-      figure: tel.aqi !== undefined ? `AQI ${tel.aqi} · ${tel.is_live ? 'live' : 'scenario'}` : undefined
+      figure: tel.aqi === undefined ? undefined
+        : `${tel.flood_alert ? `Rain ${tel.rain_24h_mm} mm` : tel.cold_wave_alert ? `Min ${tel.min_temp_c}°C` : `AQI ${tel.aqi}`} · ${tel.is_live ? 'live' : 'scenario'}`
     },
     intake: {
       state: usedReport ? 'done' : 'skipped',
@@ -2179,6 +2198,12 @@ function renderNotifications() {
       card('red', '🌫️ Poor Air Quality', `AQI ${escapeHtml(t.aqi)} &bull; ${escapeHtml(aqiCategory(t.aqi))}`,
         `${escapeHtml(source)} for ${escapeHtml(t.corridor || '')}: PM2.5 ${escapeHtml(t.pm25)} µg/m³${t.forecast_peak_aqi_72h ? `, 72h peak AQI ${escapeHtml(t.forecast_peak_aqi_72h)}` : ''}. Respiratory demand is raised in the forecast.`);
     }
+    if (t.flood_alert) {
+      card('red', '🌧️ Flood / Very Heavy Rain', `${escapeHtml(t.rain_24h_mm ?? 'n/a')} mm / 24 h`, `${escapeHtml(source)}: diarrhoea and fever usually rise in the days after; ORS and fever-medicine demand is raised in the forecast.`);
+    }
+    if (t.cold_wave_alert) {
+      card('red', '❄️ Cold Wave', `Min ${escapeHtml(t.min_temp_c ?? t.temperature_c)}°C`, `${escapeHtml(source)}: chest infections rise in cold spells; antibiotic and fever-medicine demand is raised in the forecast.`);
+    }
     if (t.heatwave_alert) {
       card('red', '☀️ Heatwave Alert', `${escapeHtml(t.temperature_c)}°C`, `${escapeHtml(source)}: heatwave threshold reached; ORS and fluids demand is raised in the forecast.`);
     }
@@ -2418,7 +2443,7 @@ function aqiCategory(aqi) {
 
 function highlightScenarioButton(active) {
   const inactive = 'px-3.5 py-2 rounded-full font-bold text-xs sm:text-sm text-clay-muted hover:text-clay-dark hover:bg-white transition cursor-pointer';
-  const ids = { live: 'scenarioLive', smog: 'scenarioSmog', heat: 'scenarioHeat', normal: 'scenarioNormal' };
+  const ids = { live: 'scenarioLive', smog: 'scenarioSmog', heat: 'scenarioHeat', flood: 'scenarioFlood', cold: 'scenarioCold', normal: 'scenarioNormal' };
   Object.entries(ids).forEach(([key, id]) => {
     const el = document.getElementById(id);
     if (!el) return;

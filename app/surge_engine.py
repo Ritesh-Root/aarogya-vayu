@@ -3,6 +3,22 @@ import math
 from typing import List, Dict, Optional, Tuple
 from app.models import EnvironmentalReading, StockoutRiskAssessment, Facility, Medicine, InventoryItem
 
+# ---- Heavy rain / floods and cold waves (sources in the README, "How weather changes demand") ----
+# Rain bands use IMD's 24 h categories (SOP for Weather Forecasting and Warning): heavy 64.5 mm,
+# extremely heavy 204.5 mm. Diarrhoea admissions rise about x1.5 after heavy rain (Bush 2014, Chennai,
+# RR 1.60; Kraay 2020 meta-analysis 1.23-1.56) and about x2 in real floods (Hashizume 2008, Dhaka).
+FLOOD_BANDS = [(64.5, 1.5), (204.5, 2.0)]
+FLOOD_ALERT_MIN = 1.5
+# Cold bands use IMD's plains cold-wave minimums (cold wave <= 4 °C, severe <= 2 °C). Pneumonia
+# admissions rise about x1.23 in cold spells and up to x1.69 at the peak (Feng 2023; Wu 2024; both China:
+# no Indian morbidity study exists). The <= 10 °C band (IMD's cold-wave eligibility) is a low-confidence x1.1.
+COLD_BANDS = [(10.0, 1.1), (4.0, 1.25), (2.0, 1.5)]
+COLD_ALERT_MIN = 1.25
+# Share of a hazard's surge that partly sensitive categories take (indirect evidence; low confidence)
+FLOOD_SHARE = {"Heat / Infection": 0.4}             # fever medicine: about x1.2 in the acute phase
+COLD_SHARE = {"AQI / Smog": 0.6, "Heat / Infection": 0.6}  # salbutamol ~x1.15 (x1.3 severe); paracetamol ~x1.15
+
+
 class SurgeEngine:
     def __init__(self, facilities_path, medicines_path):
         if isinstance(facilities_path, dict):
@@ -23,8 +39,9 @@ class SurgeEngine:
 
     def calculate_surge_multipliers(self, env: EnvironmentalReading) -> Dict[str, float]:
         """
-        Calculates category-specific consumption surge multipliers based on
-        environmental readings (Air Quality, PM2.5, Temperature).
+        Category-specific consumption multipliers from the environment: air quality, heat,
+        heavy rain / floods and cold waves. Each medicine category takes the strongest of the
+        hazards that drive it (a share of a hazard's surge where it is only partly driven by it).
         """
         # Plan against the worse of now and the 72h forecast peak (live telemetry only)
         aqi = max(env.aqi, env.forecast_peak_aqi_72h or 0)
@@ -58,14 +75,50 @@ class SurgeEngine:
         if env.smog_episode:
             resp_mult = max(resp_mult, 1.55)
 
+        flood_mult = self._flood_multiplier(env)
+        cold_mult = self._cold_multiplier(env)
+
+        def share(mult: float, fraction: float) -> float:
+            return 1 + fraction * (mult - 1)
+
         return {
-            "AQI / Smog": resp_mult,
-            "Heatwave / Drought": heat_mult,
-            # Partly sensitive categories take a share of the surge, and are exactly 1.0 at baseline
-            "Secondary Respiratory": round(1 + 0.85 * (resp_mult - 1), 3),
-            "Heat / Infection": round(max(1 + 0.8 * (heat_mult - 1), 1 + 0.7 * (resp_mult - 1)), 3),
-            "Smog / Dust": resp_mult
+            # Salbutamol, dexamethasone: air quality; cold air also triggers asthma/COPD flare-ups
+            "AQI / Smog": round(max(resp_mult, share(cold_mult, COLD_SHARE["AQI / Smog"])), 3),
+            # ORS: heat, and diarrhoea after floods
+            "Heatwave / Drought": round(max(heat_mult, flood_mult), 3),
+            # Partly sensitive categories take a share of each surge, and are exactly 1.0 at baseline
+            "Secondary Respiratory": round(max(share(resp_mult, 0.85), cold_mult), 3),
+            "Heat / Infection": round(max(share(heat_mult, 0.8), share(resp_mult, 0.7),
+                                          share(flood_mult, FLOOD_SHARE["Heat / Infection"]), share(cold_mult, COLD_SHARE["Heat / Infection"])), 3),
+            "Smog / Dust": resp_mult,
+            # Hazard levels themselves, for display
+            "Flood / Heavy rain": flood_mult,
+            "Cold wave": cold_mult,
         }
+
+    @staticmethod
+    def _flood_multiplier(env: EnvironmentalReading) -> float:
+        """Diarrhoeal and fever demand after heavy rain, banded on IMD 24 h rainfall categories."""
+        rain = env.rain_24h_mm or 0.0
+        mult = 1.0
+        for threshold, value in FLOOD_BANDS:
+            if rain >= threshold:
+                mult = value
+        if env.flood_alert:
+            mult = max(mult, FLOOD_ALERT_MIN)
+        return mult
+
+    @staticmethod
+    def _cold_multiplier(env: EnvironmentalReading) -> float:
+        """Respiratory-infection demand in cold spells, banded on the minimum temperature."""
+        tmin = env.min_temp_c if env.min_temp_c is not None else env.temperature_c
+        mult = 1.0
+        for threshold, value in COLD_BANDS:
+            if tmin <= threshold:
+                mult = value
+        if env.cold_wave_alert:
+            mult = max(mult, COLD_ALERT_MIN)
+        return mult
 
     def assess_facility_risks(
         self,

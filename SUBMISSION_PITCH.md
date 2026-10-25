@@ -134,6 +134,9 @@ These remain assumptions to validate in a pilot:
 #### Q6: "Where do the multipliers (×1.62 etc.) come from?"
 **Answer:** They are planning assumptions, and we checked them against the literature. The direction and timing are well supported: a meta-analysis of 37 studies finds asthma ER visits rise about 2.3% per 10 µg/m³ PM2.5, strongest 1–3 days later (Zheng 2015, *PLoS ONE*), and Indian ambulance data shows a same-day rise lasting about a week (Kawano 2026, *npj Clean Air*). Our top smog bands are higher than Delhi ER data, where children's respiratory visits rose 21–29% on polluted days (Yadav 2021, AIIMS). So they err toward warning early; a pilot would calibrate them against real consumption. Heat multipliers follow the 2010 Ahmedabad heatwave mortality ratio (×1.76–2.12); no study measures ORS demand directly.
 
+#### Q6b: "What about floods and cold waves?"
+**Answer:** Both are in. The app reads rainfall and minimum temperature from the same live feed and uses IMD's own thresholds (very heavy rain 115.6 mm in 24 h, cold wave at ≤ 4 °C on the plains). After heavy rain ORS demand rises ×1.5, and ×2 in real flooding, based on Chennai and Dhaka studies (Bush 2014, Hashizume 2008), peaking 4–15 days later. In a cold wave antibiotics rise ×1.25 (×1.5 when severe), based on pneumonia admissions in cold spells; that evidence is from China, because there is no Indian study yet. Dengue and malaria after the monsoon come 1–3 months later and are next on the roadmap.
+
 #### Q7: "Does it actually reduce stockouts?"
 **Answer:** In simulation on our sample clinics: 42% fewer clinic-days out of stock in the first week of a smog surge, 83% in a heatwave. It also shows the limit honestly: after about two weeks the whole district is short, redistribution stops helping, and the app escalates unmet demand for resupply. Field evidence needs a pilot.
 

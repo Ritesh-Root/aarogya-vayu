@@ -1200,3 +1200,49 @@ def test_scenario_approval_uses_the_callers_quantity_and_survives_cache_loss():
     entries = entries if isinstance(entries, list) else entries.get("entries", [])
     context = [e for e in entries if e.get("event_type") == "APPROVAL_PLANNING_CONTEXT"]
     assert context and context[-1]["details"]["scenario"] == "smog" and context[-1]["details"]["simulated"] is True
+
+
+def test_flood_and_cold_wave_raise_the_right_medicines():
+    base = dict(aqi=60, pm25=20.0, temperature_c=26.0, heatwave_alert=False, smog_episode=False)
+    normal = surge_engine.calculate_surge_multipliers(EnvironmentalReading(**base))
+    assert all(v == 1.0 for v in normal.values()), normal
+
+    flood = surge_engine.calculate_surge_multipliers(EnvironmentalReading(**base, rain_24h_mm=140.0, flood_alert=True))
+    assert flood["Heatwave / Drought"] > 1.0          # ORS: diarrhoea after floods
+    assert flood["Heat / Infection"] > 1.0            # paracetamol IV: fevers after rain
+    assert flood["AQI / Smog"] == 1.0                 # salbutamol not driven by rain
+
+    cold = surge_engine.calculate_surge_multipliers(EnvironmentalReading(**{**base, "temperature_c": 8.0}, min_temp_c=3.0, cold_wave_alert=True))
+    assert cold["Secondary Respiratory"] > 1.0        # amoxicillin: chest infections
+    assert cold["Heatwave / Drought"] == 1.0          # ORS not driven by cold
+
+    # Smog numbers (and the demo's Kakori figures) are unchanged by the new hazards
+    smog = surge_engine.calculate_surge_multipliers(EnvironmentalReading(aqi=385, pm25=265.0, temperature_c=17.5, smog_episode=True))
+    assert smog["AQI / Smog"] == 1.62
+
+    for sc in ("flood", "cold"):
+        env = client.get(f"/api/environmental?region=lucknow&scenario={sc}").json()
+        assert env["scenario"] == sc and env["telemetry"][f"{'flood' if sc == 'flood' else 'cold_wave'}_alert"] is True
+
+
+def test_live_telemetry_flags_heavy_rain_and_cold(monkeypatch):
+    t_w, temps = _hourly(24, 96, lambda h: 12.0)
+    _, blh = _hourly(24, 96, lambda h: 400.0)
+    t_aq, aqi = _hourly(720, 96, lambda h: 90)
+    _, pm = _hourly(720, 96, lambda h: 30.0)
+    _, aod = _hourly(720, 96, lambda h: 0.3)
+
+    def fake_get_json(url, timeout=5):
+        if "air-quality" in url:
+            return {"current": {"pm2_5": 30.0, "pm10": 40.0, "us_aqi": 90, "aerosol_optical_depth": 0.3, "time": "now"},
+                    "hourly": {"time": t_aq, "us_aqi": aqi, "pm2_5": pm, "aerosol_optical_depth": aod}}
+        assert "daily=precipitation_sum,temperature_2m_min" in url
+        return {"current": {"temperature_2m": 12.0, "relative_humidity_2m": 90.0, "wind_speed_10m": 6.0},
+                "hourly": {"time": t_w, "temperature_2m": temps, "boundary_layer_height": blh},
+                "daily": {"precipitation_sum": [2.0, 130.5, None, 10.0, 0.0], "temperature_2m_min": [6.0, 3.5, 5.0, 7.0, 8.0]}}
+
+    monkeypatch.setattr(telemetry_module, "_get_json", fake_get_json)
+    monkeypatch.delenv("FIRMS_MAP_KEY", raising=False)
+    reading = telemetry_module.LiveTelemetryService(cache_ttl_seconds=0).fetch_live_reading("lucknow")
+    assert reading.rain_24h_mm == 130.5 and reading.flood_alert is True
+    assert reading.min_temp_c == 3.5 and reading.cold_wave_alert is True
