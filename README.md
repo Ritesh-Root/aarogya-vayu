@@ -33,16 +33,16 @@ When winter smog settles over the Indo-Gangetic plain, breathing problems surge 
 <td width="50%" valign="top">
 
 ### 🔴 PHC Kakori
-**15** salbutamol respules left
-Uses **32.4 a day** during smog (×1.62)
+**15** salbutamol respules left<br>
+Uses **32.4 a day** during smog (×1.62)<br>
 ➜ **0.5 days** until it runs out
 
 </td>
 <td width="50%" valign="top">
 
 ### 🟢 CHC Nawabganj, 30.2 km away
-Has **spare** salbutamol
-Its batch **expires in ~70 days**
+Has **spare** salbutamol<br>
+Its batch **expires in ~70 days**<br>
 ➜ will be **thrown away** if nobody uses it
 
 </td>
