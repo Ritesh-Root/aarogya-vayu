@@ -252,6 +252,84 @@ async def sync_live_env(reg: str, force: bool = False) -> None:
             or (previous.heatwave_alert, previous.smog_episode) != (reading.heatwave_alert, reading.smog_episode):
         recompute_recommendations(reg)
 
+# ---- Per-browser scenarios ----
+# Each browser keeps its own scenario (live / smog / heat / normal) and sends it as ?scenario=.
+# The server derives the environment and the transfer proposals from that, so one visitor
+# pressing Smog no longer changes what everyone else sees. Requests without ?scenario= keep
+# the older shared per-region mode (used by tests and older clients).
+SCENARIOS = ("live", "smog", "heat", "normal")
+SCENARIO_PRESETS: Dict[str, Dict[str, EnvironmentalReading]] = {
+    "bhubaneswar": {
+        "smog": EnvironmentalReading(aqi=385, pm25=265.0, temperature_c=17.5, humidity_pct=78.0, heatwave_alert=False,
+                                     smog_episode=True, corridor="Bhubaneswar–Cuttack Inversion Corridor"),
+        "heat": EnvironmentalReading(aqi=140, pm25=65.0, temperature_c=43.5, humidity_pct=35.0, heatwave_alert=True,
+                                     smog_episode=False, corridor="Coastal Odisha Heatwave Corridor (Severe Dehydration Risk)"),
+        "normal": EnvironmentalReading(aqi=75, pm25=28.0, temperature_c=26.0, humidity_pct=60.0, heatwave_alert=False,
+                                       smog_episode=False, corridor="Bhubaneswar Coastal Baseline Operations"),
+    },
+    "lucknow": {
+        "smog": EnvironmentalReading(aqi=385, pm25=265.0, temperature_c=17.5, humidity_pct=78.0, heatwave_alert=False,
+                                     smog_episode=True, corridor="Lucknow-Unnao Indo-Gangetic Smog Corridor (Severe Inversion)"),
+        "heat": EnvironmentalReading(aqi=140, pm25=65.0, temperature_c=43.5, humidity_pct=35.0, heatwave_alert=True,
+                                     smog_episode=False, corridor="Central Awadh Heatwave Corridor (Severe Dehydration Risk)"),
+        "normal": EnvironmentalReading(aqi=75, pm25=28.0, temperature_c=26.0, humidity_pct=60.0, heatwave_alert=False,
+                                       smog_episode=False, corridor="Baseline Seasonal Conditions"),
+    },
+}
+_last_live_reading: Dict[str, EnvironmentalReading] = {}
+_view_recs: Dict[tuple, Dict[str, TransferRecommendation]] = {}
+
+
+def resolve_scenario(scenario: Any) -> Optional[str]:
+    if scenario is None or scenario == "":
+        return None
+    sc = str(scenario).strip().lower()
+    if sc not in SCENARIOS:
+        raise HTTPException(status_code=400, detail=f"Unknown scenario '{sc}'. Available: {list(SCENARIOS)}")
+    return sc
+
+
+async def env_for(reg: str, scenario: Optional[str]) -> EnvironmentalReading:
+    """The environment a request should plan against: its own scenario, or the shared region mode."""
+    if scenario is None:
+        await sync_live_env(reg)
+        return current_env_by_region.get(reg, current_env)
+    if scenario == "live":
+        reading = await asyncio.to_thread(telemetry_service.fetch_live_reading, reg)  # cached upstream
+        if is_live_reading(reading):
+            _last_live_reading[reg] = reading
+        # Feed unavailable: keep the last live reading, else the region's current reading (as the shared mode does),
+        # rather than the telemetry service's invented baseline
+        return _last_live_reading.get(reg) or current_env_by_region.get(reg, current_env)
+    return SCENARIO_PRESETS[reg][scenario]
+
+
+def view_recommendations(reg: str, scenario: Optional[str], env: EnvironmentalReading):
+    """Transfer proposals and unmet demand for one region under one scenario."""
+    if scenario is None:
+        return active_recommendations_by_region[reg], active_unmet_demands_by_region[reg]
+    inv, consignments, _, _ = storage.load_all(region=reg)
+    closed = {c.get("recommendation_id") for c in consignments.values() if c.get("status") in ("RECEIVED", "CANCELLED")}
+    inbound, active_ids = committed_transfers(consignments)
+    risks = surge_engine.assess_facility_risks(inv, env, inbound)
+    recs = optimizer.optimize(risks, inv, active_ids)
+    # An approval is a real-world action, so it shows in every view, rebuilt from the stored consignment
+    # (any instance can do this) and never overwritten by a pending copy from another scenario
+    view: Dict[str, TransferRecommendation] = {}
+    for c in consignments.values():
+        snap = c.get("recommendation_snapshot")
+        if snap and c.get("status") in ("APPROVED_RESERVED", "DISPATCHED") and c.get("recommendation_id") not in closed:
+            view[snap["id"]] = TransferRecommendation(**snap)
+    for cached in [active_recommendations_by_region[reg]] + [v for (r, _), v in _view_recs.items() if r == reg]:
+        for rid, r in cached.items():
+            if r.status == "APPROVED" and rid not in closed:
+                view.setdefault(rid, r)
+    for r in recs:
+        view.setdefault(r.id, r)
+    _view_recs[(reg, scenario)] = view
+    return view, optimizer.get_unmet_demands()
+
+
 # Static files mount
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -375,23 +453,25 @@ async def get_system_capabilities():
             "demand_forecast": "Rule-based lag-curve forecaster driven by live surge multipliers (not a trained ML model)",
             "facilities": "Named after real PHC/CHC sites; coordinates, population and staffing are demo values, not an official registry",
             "inventory": "SYNTHETIC demo stock register (no public API exposes PHC stock)",
-            "scenario_presets": "SIMULATED: Smog/Heatwave/Baseline buttons override live telemetry until Live is reselected",
+            "scenario_presets": "SIMULATED: Smog/Heatwave/Normal buttons replace live telemetry for that browser only (sent as ?scenario=); other visitors are unaffected",
         }
     }
 
 @app.get("/api/environmental")
-async def get_environmental(region: Optional[str] = None, live: bool = False):
+async def get_environmental(region: Optional[str] = None, live: bool = False, scenario: Optional[str] = None):
     reg = resolve_region(region)
-    if live and reg in env_mode_by_region:
+    sc = resolve_scenario(scenario)
+    if sc is None and live and reg in env_mode_by_region:
         env_mode_by_region[reg] = "live"
-    await sync_live_env(reg)
-    reg_env = current_env_by_region.get(reg, current_env)
+    reg_env = await env_for(reg, sc)
 
     multipliers = surge_engine.calculate_surge_multipliers(reg_env)
+    mode = env_mode_by_region.get(reg, "scenario") if sc is None else ("live" if sc == "live" else "scenario")
     return {
         "region": reg,
         "is_live": is_live_reading(reg_env),
-        "mode": env_mode_by_region.get(reg, "scenario"),
+        "mode": mode,
+        "scenario": sc,
         "telemetry": reg_env.model_dump(),
         "surge_multipliers": multipliers
     }
@@ -471,32 +551,31 @@ async def update_environmental(env: EnvironmentalReading, region: Optional[str] 
     return {"status": "updated", "region": reg, "telemetry": env}
 
 @app.get("/api/risks")
-async def get_risks(region: Optional[str] = None):
+async def get_risks(region: Optional[str] = None, scenario: Optional[str] = None):
     reg = resolve_region(region)
-    await sync_live_env(reg)
+    reg_env = await env_for(reg, resolve_scenario(scenario))
     inv, consignments, _, _ = storage.load_all(region=reg)
-    reg_env = current_env_by_region.get(reg, current_env)
     inbound, _ = committed_transfers(consignments)
     risks = surge_engine.assess_facility_risks(inv, reg_env, inbound)
     return [r.model_dump() for r in risks]
 
 @app.get("/api/recommendations")
-async def get_recommendations(region: Optional[str] = None):
+async def get_recommendations(region: Optional[str] = None, scenario: Optional[str] = None):
     reg = resolve_region(region)
-    await sync_live_env(reg)
-    recs_dict = active_recommendations_by_region.get(reg, active_recommendations)
+    sc = resolve_scenario(scenario)
+    recs_dict, _ = view_recommendations(reg, sc, await env_for(reg, sc))
     return [r.model_dump() for r in recs_dict.values()]
 
 @app.get("/api/unmet-demands")
-async def get_unmet_demands(region: Optional[str] = None):
+async def get_unmet_demands(region: Optional[str] = None, scenario: Optional[str] = None):
     """
     Returns clinical shortages where peer-to-peer redistribution is mathematically
     infeasible (no corridor donor retains >=14d safety reserve within 35km).
     Escalated to District Replenishment Requisition Queue.
     """
     reg = resolve_region(region)
-    await sync_live_env(reg)
-    unmet_list = active_unmet_demands_by_region.get(reg, active_unmet_demands)
+    sc = resolve_scenario(scenario)
+    _, unmet_list = view_recommendations(reg, sc, await env_for(reg, sc))
     return [u.model_dump() for u in unmet_list]
 
 # Per-client throttle for endpoints that spend paid LLM calls (per serverless instance)
@@ -589,19 +668,32 @@ async def process_voice_intake(request: VoiceIntakeRequest, http_request: Reques
     return result.model_dump()
 
 @app.post("/api/approve-transfer")
-async def approve_transfer(req: ApprovalRequest):
+async def approve_transfer(req: ApprovalRequest, scenario: Optional[str] = None):
     """
     CMO / Authorized Officer transfer approval:
     Transitions recommendation into a durable TransferConsignment (status='APPROVED_RESERVED').
     Donor available stock is reserved. Recipient inventory is NOT credited until physical receipt.
     """
-    rec = active_recommendations.get(req.recommendation_id)
-    if not rec:
-        for reg_recs in active_recommendations_by_region.values():
-            if req.recommendation_id in reg_recs:
-                rec = reg_recs[req.recommendation_id]
+    sc = resolve_scenario(scenario)
+    rec = None
+    planning_env = None
+    if sc is not None:
+        # The same ID can carry a different quantity under another scenario, so use this browser's own view
+        for reg in REGIONS_CONFIG:
+            reg_env = await env_for(reg, sc)
+            view, _ = view_recommendations(reg, sc, reg_env)
+            rec = view.get(req.recommendation_id)
+            if rec:
+                planning_env = reg_env
                 break
-    if not rec:
+    else:
+        rec = active_recommendations.get(req.recommendation_id)
+        if not rec:
+            for reg_recs in active_recommendations_by_region.values():
+                if req.recommendation_id in reg_recs:
+                    rec = reg_recs[req.recommendation_id]
+                    break
+    if not rec and sc is None:
         # IDs are deterministic, so a recommendation listed by another serverless instance can be rebuilt here
         for reg in REGIONS_CONFIG:
             recompute_recommendations(reg)
@@ -613,6 +705,14 @@ async def approve_transfer(req: ApprovalRequest):
 
     already_approved = (rec.status == "APPROVED")
     consignment = domain_service.approve_transfer_to_consignment(req, rec)
+    if planning_env is not None and not already_approved:
+        # Record which conditions the proposal was planned under, so a simulated preset is never mistaken for live data
+        audit_ledger.record_entry(
+            event_type="APPROVAL_PLANNING_CONTEXT",
+            details={"recommendation_id": rec.id, "consignment_id": consignment.id, "scenario": sc,
+                     "simulated": sc != "live", "aqi": planning_env.aqi, "temperature_c": planning_env.temperature_c},
+            approved_by=req.officer_name
+        )
     recompute_recommendations()
 
     return {
@@ -752,7 +852,7 @@ async def verify_audit_ledger():
     return audit_ledger.verify_chain_integrity()
 
 @app.post("/api/agents/run-resilience-pipeline")
-async def run_resilience_pipeline(http_request: Request, payload: Dict[str, Any] = Body(default={})):
+async def run_resilience_pipeline(http_request: Request, payload: Dict[str, Any] = Body(default={}), scenario: Optional[str] = None):
     target_phc = payload.get("target_facility_id") or REGIONS_CONFIG[active_region_id]["default_facility_id"]
     if not isinstance(target_phc, str) or target_phc not in facilities_dict:
         raise HTTPException(status_code=400, detail="Unknown target_facility_id")
@@ -763,14 +863,16 @@ async def run_resilience_pipeline(http_request: Request, payload: Dict[str, Any]
     set_request_deadline(PIPELINE_LLM_BUDGET_S)
     # The facility decides the region; the per-instance active region may belong to another user or instance
     reg = domain_service.get_region_for_facility(target_phc)
-    await sync_live_env(reg)
+    sc = resolve_scenario(scenario)
+    reg_env = await env_for(reg, sc)
     intake = None
     if snippet:
         parsed = await voice_service.parse_and_validate(VoiceIntakeRequest(transcript_text=snippet, facility_id=target_phc))
         intake = parsed.model_dump()
     inv, consignments, _, _ = storage.load_all(region=reg)
-    result = await agent_orchestrator.run_pipeline(current_env_by_region[reg], inv, target_phc, intake, consignments)
-    recompute_recommendations(reg)
+    result = await agent_orchestrator.run_pipeline(reg_env, inv, target_phc, intake, consignments)
+    if sc is None:
+        recompute_recommendations(reg)
     audit_ledger.record_entry(
         event_type="MULTI_AGENT_PIPELINE_RUN",
         details={
@@ -782,11 +884,11 @@ async def run_resilience_pipeline(http_request: Request, payload: Dict[str, Any]
     return result
 
 @app.post("/api/agents/run")
-async def run_agents_alias(http_request: Request, payload: Dict[str, Any] = Body(default={})):
-    return await run_resilience_pipeline(http_request, payload)
+async def run_agents_alias(http_request: Request, payload: Dict[str, Any] = Body(default={}), scenario: Optional[str] = None):
+    return await run_resilience_pipeline(http_request, payload, scenario)
 
 @app.post("/api/cmo/chat")
-async def cmo_chat(http_request: Request, payload: Dict[str, Any] = Body(...)):
+async def cmo_chat(http_request: Request, payload: Dict[str, Any] = Body(...), scenario: Optional[str] = None):
     question = str(payload.get("question") or "")
     if not question:
         raise HTTPException(status_code=400, detail="Question is required")
@@ -794,9 +896,8 @@ async def cmo_chat(http_request: Request, payload: Dict[str, Any] = Body(...)):
         raise HTTPException(status_code=400, detail=f"Question exceeds {MAX_LLM_INPUT_CHARS} characters")
     enforce_llm_rate_limit(http_request)
     reg = resolve_region(payload.get("region"))
-    await sync_live_env(reg)
+    reg_env = await env_for(reg, resolve_scenario(scenario))
     inv, consignments, _, _ = storage.load_all(region=reg)
-    reg_env = current_env_by_region.get(reg, current_env)
     try:
         response = await agent_orchestrator.query_strategic_insight(question, reg_env, inv, consignments)
     except Exception:

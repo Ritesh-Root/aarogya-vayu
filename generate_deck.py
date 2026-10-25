@@ -35,6 +35,7 @@ IMG_GIS_MAP = os.path.join(SHOT_DIR, "proj_facility_map.png")
 IMG_CMO_STUDIO = os.path.join(SHOT_DIR, "proj_cmo_ai_studio.png")
 IMG_VISION = os.path.join(SHOT_DIR, "proj_vision_ocr_verification.png")
 IMG_LEDGER = os.path.join(SHOT_DIR, "proj_cryptographic_ledger.png")
+IMG_IMPACT = os.path.join(os.path.dirname(SHOT_DIR), "docs", "impact.png")
 
 prs = Presentation()
 prs.slide_width = Inches(13.333)
@@ -662,13 +663,38 @@ for m_v, m_d, m_c in imp_metrics:
     p.space_after = Pt(4)
 
 # ==============================================================================
+# SLIDE 10: Simulated impact (scripts/simulate_impact.py)
+# ==============================================================================
+slide_sim = prs.slides.add_slide(blank_slide_layout)
+set_slide_background(slide_sim)
+add_header(
+    slide_sim,
+    "09 / DOES IT HELP?",
+    "Fewer Stockouts in the First Week of a Surge",
+    "Simulation on the app's 40 sample clinics with its own engine and allocator (20 runs, no store deliveries in the window)"
+)
+add_card(slide_sim, Inches(0.8), Inches(1.45), Inches(11.7), Inches(5.55), bg_color=CARD_BG, border_color=CARD_BORDER, corner_radius=0.025)
+if os.path.exists(IMG_IMPACT):
+    pic_w = Inches(10.2)
+    slide_sim.shapes.add_picture(IMG_IMPACT, Inches(0.8) + (Inches(11.7) - pic_w) // 2, Inches(1.6), pic_w)
+tb_s = slide_sim.shapes.add_textbox(Inches(1.1), Inches(6.62), Inches(11.1), Inches(0.36))
+tf_s = tb_s.text_frame
+tf_s.word_wrap = True
+tf_s.margin_left = tf_s.margin_top = tf_s.margin_right = tf_s.margin_bottom = 0
+p = tf_s.paragraphs[0]
+p.text = ("First 7 days: 42% fewer clinic-days out of stock (smog), 83% (heat). After ~2 weeks the district is short and needs resupply, "
+          "which the app flags as unmet demand. Running cost ≈ $10 (under ₹1,000) a month per 20-clinic district. Sample data, not field results.")
+p.font.size = Pt(10)
+p.font.color.rgb = TEXT_BODY
+
+# ==============================================================================
 # SLIDE 10: Scalability Roadmap & Solo Developer Profile
 # ==============================================================================
 slide10 = prs.slides.add_slide(blank_slide_layout)
 set_slide_background(slide10)
 add_header(
     slide10, 
-    "09 / ROADMAP & DEVELOPER", 
+    "10 / ROADMAP & DEVELOPER", 
     "From Hackathon Prototype to National Infrastructure", 
     "Scalability milestones and solo developer credentials"
 )
@@ -749,4 +775,4 @@ p.font.bold = True
 p.font.color.rgb = EMERALD
 
 prs.save(PPTX_PATH)
-print(f"SUCCESS: Generated refined 10-slide Real-Project Deck to {PPTX_PATH}")
+print(f"SUCCESS: Generated 11-slide deck to {PPTX_PATH}")

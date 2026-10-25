@@ -234,6 +234,8 @@ class TransferConsignment(BaseModel):
     condition_notes: Optional[str] = None
     vehicle_number: Optional[str] = None
     idempotency_key: Optional[str] = None
+    # The proposal as approved, so any server instance can show the approved card unchanged
+    recommendation_snapshot: Optional[Dict[str, Any]] = None
     cryptographic_hash: Optional[str] = None
 
 class StockActionRequest(BaseModel):
@@ -373,6 +375,10 @@ class DailyActionItem(BaseModel):
     target_consignment_id: Optional[str] = None
     target_batch: Optional[str] = None
     cta_label: str
+    # Hindi versions for the Clinic view's language toggle
+    title_hi: Optional[str] = None
+    description_hi: Optional[str] = None
+    cta_label_hi: Optional[str] = None
 
 class ClinicDeskResponse(BaseModel):
     facility: Facility

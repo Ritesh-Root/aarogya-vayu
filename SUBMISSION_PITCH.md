@@ -35,7 +35,7 @@ Aarogya-Vāyu is a multi-agent decision support system that links **live environ
 
 ## 2. The 3-Minute Live Demo Script
 
-Click **Live** before you start, so the dashboard shows real telemetry.
+The **Conditions** choice is per browser, so your demo can't be disturbed by judges clicking on their own laptops. Start on **📡 Live today**, switch to **🌫️ Smog (demo)** for the walkthrough.
 
 | Timecode | On Screen | Spoken Script |
 | :--- | :--- | :--- |
@@ -89,9 +89,21 @@ Click **Live** before you start, so the dashboard shows real telemetry.
 
 ---
 
-## 4. Impact Model (Projections, Not Measurements)
+## 4. Impact Model (Simulation and Projections, Not Field Measurements)
 
-These are assumptions to validate in a pilot, not results:
+**Simulation** (`scripts/simulate_impact.py`; the app's own engine and allocator on its 40 sample clinics, 20 runs, no store deliveries inside the window):
+
+| Surge window | Smog, Lucknow-Unnao | Heatwave, Bhubaneswar-Cuttack |
+|---|:-:|:-:|
+| First 7 days | **−42%** clinic-days out of stock, −32% doses missed | **−83%** clinic-days, −69% doses missed |
+| First 14 days | −6% / −5% | −32% / −21% |
+| First 21 days | −1% | −7% |
+
+Transfers prevent most stockouts in the first week. After about two weeks the whole district is short and needs resupply, which the app flags as unmet demand.
+
+**Running cost:** about $10 (under ₹1,000) a month per 20-clinic district at published Gemini prices (estimate; prices double from Jan 2027).
+
+These remain assumptions to validate in a pilot:
 1. **Fewer climate-surge stockouts:** transfers are proposed while a clinic still has days of cover, not after it hits zero.
 2. **Less expiry waste:** donors send the batch nearest expiry first, so stock that would expire is used.
 3. **Low transport cost:** transfers stay within 35 km and can use existing 108/102 ambulance return trips.
@@ -118,3 +130,15 @@ These are assumptions to validate in a pilot, not results:
 
 #### Q5: "Is the forecast a trained model?"
 **Answer:** No, deliberately. It is a transparent rule-based surge engine: climate multipliers applied to baseline consumption, giving days of cover and a 7-day stockout probability. Training a model needs real consumption history, which a pilot would provide.
+
+#### Q6: "Where do the multipliers (×1.62 etc.) come from?"
+**Answer:** They are planning assumptions, and we checked them against the literature. The direction and timing are well supported: a meta-analysis of 37 studies finds asthma ER visits rise about 2.3% per 10 µg/m³ PM2.5, strongest 1–3 days later (Zheng 2015, *PLoS ONE*), and Indian ambulance data shows a same-day rise lasting about a week (Kawano 2026, *npj Clean Air*). Our top smog bands are higher than Delhi ER data, where children's respiratory visits rose 21–29% on polluted days (Yadav 2021, AIIMS). So they err toward warning early; a pilot would calibrate them against real consumption. Heat multipliers follow the 2010 Ahmedabad heatwave mortality ratio (×1.76–2.12); no study measures ORS demand directly.
+
+#### Q7: "Does it actually reduce stockouts?"
+**Answer:** In simulation on our sample clinics: 42% fewer clinic-days out of stock in the first week of a smog surge, 83% in a heatwave. It also shows the limit honestly: after about two weeks the whole district is short, redistribution stops helping, and the app escalates unmet demand for resupply. Field evidence needs a pilot.
+
+#### Q8: "Is this really multi-agent?"
+**Answer:** It is a pipeline of five specialised steps. The genuinely AI decisions are Gemini's: reading voice and photos, answering questions, and deciding to call the transfer tool. Quantities come from a deterministic allocator by design, because a wrong number in healthcare can cause a second stockout.
+
+#### Q9: "What does it cost?"
+**Answer:** About $10 (under ₹1,000) a month for a 20-clinic district at Google's published Gemini prices: voice reports, transfer checks, CMO questions, read-aloud and photo checks. It runs on existing phones and needs no new hardware.

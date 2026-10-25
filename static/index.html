@@ -773,10 +773,8 @@
             </div>
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
-                <span class="text-xs uppercase font-extrabold tracking-wider text-clay-terracotta">Frontline Facility Workspace</span>
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300">
-                  Demo Role Simulation
-                </span>
+                <span class="text-xs uppercase font-extrabold tracking-wider text-clay-terracotta" data-i18n="eyebrow">Frontline Facility Workspace</span>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300" data-i18n="demoRole">Demo Role Simulation</span>
                 <span id="systemCapabilityBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
                   Storage: Demo (Local/Ephemeral) &bull; Audit: Hash-Linked SHA-256
                 </span>
@@ -787,20 +785,22 @@
                 </select>
                 <span id="clinicFacilityBadge" class="text-xs font-extrabold text-clay-muted bg-white/80 px-2.5 py-1 rounded-lg border border-clay-salmon/20"></span>
               </div>
-              <p class="text-xs text-clay-muted mt-1 font-medium">
-                Active Session: <strong class="text-clay-dark font-bold">Demo Pharmacist</strong> (Staff Pharmacist / Storekeeper) &bull; Demo stock register
-              </p>
+              <p class="text-xs text-clay-muted mt-1 font-medium" data-i18n="session">Signed in as: Demo Pharmacist (staff pharmacist / storekeeper) · demo stock register</p>
             </div>
           </div>
 
-          <div class="flex items-center space-x-3">
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="flex items-center bg-white p-1 rounded-xl border border-clay-salmon/25 shadow-sm" role="group" aria-label="Language">
+              <button id="clinicLangEn" type="button" onclick="setClinicLang('en')" class="px-3 py-1.5 rounded-lg text-xs font-black transition">English</button>
+              <button id="clinicLangHi" type="button" onclick="setClinicLang('hi')" lang="hi" class="px-3 py-1.5 rounded-lg text-xs font-black transition">हिन्दी</button>
+            </div>
             <button onclick="loadClinicDesk(currentClinicFacilityId)" class="px-4 py-2.5 rounded-xl bg-white border border-clay-salmon/25 text-clay-dark text-xs font-extrabold shadow-sm hover:bg-clay-inner transition flex items-center space-x-2" title="Refresh Clinic Ledger">
               <i data-lucide="refresh-cw" class="w-4 h-4 text-clay-terracotta"></i>
-              <span>Refresh Desk</span>
+              <span data-i18n="refresh">Refresh Desk</span>
             </button>
             <button onclick="openStockActionModal()" class="px-5 py-2.5 rounded-xl bg-clay-terracotta hover:bg-clay-terracottaDark text-white text-xs sm:text-sm font-black shadow-clay-btn transition flex items-center space-x-2">
               <i data-lucide="plus-circle" class="w-4 h-4"></i>
-              <span>Record Stock Action</span>
+              <span data-i18n="recordAction">Record Stock Action</span>
             </button>
           </div>
         </div>
@@ -812,10 +812,10 @@
               <div class="w-8 h-8 rounded-xl bg-red-100 text-red-600 flex items-center justify-center">
                 <i data-lucide="alert-triangle" class="w-4 h-4"></i>
               </div>
-              <h3 class="text-base font-extrabold text-clay-dark">Today's Action Priorities</h3>
+              <h3 class="text-base font-extrabold text-clay-dark" data-i18n="todayActions">Today's Action Priorities</h3>
               <span id="clinicActionCountBadge" class="px-2.5 py-0.5 rounded-full text-xs font-black bg-red-100 text-red-700">0 Actions</span>
             </div>
-            <span class="text-xs text-clay-muted font-bold">Ranked by Clinical Urgency & Transfer Deadlines</span>
+            <span class="text-xs text-clay-muted font-bold" data-i18n="ranked">Most urgent first</span>
           </div>
 
           <div id="clinicActionItemsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
@@ -833,14 +833,14 @@
                 <div>
                   <h3 class="text-base font-extrabold text-clay-dark flex items-center space-x-2">
                     <i data-lucide="boxes" class="w-5 h-5 text-clay-terracotta"></i>
-                    <span>Stock on the shelf</span>
+                    <span data-i18n="stockShelf">Stock on the shelf</span>
                   </h3>
-                  <p class="text-xs text-clay-muted mt-0.5">Counted stock, what is free to use, and what is reserved for transfers</p>
+                  <p class="text-xs text-clay-muted mt-0.5" data-i18n="stockShelfSub">Counted stock, what is free to use, and what is reserved for transfers</p>
                 </div>
 
                 <div class="relative w-full sm:w-64">
                   <i data-lucide="search" class="w-4 h-4 text-clay-muted absolute left-3 top-1/2 -translate-y-1/2"></i>
-                  <input type="text" id="clinicMedSearch" oninput="filterClinicInventory(this.value)" placeholder="Filter medicine or batch..." class="w-full bg-white border border-clay-salmon/25 rounded-xl py-2 pl-9 pr-3 text-xs font-medium text-clay-dark focus:outline-none focus:ring-2 focus:ring-clay-salmon">
+                  <input type="text" id="clinicMedSearch" oninput="filterClinicInventory(this.value)" placeholder="Filter medicine or batch..." data-i18n-placeholder="filter" class="w-full bg-white border border-clay-salmon/25 rounded-xl py-2 pl-9 pr-3 text-xs font-medium text-clay-dark focus:outline-none focus:ring-2 focus:ring-clay-salmon">
                 </div>
               </div>
 
@@ -861,11 +861,11 @@
                   <div class="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
                     <i data-lucide="arrow-down-left" class="w-4 h-4"></i>
                   </div>
-                  <h3 class="text-sm font-extrabold text-clay-dark">Deliveries coming in</h3>
+                  <h3 class="text-sm font-extrabold text-clay-dark" data-i18n="incoming">Deliveries coming in</h3>
                 </div>
                 <span id="clinicInboundCountBadge" class="px-2 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800">0 Incoming</span>
               </div>
-              <p class="text-xs text-clay-muted mb-3 font-medium">Dispatched by donors. Physically inspect, count, and log receipt on arrival.</p>
+              <p class="text-xs text-clay-muted mb-3 font-medium" data-i18n="incomingSub">Sent by other clinics. On arrival, inspect, count and record the receipt.</p>
               
               <div id="clinicInboundList" class="space-y-3 overflow-y-auto max-h-[260px] custom-scrollbar pr-1">
                 <!-- Inbound consignments -->
@@ -879,11 +879,11 @@
                   <div class="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
                     <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
                   </div>
-                  <h3 class="text-sm font-extrabold text-clay-dark">Stock going out</h3>
+                  <h3 class="text-sm font-extrabold text-clay-dark" data-i18n="outgoing">Stock going out</h3>
                 </div>
                 <span id="clinicOutboundCountBadge" class="px-2 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-800">0 Outgoing</span>
               </div>
-              <p class="text-xs text-clay-muted mb-3 font-medium">Stock is reserved on shelves. Hand over packages to courier and confirm dispatch.</p>
+              <p class="text-xs text-clay-muted mb-3 font-medium" data-i18n="outgoingSub">Stock is reserved on the shelf. Hand the package to the courier and confirm dispatch.</p>
               
               <div id="clinicOutboundList" class="space-y-3 overflow-y-auto max-h-[260px] custom-scrollbar pr-1">
                 <!-- Outbound consignments -->

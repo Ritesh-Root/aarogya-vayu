@@ -1,0 +1,203 @@
+{
+  "assumptions": "Before/after simulation: what happens to the sample clinics during a climate surge with and\nwithout Aarogya-Vāyu's transfers. It uses the app's own demand engine and transfer allocator.\n\nModel (all assumptions are stated here and printed in the report):\n- A weather event (smog for Lucknow-Unnao, heat for Bhubaneswar-Cuttack) starts on day 0 and lasts\n  the whole window. Windows of 7, 14 and 21 days are run: the gap before the next monthly indent.\n- No deliveries from the district store arrive inside the window, in either run.\n- Daily use per clinic and medicine is Poisson with mean = normal use x the app's surge multiplier.\n- \"With Aarogya-Vāyu\": every morning the app's engine and allocator run on that day's stock, every\n  proposed transfer is approved, and it arrives the next morning. Rules are the app's own:\n  35 km, the donor keeps 14 days, no batch expiring within 30 days, oldest batch first.\n- Stock is used oldest batch first. A batch still on the shelf on its expiry date is wasted.\n- Inventory, facilities and multipliers are the app's sample data and rules, not field data.",
+  "windows_days": [
+    7,
+    14,
+    21
+  ],
+  "seeds": 20,
+  "results": {
+    "7": {
+      "lucknow": {
+        "status_quo": {
+          "stockout_days": 24.3,
+          "unmet_doses": 1022.1,
+          "expired_units": 0,
+          "transfers": 0,
+          "units_moved": 0,
+          "km": 0.0,
+          "stockout_days_range": [
+            22,
+            26
+          ]
+        },
+        "with_app": {
+          "stockout_days": 14.2,
+          "unmet_doses": 700,
+          "expired_units": 0,
+          "transfers": 6.7,
+          "units_moved": 1274,
+          "km": 196.6,
+          "stockout_days_range": [
+            14,
+            15
+          ]
+        },
+        "change": {
+          "stockout_days_pct": -41.6,
+          "unmet_doses_pct": -31.5,
+          "expired_units_diff": 0
+        }
+      },
+      "bhubaneswar": {
+        "status_quo": {
+          "stockout_days": 33.8,
+          "unmet_doses": 1195.8,
+          "expired_units": 0,
+          "transfers": 0,
+          "units_moved": 0,
+          "km": 0.0,
+          "stockout_days_range": [
+            33,
+            35
+          ]
+        },
+        "with_app": {
+          "stockout_days": 5.8,
+          "unmet_doses": 365.6,
+          "expired_units": 0,
+          "transfers": 18.4,
+          "units_moved": 3163,
+          "km": 448.3,
+          "stockout_days_range": [
+            5,
+            6
+          ]
+        },
+        "change": {
+          "stockout_days_pct": -82.8,
+          "unmet_doses_pct": -69.4,
+          "expired_units_diff": 0
+        }
+      }
+    },
+    "14": {
+      "lucknow": {
+        "status_quo": {
+          "stockout_days": 329.9,
+          "unmet_doses": 15578.5,
+          "expired_units": 0,
+          "transfers": 0,
+          "units_moved": 0,
+          "km": 0.0,
+          "stockout_days_range": [
+            318,
+            341
+          ]
+        },
+        "with_app": {
+          "stockout_days": 309,
+          "unmet_doses": 14789.4,
+          "expired_units": 0,
+          "transfers": 6.8,
+          "units_moved": 1287,
+          "km": 200.5,
+          "stockout_days_range": [
+            297,
+            318
+          ]
+        },
+        "change": {
+          "stockout_days_pct": -6.3,
+          "unmet_doses_pct": -5.1,
+          "expired_units_diff": 0
+        }
+      },
+      "bhubaneswar": {
+        "status_quo": {
+          "stockout_days": 252.2,
+          "unmet_doses": 12704.0,
+          "expired_units": 0,
+          "transfers": 0,
+          "units_moved": 0,
+          "km": 0.0,
+          "stockout_days_range": [
+            243,
+            260
+          ]
+        },
+        "with_app": {
+          "stockout_days": 171.3,
+          "unmet_doses": 10098.6,
+          "expired_units": 0,
+          "transfers": 18.4,
+          "units_moved": 3168,
+          "km": 449.1,
+          "stockout_days_range": [
+            163,
+            183
+          ]
+        },
+        "change": {
+          "stockout_days_pct": -32.1,
+          "unmet_doses_pct": -20.5,
+          "expired_units_diff": 0
+        }
+      }
+    },
+    "21": {
+      "lucknow": {
+        "status_quo": {
+          "stockout_days": 1088.8,
+          "unmet_doses": 58833.4,
+          "expired_units": 0,
+          "transfers": 0,
+          "units_moved": 0,
+          "km": 0.0,
+          "stockout_days_range": [
+            1078,
+            1099
+          ]
+        },
+        "with_app": {
+          "stockout_days": 1075.5,
+          "unmet_doses": 58345.8,
+          "expired_units": 0,
+          "transfers": 6.8,
+          "units_moved": 1287,
+          "km": 200.5,
+          "stockout_days_range": [
+            1065,
+            1084
+          ]
+        },
+        "change": {
+          "stockout_days_pct": -1.2,
+          "unmet_doses_pct": -0.8,
+          "expired_units_diff": 0
+        }
+      },
+      "bhubaneswar": {
+        "status_quo": {
+          "stockout_days": 908.4,
+          "unmet_doses": 50070.7,
+          "expired_units": 0,
+          "transfers": 0,
+          "units_moved": 0,
+          "km": 0.0,
+          "stockout_days_range": [
+            892,
+            922
+          ]
+        },
+        "with_app": {
+          "stockout_days": 844.5,
+          "unmet_doses": 49135.3,
+          "expired_units": 0,
+          "transfers": 18.4,
+          "units_moved": 3168,
+          "km": 449.1,
+          "stockout_days_range": [
+            825,
+            862
+          ]
+        },
+        "change": {
+          "stockout_days_pct": -7.0,
+          "unmet_doses_pct": -1.9,
+          "expired_units_diff": 0
+        }
+      }
+    }
+  }
+}

@@ -1131,3 +1131,72 @@ def test_cmo_speak_returns_gemini_wav_and_caps_text(monkeypatch):
     assert wav[:4] == b"RIFF" and model == speech_module.TTS_MODELS[0]
     assert len(calls[0]) <= speech_module.MAX_TTS_CHARS
     assert asyncio.run(speech_module.synthesize("word " * 400))[1] == "cache" and len(calls) == 1
+
+
+def test_scenarios_are_per_request_and_do_not_change_shared_state():
+    import app.main as main_module
+    shared_before = client.get("/api/environmental?region=lucknow").json()["telemetry"]
+
+    smog = client.get("/api/environmental?region=lucknow&scenario=smog").json()
+    heat = client.get("/api/environmental?region=lucknow&scenario=heat").json()
+    assert smog["telemetry"]["aqi"] == 385 and smog["mode"] == "scenario" and smog["scenario"] == "smog"
+    assert heat["telemetry"]["heatwave_alert"] is True and heat["surge_multipliers"]["Heatwave / Drought"] > 1.0
+    assert client.get("/api/environmental?region=lucknow&scenario=storm").status_code == 400
+
+    # Asking for a scenario never changes what a request without one sees
+    assert client.get("/api/environmental?region=lucknow").json()["telemetry"] == shared_before
+
+    # Each scenario gets its own proposals (smog flags more clinics, and donors must keep more for themselves)
+    smog_recs = client.get("/api/recommendations?region=lucknow&scenario=smog").json()
+    normal_recs = client.get("/api/recommendations?region=lucknow&scenario=normal").json()
+    smog_risks = client.get("/api/risks?region=lucknow&scenario=smog").json()
+    normal_risks = client.get("/api/risks?region=lucknow&scenario=normal").json()
+    critical = lambda risks: sum(r["status"] == "CRITICAL" for r in risks)
+    assert critical(smog_risks) > critical(normal_risks)
+    assert smog_recs and {r["id"] for r in smog_recs} != {r["id"] for r in normal_recs}
+
+    # A proposal seen under a scenario can be approved even if this instance never cached it
+    main_module._view_recs.clear()
+    rec_id = smog_recs[0]["id"]
+    res = client.post("/api/approve-transfer?scenario=smog", json={"recommendation_id": rec_id, "officer_name": "Dr. Test CMO"})
+    assert res.status_code == 200, res.text
+    after = client.get("/api/recommendations?region=lucknow&scenario=smog").json()
+    assert any(r["id"] == rec_id and r["status"] == "APPROVED" for r in after)
+
+
+def test_clinic_action_items_carry_hindi_text():
+    desk = client.get("/api/clinic/PHC-LKO-01/desk").json()
+    items = desk["action_items"]
+    assert items, "PHC Kakori should have at least one action item in the demo data"
+    for item in items:
+        assert item["title_hi"] and item["description_hi"] and item["cta_label_hi"]
+    stockout = next((i for i in items if i["action_type"] == "IMPENDING_STOCKOUT"), None)
+    if stockout:
+        assert "दवा खत्म होने वाली है" in stockout["title_hi"]
+
+
+def test_scenario_approval_uses_the_callers_quantity_and_survives_cache_loss():
+    import app.main as main_module
+    smog = {r["id"]: r for r in client.get("/api/recommendations?region=lucknow&scenario=smog").json()}
+    heat = {r["id"]: r for r in client.get("/api/recommendations?region=lucknow&scenario=heat").json()}
+    normal = {r["id"]: r for r in client.get("/api/recommendations?region=lucknow&scenario=normal").json()}
+    others = {**heat, **normal}
+    # Prefer an ID that both views propose with different quantities; any smog proposal still exercises the path
+    shared = [rid for rid in smog if rid in others and others[rid]["units_to_transfer"] != smog[rid]["units_to_transfer"]]
+    rec_id = shared[0] if shared else next(iter(smog))
+
+    res = client.post("/api/approve-transfer?scenario=smog", json={"recommendation_id": rec_id, "officer_name": "Dr. Test CMO"})
+    assert res.status_code == 200, res.text
+    assert res.json()["consignment"]["units_requested"] == smog[rec_id]["units_to_transfer"]
+
+    # Visible in every view, including after this instance forgets its caches (another serverless instance)
+    main_module._view_recs.clear()
+    for sc in ("heat", "smog", "normal"):
+        recs = {r["id"]: r for r in client.get(f"/api/recommendations?region=lucknow&scenario={sc}").json()}
+        assert recs.get(rec_id, {}).get("status") == "APPROVED", sc
+        assert recs[rec_id]["units_to_transfer"] == smog[rec_id]["units_to_transfer"]
+
+    entries = client.get("/api/audit-log").json()
+    entries = entries if isinstance(entries, list) else entries.get("entries", [])
+    context = [e for e in entries if e.get("event_type") == "APPROVAL_PLANNING_CONTEXT"]
+    assert context and context[-1]["details"]["scenario"] == "smog" and context[-1]["details"]["simulated"] is True

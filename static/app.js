@@ -1,3 +1,21 @@
+// Each browser keeps its own Conditions choice (live / smog / heat / normal) and sends it with every
+// API call, so one visitor pressing Smog doesn't change what everyone else sees. Until a visitor picks
+// one, nothing is sent and the server's own default applies.
+const SCENARIO_KEY = 'aarogya.scenario';
+const SCENARIO_NAMES = ['live', 'smog', 'heat', 'normal'];
+let currentScenario = null;
+try {
+  const saved = localStorage.getItem(SCENARIO_KEY);
+  if (SCENARIO_NAMES.includes(saved)) currentScenario = saved;
+} catch (e) { /* storage blocked: start on live */ }
+const nativeFetch = window.fetch.bind(window);
+window.fetch = (input, init) => {
+  if (currentScenario && typeof input === 'string' && input.startsWith('/api/')) {
+    input += (input.includes('?') ? '&' : '?') + 'scenario=' + encodeURIComponent(currentScenario);
+  }
+  return nativeFetch(input, init);
+};
+
 let map;
 let facilityMarkers = {};
 let transferLines = [];
@@ -1541,73 +1559,11 @@ function recordWithBrowserSpeech() {
   }
 }
 
+// Conditions buttons: the choice is this browser's own (see the fetch wrapper at the top)
 async function switchScenario(type) {
-  let envData = {};
-  highlightScenarioButton(type);
-
-  if (type === 'live') {
-
-    try {
-      const res = await fetch(`/api/environmental/live/activate?region=${encodeURIComponent(currentRegion)}`, {
-        method: 'POST'
-      });
-      if (!res.ok) throw new Error(await apiErrorMessage(res, 'Live telemetry activation failed'));
-      const data = await res.json();
-      if (data.status === 'live_feed_unavailable' || data.is_live === false) {
-        alert('The live Open-Meteo / CAMS feed is unavailable right now, so the dashboard shows an offline baseline (not live data).');
-      }
-    } catch (e) {
-      console.warn("Live telemetry activation failed:", e);
-      alert(e.message || 'Live telemetry activation failed');
-    }
-    await loadInitialData();
-    return;
-  }
-
-
-  if (type === 'smog') {
-    envData = {
-      aqi: 385,
-      pm25: 265.0,
-      temperature_c: 17.5,
-      humidity_pct: 78.0,
-      heatwave_alert: false,
-      smog_episode: true,
-      corridor: currentRegion === 'bhubaneswar' ? "Bhubaneswar–Cuttack Inversion Corridor" : "Lucknow-Unnao Indo-Gangetic Smog Corridor (Severe Inversion)"
-    };
-  } else if (type === 'heat') {
-    envData = {
-      aqi: 140,
-      pm25: 65.0,
-      temperature_c: 43.5,
-      humidity_pct: 35.0,
-      heatwave_alert: true,
-      smog_episode: false,
-      corridor: currentRegion === 'bhubaneswar' ? "Coastal Odisha Heatwave Corridor (Severe Dehydration Risk)" : "Central Awadh Heatwave Corridor (Severe Dehydration Risk)"
-    };
-  } else {
-    envData = {
-      aqi: 75,
-      pm25: 28.0,
-      temperature_c: 26.0,
-      humidity_pct: 60.0,
-      heatwave_alert: false,
-      smog_episode: false,
-      corridor: currentRegion === 'bhubaneswar' ? "Bhubaneswar Coastal Baseline Operations" : "Baseline Seasonal Conditions"
-    };
-  }
-
-  try {
-    const res = await fetch(`/api/environmental?region=${encodeURIComponent(currentRegion)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(envData)
-    });
-    if (!res.ok) alert('Could not apply the scenario: ' + await apiErrorMessage(res, 'Server error'));
-  } catch (e) {
-    alert('Network error while applying the scenario');
-  }
-
+  currentScenario = SCENARIO_NAMES.includes(type) ? type : 'live';
+  try { localStorage.setItem(SCENARIO_KEY, currentScenario); } catch (e) { /* private mode: keep it for this page only */ }
+  highlightScenarioButton(currentScenario);
   await loadInitialData();
 }
 
@@ -2548,6 +2504,98 @@ function onClinicFacilityChange(facilityId) {
 
 let clinicDeskRequestSeq = 0;
 
+// ---- Clinic view language (English / Hindi) ----
+const CLINIC_I18N = {
+  en: {
+    eyebrow: 'Frontline Facility Workspace', demoRole: 'Demo Role Simulation',
+    session: 'Signed in as: Demo Pharmacist (staff pharmacist / storekeeper) · demo stock register',
+    refresh: 'Refresh Desk', recordAction: 'Record Stock Action', todayActions: "Today's Action Priorities",
+    ranked: 'Most urgent first', actionsCount: '{n} Actions',
+    stockShelf: 'Stock on the shelf', stockShelfSub: 'Counted stock, what is free to use, and what is reserved for transfers',
+    filter: 'Filter medicine or batch...',
+    incoming: 'Deliveries coming in', incomingSub: 'Sent by other clinics. On arrival, inspect, count and record the receipt.',
+    outgoing: 'Stock going out', outgoingSub: 'Stock is reserved on the shelf. Hand the package to the courier and confirm dispatch.',
+    incomingCount: '{n} Incoming', outgoingCount: '{n} Outgoing',
+    noActionsTitle: 'All Daily Action Items Clear',
+    noActionsBody: 'No impending stockouts, pending dispatches, or uninspected deliveries at this facility.',
+    CRITICAL: 'CRITICAL', HIGH: 'HIGH', MEDIUM: 'MEDIUM', LOW: 'LOW',
+    available: 'Available', onHand: 'On Hand', reserved: 'Reserved', quarantined: 'Quarantined', inTransit: 'In Transit',
+    batch: 'Batch', pack: 'Pack', exp: 'Exp', units: 'units', Units: 'Units', register: 'Register', update: 'Update', resolve: 'Resolve',
+    frozen: 'DEFICIT FROZEN', deficit: 'Deficit', noMatch: 'No medicine batches match your search filter.',
+    badgeInTransit: '🚚 In Transit', badgePreparing: '⏳ Donor Preparing', from: 'From', to: 'To', vehicle: 'Vehicle',
+    notRecorded: 'not recorded', notAssigned: 'not assigned yet', confirmReceipt: 'Inspect & Confirm Receipt',
+    awaitingCourier: 'Awaiting physical courier dispatch from donor facility.',
+    badgeReserved: '📦 Stock Reserved', badgeDispatched: '🚚 Dispatched', courierHandover: 'Courier Handover', cancel: 'Cancel',
+    viewChallan: 'View Challan', noInbound: 'No inbound deliveries currently en route to this facility.',
+    noOutbound: 'No outbound consignments scheduled for this facility.', district: 'District', pop: 'Pop'
+  },
+  hi: {
+    eyebrow: 'क्लिनिक कार्यक्षेत्र', demoRole: 'डेमो भूमिका',
+    session: 'लॉग-इन: डेमो फ़ार्मासिस्ट (फ़ार्मासिस्ट / भंडारपाल) · डेमो स्टॉक रजिस्टर',
+    refresh: 'रीफ़्रेश करें', recordAction: 'स्टॉक दर्ज करें', todayActions: 'आज के ज़रूरी काम',
+    ranked: 'सबसे ज़रूरी पहले', actionsCount: '{n} काम',
+    stockShelf: 'शेल्फ़ पर स्टॉक', stockShelfSub: 'गिना हुआ स्टॉक, इस्तेमाल के लिए उपलब्ध, और ट्रांसफ़र के लिए आरक्षित',
+    filter: 'दवा या बैच खोजें…',
+    incoming: 'आने वाली खेप', incomingSub: 'दूसरे केंद्रों से भेजी गई। पहुँचने पर जाँचें, गिनें और रसीद दर्ज करें।',
+    outgoing: 'जाने वाला स्टॉक', outgoingSub: 'स्टॉक शेल्फ़ पर आरक्षित है। पैकेट कूरियर को सौंपें और भेजना पक्का करें।',
+    incomingCount: '{n} आ रही', outgoingCount: '{n} जा रही',
+    noActionsTitle: 'आज कोई ज़रूरी काम बाकी नहीं',
+    noActionsBody: 'इस केंद्र पर न दवा खत्म हो रही है, न कोई खेप भेजनी या जाँचनी बाकी है।',
+    CRITICAL: 'गंभीर', HIGH: 'ज़रूरी', MEDIUM: 'सामान्य', LOW: 'कम',
+    available: 'उपलब्ध', onHand: 'कुल', reserved: 'आरक्षित', quarantined: 'अलग रखा', inTransit: 'रास्ते में',
+    batch: 'बैच', pack: 'पैक', exp: 'एक्सपायरी', units: 'यूनिट', Units: 'यूनिट', register: 'रजिस्टर', update: 'अपडेट', resolve: 'सुलझाएँ',
+    frozen: 'कमी: रोका गया', deficit: 'कमी', noMatch: 'खोज से कोई दवा या बैच नहीं मिला।',
+    badgeInTransit: '🚚 रास्ते में', badgePreparing: '⏳ भेजने की तैयारी', from: 'कहाँ से', to: 'कहाँ', vehicle: 'वाहन',
+    notRecorded: 'दर्ज नहीं', notAssigned: 'अभी तय नहीं', confirmReceipt: 'जाँचें और रसीद पक्की करें',
+    awaitingCourier: 'भेजने वाले केंद्र से कूरियर का इंतज़ार।',
+    badgeReserved: '📦 स्टॉक आरक्षित', badgeDispatched: '🚚 भेज दिया', courierHandover: 'कूरियर को सौंपें', cancel: 'रद्द करें',
+    viewChallan: 'चालान देखें', noInbound: 'इस केंद्र के लिए अभी कोई खेप रास्ते में नहीं है।',
+    noOutbound: 'इस केंद्र से अभी कुछ भेजना तय नहीं है।', district: 'ज़िला', pop: 'आबादी'
+  }
+};
+const CLINIC_LANG_KEY = 'aarogya.clinicLang';
+let clinicLang = 'en';
+try { if (localStorage.getItem(CLINIC_LANG_KEY) === 'hi') clinicLang = 'hi'; } catch (e) { /* storage blocked */ }
+
+function t(key, vars) {
+  let text = (CLINIC_I18N[clinicLang] || {})[key] ?? CLINIC_I18N.en[key] ?? key;
+  if (vars) Object.entries(vars).forEach(([k, v]) => { text = text.replace(`{${k}}`, v); });
+  return text;
+}
+
+function applyClinicLang() {
+  const root = document.getElementById('clinicDeskViewContainer');
+  if (!root) return;
+  root.lang = clinicLang;
+  root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  root.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  [['en', 'clinicLangEn'], ['hi', 'clinicLangHi']].forEach(([lang, id]) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    const on = lang === clinicLang;
+    btn.className = `px-3 py-1.5 rounded-lg text-xs font-black transition ${on ? 'bg-clay-terracotta text-white' : 'text-clay-muted hover:text-clay-dark'}`;
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
+function setClinicLang(lang) {
+  clinicLang = lang === 'hi' ? 'hi' : 'en';
+  try { localStorage.setItem(CLINIC_LANG_KEY, clinicLang); } catch (e) { /* keep for this page only */ }
+  applyClinicLang();
+  if (activeClinicDeskData) renderClinicDesk(activeClinicDeskData);
+}
+
+function renderClinicDesk(data) {
+  const badgeEl = document.getElementById('clinicFacilityBadge');
+  if (badgeEl && data.facility) {
+    badgeEl.textContent = `${data.facility.type} • ${data.facility.district} ${t('district')} • ${t('pop')}: ${(data.facility.population_served || 20000).toLocaleString()}`;
+  }
+  renderClinicActionItems(data.action_items || []);
+  renderClinicInventory(data.inventory || []);
+  renderClinicConsignments(data.inbound_consignments || [], data.outbound_consignments || []);
+  if (window.lucide) lucide.createIcons();
+}
+
 async function loadClinicDesk(facilityId) {
   if (!facilityId) facilityId = currentClinicFacilityId || (currentRegion === 'bhubaneswar' ? "PHC-BBS-01" : "PHC-LKO-01");
   currentClinicFacilityId = facilityId;
@@ -2570,11 +2618,7 @@ async function loadClinicDesk(facilityId) {
     if (seq !== clinicDeskRequestSeq) return;
     activeClinicDeskData = data;
 
-    // Facility Badge & Metadata
-    const badgeEl = document.getElementById('clinicFacilityBadge');
-    if (badgeEl && data.facility) {
-      badgeEl.textContent = `${data.facility.type} • ${data.facility.district} District • Pop: ${(data.facility.population_served || 20000).toLocaleString()}`;
-    }
+    applyClinicLang();
 
     // Fetch and display safe system capability indicator
     if (!window._systemCapsLoaded) {
@@ -2596,16 +2640,7 @@ async function loadClinicDesk(facilityId) {
         }).catch(() => {});
     }
 
-    // Render Action Priorities
-    renderClinicActionItems(data.action_items || []);
-
-    // Render Facility Store Ledger
-    renderClinicInventory(data.inventory || []);
-
-    // Render Inbound & Outbound Queues
-    renderClinicConsignments(data.inbound_consignments || [], data.outbound_consignments || []);
-
-    if (window.lucide) lucide.createIcons();
+    renderClinicDesk(data);
   } catch (err) {
     console.error("loadClinicDesk error:", err);
   }
@@ -2617,7 +2652,7 @@ function renderClinicActionItems(items) {
   if (!container) return;
 
   if (countBadge) {
-    countBadge.textContent = `${items.length} Actions`;
+    countBadge.textContent = t('actionsCount', { n: items.length });
     if (items.length === 0) {
       countBadge.className = "px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800";
     } else {
@@ -2629,14 +2664,15 @@ function renderClinicActionItems(items) {
     container.innerHTML = `
       <div class="col-span-full bg-white rounded-2xl p-6 text-center border border-emerald-200 shadow-sm">
         <span class="text-2xl block mb-1">🎉</span>
-        <h4 class="text-sm font-black text-emerald-800">All Daily Action Items Clear</h4>
-        <p class="text-xs text-clay-muted mt-1 font-medium">No impending stockouts, pending dispatches, or uninspected deliveries at this facility.</p>
+        <h4 class="text-sm font-black text-emerald-800">${t('noActionsTitle')}</h4>
+        <p class="text-xs text-clay-muted mt-1 font-medium">${t('noActionsBody')}</p>
       </div>
     `;
     return;
   }
 
   container.innerHTML = '';
+  const hi = clinicLang === 'hi';
   items.forEach(item => {
     let urgencyColor = "bg-red-50 border-red-200 text-red-900";
     let badgeColor = "bg-red-600 text-white";
@@ -2682,15 +2718,15 @@ function renderClinicActionItems(items) {
         <div class="flex items-center justify-between gap-2 mb-1.5">
           <span class="inline-flex items-center space-x-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${badgeColor}">
             <i data-lucide="${iconName}" class="w-3 h-3"></i>
-            <span>${escapeHtml(item.urgency)}</span>
+            <span>${escapeHtml(t(item.urgency))}</span>
           </span>
           <span class="text-[10px] font-mono font-bold text-clay-muted">${escapeHtml(item.action_type)}</span>
         </div>
-        <h4 class="text-sm font-black text-clay-dark leading-snug">${escapeHtml(item.title)}</h4>
-        <p class="text-xs text-clay-muted mt-1 leading-relaxed font-medium">${escapeHtml(item.description)}</p>
+        <h4 class="text-sm font-black text-clay-dark leading-snug">${escapeHtml(hi && item.title_hi ? item.title_hi : item.title)}</h4>
+        <p class="text-xs text-clay-muted mt-1 leading-relaxed font-medium">${escapeHtml(hi && item.description_hi ? item.description_hi : item.description)}</p>
       </div>
       <button onclick="${onclickStr}" class="w-full bg-white hover:bg-clay-bg border border-clay-salmon/30 text-clay-dark font-black text-xs py-2 px-3 rounded-xl transition shadow-sm flex items-center justify-center space-x-1.5 hover:scale-[1.01] cursor-pointer">
-        <span>${escapeHtml(item.cta_label)}</span>
+        <span>${escapeHtml(hi && item.cta_label_hi ? item.cta_label_hi : item.cta_label)}</span>
         <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-clay-terracotta"></i>
       </button>
     `;
@@ -2740,7 +2776,7 @@ function renderClinicInventory(inventory) {
   if (filtered.length === 0) {
     container.innerHTML = `
       <div class="p-8 text-center text-clay-muted text-xs font-bold bg-white rounded-2xl border border-clay-salmon/15">
-        No medicine batches match your search filter.
+        ${t('noMatch')}
       </div>
     `;
     return;
@@ -2764,43 +2800,43 @@ function renderClinicInventory(inventory) {
         <div class="flex items-center space-x-2">
           <h4 class="text-sm font-black text-clay-dark">${escapeHtml(item.medicine_name)}</h4>
           <span class="text-[10px] font-bold text-clay-muted bg-clay-inner px-2 py-0.5 rounded-md border border-clay-salmon/20">${item.category || 'EDL'}</span>
-          ${isFrozen ? '<span class="text-[10px] font-black uppercase tracking-wider bg-red-600 text-white px-2 py-0.5 rounded-md animate-pulse">DEFICIT FROZEN</span>' : ''}
-          ${deficit > 0 ? `<span class="text-[10px] font-extrabold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md font-mono">Deficit: -${deficit}</span>` : ''}
+          ${isFrozen ? `<span class="text-[10px] font-black uppercase tracking-wider bg-red-600 text-white px-2 py-0.5 rounded-md animate-pulse">${t('frozen')}</span>` : ''}
+          ${deficit > 0 ? `<span class="text-[10px] font-extrabold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md font-mono">${t('deficit')}: -${deficit}</span>` : ''}
         </div>
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-clay-muted font-mono">
-          <span>Batch: <strong class="text-clay-dark">${escapeHtml(item.batch_number || 'BAT-DEFAULT')}</strong></span>
+          <span>${t('batch')}: <strong class="text-clay-dark">${escapeHtml(item.batch_number || 'BAT-DEFAULT')}</strong></span>
           <span>•</span>
-          <span>Pack: <strong class="text-clay-dark">${item.pack_size || 10} units</strong></span>
+          <span>${t('pack')}: <strong class="text-clay-dark">${item.pack_size || 10} ${t('units')}</strong></span>
           <span>•</span>
-          <span>Exp: <strong class="text-clay-dark">${item.expiry_date || '2027-12-31'}</strong></span>
+          <span>${t('exp')}: <strong class="text-clay-dark">${item.expiry_date || '2027-12-31'}</strong></span>
         </div>
       </div>
 
       <!-- Segregated Stock Pill Metrics -->
       <div class="flex flex-wrap items-center gap-2">
         <div class="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-center min-w-[70px]" title="Available for immediate dispensing">
-          <span class="text-[9px] uppercase font-black text-emerald-700 block">Available</span>
+          <span class="text-[9px] uppercase font-black text-emerald-700 block">${t('available')}</span>
           <span class="text-sm font-black text-emerald-800 font-mono">${available}</span>
         </div>
 
         <div class="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-center min-w-[70px]" title="Physical on-hand stock in storage">
-          <span class="text-[9px] uppercase font-bold text-slate-500 block">On Hand</span>
+          <span class="text-[9px] uppercase font-bold text-slate-500 block">${t('onHand')}</span>
           <span class="text-sm font-black text-slate-700 font-mono">${onHand}</span>
         </div>
 
         <div class="px-3 py-1.5 rounded-xl ${reserved > 0 ? 'bg-amber-50 border border-amber-200 text-amber-800' : 'bg-slate-50/50 border border-slate-100 text-slate-400'} text-center min-w-[65px]" title="Reserved for approved transfers awaiting dispatch">
-          <span class="text-[9px] uppercase font-bold block">Reserved</span>
+          <span class="text-[9px] uppercase font-bold block">${t('reserved')}</span>
           <span class="text-sm font-black font-mono">${reserved}</span>
         </div>
 
         <div class="px-3 py-1.5 rounded-xl ${quarantined > 0 ? 'bg-red-50 border border-red-200 text-red-800' : 'bg-slate-50/50 border border-slate-100 text-slate-400'} text-center min-w-[65px]" title="Quarantined damaged or expired units">
-          <span class="text-[9px] uppercase font-bold block">Quarantined</span>
+          <span class="text-[9px] uppercase font-bold block">${t('quarantined')}</span>
           <span class="text-sm font-black font-mono">${quarantined}</span>
         </div>
 
         ${inTransit > 0 ? `
           <div class="px-3 py-1.5 rounded-xl bg-cyan-50 border border-cyan-200 text-center min-w-[65px]" title="In transit en route to this facility">
-            <span class="text-[9px] uppercase font-bold text-cyan-700 block">In Transit</span>
+            <span class="text-[9px] uppercase font-bold text-cyan-700 block">${t('inTransit')}</span>
             <span class="text-sm font-black text-cyan-800 font-mono">+${inTransit}</span>
           </div>
         ` : ''}
@@ -2808,18 +2844,18 @@ function renderClinicInventory(inventory) {
         ${isFrozen ? `
           <button onclick="openResolveReconciliationModal('${safeId(item.medicine_id)}', '${safeId(item.batch_number)}')" class="px-3 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow-sm transition flex items-center space-x-1 cursor-pointer" title="Resolve Over-Commitment Exception">
             <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i>
-            <span>Resolve</span>
+            <span>${t('resolve')}</span>
           </button>
         ` : ''}
 
         <button onclick="openStockMovementRegister('${safeId(item.medicine_id)}', '${safeId(item.batch_number)}')" class="px-3 py-2 rounded-xl bg-white hover:bg-clay-inner text-clay-dark text-xs font-black border border-clay-salmon/25 shadow-sm transition flex items-center space-x-1 cursor-pointer" title="View Stock Movement Register & Handover Ledger">
           <i data-lucide="clipboard-list" class="w-3.5 h-3.5 text-clay-terracotta"></i>
-          <span>Register</span>
+          <span>${t('register')}</span>
         </button>
 
         <button onclick="openStockActionModal('${safeId(item.medicine_id)}', '${safeId(item.batch_number)}')" class="px-3.5 py-2 rounded-xl bg-clay-inner hover:bg-clay-bg text-clay-dark text-xs font-black border border-clay-salmon/30 shadow-sm transition flex items-center space-x-1 hover:scale-105 cursor-pointer" title="Record Physical Count or Stock Adjustment">
           <i data-lucide="edit" class="w-3.5 h-3.5 text-clay-terracotta"></i>
-          <span>Update</span>
+          <span>${t('update')}</span>
         </button>
       </div>
     `;
@@ -2833,13 +2869,13 @@ function renderClinicConsignments(inbound, outbound) {
   const inBadge = document.getElementById('clinicInboundCountBadge');
   
   const activeInbound = inbound.filter(c => c.status === 'DISPATCHED' || c.status === 'APPROVED_RESERVED');
-  if (inBadge) inBadge.textContent = `${activeInbound.length} Incoming`;
+  if (inBadge) inBadge.textContent = t('incomingCount', { n: activeInbound.length });
 
   if (inContainer) {
     if (activeInbound.length === 0) {
       inContainer.innerHTML = `
         <div class="p-5 text-center text-clay-muted text-xs font-medium bg-white rounded-2xl border border-clay-salmon/15">
-          No inbound deliveries currently en route to this facility.
+          ${t('noInbound')}
         </div>
       `;
     } else {
@@ -2852,22 +2888,22 @@ function renderClinicConsignments(inbound, outbound) {
           <div class="flex items-center justify-between">
             <span class="text-[10px] font-mono font-bold text-clay-muted">${escapeHtml(c.challan_id || c.id)}</span>
             <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${isDispatched ? 'bg-cyan-100 text-cyan-800' : 'bg-slate-100 text-slate-700'}">
-              ${isDispatched ? '🚚 In Transit' : '⏳ Donor Preparing'}
+              ${isDispatched ? t('badgeInTransit') : t('badgePreparing')}
             </span>
           </div>
           <div>
-            <h5 class="text-xs font-black text-clay-dark">${escapeHtml(c.medicine_name)} (${escapeHtml(isDispatched ? c.units_dispatched : c.units_requested)} Units)</h5>
-            <p class="text-[11px] text-clay-muted mt-0.5">From: <strong class="text-clay-dark font-semibold">${escapeHtml(c.donor_facility_name)}</strong></p>
-            <p class="text-[10px] font-mono text-clay-muted">Batch: ${escapeHtml(c.batch_number)} • Vehicle: ${escapeHtml(c.vehicle_number || (isDispatched ? 'not recorded' : 'not assigned yet'))}</p>
+            <h5 class="text-xs font-black text-clay-dark">${escapeHtml(c.medicine_name)} (${escapeHtml(isDispatched ? c.units_dispatched : c.units_requested)} ${t('Units')})</h5>
+            <p class="text-[11px] text-clay-muted mt-0.5">${t('from')}: <strong class="text-clay-dark font-semibold">${escapeHtml(c.donor_facility_name)}</strong></p>
+            <p class="text-[10px] font-mono text-clay-muted">${t('batch')}: ${escapeHtml(c.batch_number)} • ${t('vehicle')}: ${escapeHtml(c.vehicle_number || (isDispatched ? t('notRecorded') : t('notAssigned')))}</p>
           </div>
           ${isDispatched ? `
             <button onclick="openReceiptModal('${safeId(c.id)}')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs py-2 px-3 rounded-xl transition shadow-sm flex items-center justify-center space-x-1.5 cursor-pointer">
               <i data-lucide="package-check" class="w-3.5 h-3.5"></i>
-              <span>Inspect & Confirm Receipt</span>
+              <span>${t('confirmReceipt')}</span>
             </button>
           ` : `
             <div class="text-[11px] text-clay-muted italic bg-clay-inner/60 p-2 rounded-lg text-center">
-              Awaiting physical courier dispatch from donor facility.
+              ${t('awaitingCourier')}
             </div>
           `}
         `;
@@ -2881,13 +2917,13 @@ function renderClinicConsignments(inbound, outbound) {
   const outBadge = document.getElementById('clinicOutboundCountBadge');
   
   const activeOutbound = outbound.filter(c => c.status === 'APPROVED_RESERVED' || c.status === 'DISPATCHED');
-  if (outBadge) outBadge.textContent = `${activeOutbound.length} Outgoing`;
+  if (outBadge) outBadge.textContent = t('outgoingCount', { n: activeOutbound.length });
 
   if (outContainer) {
     if (activeOutbound.length === 0) {
       outContainer.innerHTML = `
         <div class="p-5 text-center text-clay-muted text-xs font-medium bg-white rounded-2xl border border-clay-salmon/15">
-          No outbound consignments scheduled for this facility.
+          ${t('noOutbound')}
         </div>
       `;
     } else {
@@ -2900,28 +2936,28 @@ function renderClinicConsignments(inbound, outbound) {
           <div class="flex items-center justify-between">
             <span class="text-[10px] font-mono font-bold text-clay-muted">${escapeHtml(c.challan_id || c.id)}</span>
             <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${isApproved ? 'bg-amber-100 text-amber-800' : 'bg-cyan-100 text-cyan-800'}">
-              ${isApproved ? '📦 Stock Reserved' : '🚚 Dispatched'}
+              ${isApproved ? t('badgeReserved') : t('badgeDispatched')}
             </span>
           </div>
           <div>
-            <h5 class="text-xs font-black text-clay-dark">${escapeHtml(c.medicine_name)} (${escapeHtml(isApproved ? c.units_requested : c.units_dispatched)} Units)</h5>
-            <p class="text-[11px] text-clay-muted mt-0.5">To: <strong class="text-clay-dark font-semibold">${escapeHtml(c.recipient_facility_name)}</strong></p>
-            <p class="text-[10px] font-mono text-clay-muted">Batch: ${escapeHtml(c.batch_number)}</p>
+            <h5 class="text-xs font-black text-clay-dark">${escapeHtml(c.medicine_name)} (${escapeHtml(isApproved ? c.units_requested : c.units_dispatched)} ${t('Units')})</h5>
+            <p class="text-[11px] text-clay-muted mt-0.5">${t('to')}: <strong class="text-clay-dark font-semibold">${escapeHtml(c.recipient_facility_name)}</strong></p>
+            <p class="text-[10px] font-mono text-clay-muted">${t('batch')}: ${escapeHtml(c.batch_number)}</p>
           </div>
           ${isApproved ? `
             <div class="flex items-center space-x-2">
               <button onclick="openDispatchModal('${safeId(c.id)}')" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs py-2 px-3 rounded-xl transition shadow-sm flex items-center justify-center space-x-1 cursor-pointer">
                 <i data-lucide="truck" class="w-3.5 h-3.5"></i>
-                <span>Courier Handover</span>
+                <span>${t('courierHandover')}</span>
               </button>
               <button onclick="cancelConsignmentAction('${safeId(c.id)}')" class="px-3 py-2 bg-clay-inner hover:bg-red-50 text-red-700 border border-clay-salmon/30 font-bold text-xs rounded-xl transition cursor-pointer" title="Cancel Consignment & Release Stock">
-                <span>Cancel</span>
+                <span>${t('cancel')}</span>
               </button>
             </div>
           ` : `
             <div class="flex items-center justify-between bg-clay-inner/60 p-2 rounded-lg text-[11px]">
-              <span class="text-clay-muted">Vehicle: <strong class="text-clay-dark font-mono">${escapeHtml(c.vehicle_number || 'not recorded')}</strong></span>
-              <button onclick="showChallanModal('${safeId(c.id)}')" class="text-clay-terracotta font-bold hover:underline cursor-pointer">View Challan</button>
+              <span class="text-clay-muted">${t('vehicle')}: <strong class="text-clay-dark font-mono">${escapeHtml(c.vehicle_number || t('notRecorded'))}</strong></span>
+              <button onclick="showChallanModal('${safeId(c.id)}')" class="text-clay-terracotta font-bold hover:underline cursor-pointer">${t('viewChallan')}</button>
             </div>
           `}
         `;

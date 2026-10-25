@@ -105,7 +105,28 @@ Open **[aarogya-vayu.vercel.app](https://aarogya-vayu.vercel.app)** and:
 - [ ] Press **Ask** in the side menu and ask *"Which clinics will run out first?"* Then press **Read aloud** to hear Gemini's voice.
 - [ ] Press **Photo** and upload [`docs/samples/shelf_salbutamol.jpg`](docs/samples/shelf_salbutamol.jpg). Gemini counts the boxes and checks them against the register.
 - [ ] Press **Audit**, then **Verify**. Every action is hash-chained.
-- [ ] Switch back to **📡 Live today** when you're done (the scenario is shared by everyone using the demo).
+- [ ] Press **Clinic** in the side menu, then **हिन्दी**. The clinic's own screen switches to Hindi.
+- [ ] Your **Conditions** choice is yours alone: it is remembered in your browser and doesn't change what other visitors see.
+
+---
+
+## 📊 Does it help? A simulation
+
+We replayed a climate surge on the app's 40 sample clinics, with and without Aarogya-Vāyu, using the app's own demand engine and transfer allocator (`scripts/simulate_impact.py`, 20 runs each, no store deliveries inside the window).
+
+<div align="center">
+<img src="docs/impact.svg" width="100%" alt="Simulated days a clinic ran out of a medicine, with and without Aarogya-Vāyu, over 7, 14 and 21 days">
+</div>
+
+| Surge window | Smog, Lucknow-Unnao | Heatwave, Bhubaneswar-Cuttack |
+|---|:-:|:-:|
+| **First 7 days** | **−42%** clinic-days without the medicine, −32% doses missed | **−83%** clinic-days, −69% doses missed |
+| First 14 days | −6% clinic-days, −5% doses | −32% clinic-days, −21% doses |
+| First 21 days | −1% | −7% |
+
+**What this says:** moving spare stock between nearby clinics prevents most stockouts in the first week of a surge. After about two weeks, the whole district is short (the sample data holds about 17–20 days of each medicine across all clinics), and no amount of redistribution helps; the district needs resupply. That's why the app also reports **unmet demand** (shortages no clinic within 35 km can cover) for escalation to the district store.
+
+<sub>Sample inventory and the app's own multipliers, not field data. Assumptions are listed at the top of the script; results are in `docs/impact.json`.</sub>
 
 ---
 
@@ -213,6 +234,17 @@ Every medicine is checked in every scenario; the weather decides how much faster
 
 Thresholds are in `app/surge_engine.py`. The engine plans against the worse of today and the 72-hour forecast.
 
+**What the evidence says, and where our numbers stand:**
+
+| Evidence | Finding | Our rule |
+|---|---|---|
+| Yadav et al. 2021, *Environ Sci Pollut Res* ([doi](https://doi.org/10.1007/s11356-021-13600-7)), AIIMS Delhi | Children's respiratory ER visits **+21%** on moderate and **+29%** on high-pollution days | Our top AQI bands (×1.62, ×1.90) are **higher** than this |
+| Zheng et al. 2015, *PLoS ONE* ([doi](https://doi.org/10.1371/journal.pone.0138146)), meta-analysis of 37 studies | Asthma ER visits and admissions **+2.3% per 10 µg/m³ PM2.5**; effects strongest at lag ≥ 2 days | Supports the direction and the 1–3 day lag |
+| Kawano et al. 2026, *npj Clean Air* ([link](https://www.nature.com/articles/s44407-026-00053-w)), 1.1 M ambulance dispatches in India | **+3.8%** same-day pediatric dispatches per 10 µg/m³, still raised over 7 days | Supports a same-day rise that lasts about a week |
+| Azhar et al. 2014, *PLoS ONE* ([doi](https://doi.org/10.1371/journal.pone.0091831)), Ahmedabad 2010 heatwave | Deaths **×1.76–2.12** in the hottest week (46.8 °C) | Our ×2.10 above 44 °C matches deaths, not ORS demand; no study measures ORS demand directly |
+
+**In short:** the direction and timing are supported; the top smog multipliers are set above what Delhi ER data shows, and the heat multipliers are based on mortality, not medicine use. They are planning assumptions (erring toward warning early), to be calibrated against real consumption in a pilot. The 85% / 80% / 70% shares for amoxicillin and paracetamol are design assumptions with no direct source.
+
 </details>
 
 <details>
@@ -250,7 +282,7 @@ cd aarogya-vayu
 cp .env.example .env          # add GEMINI_API_KEY (free at https://aistudio.google.com/)
 
 uv sync                       # or: python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
-uv run pytest -q              # 50 tests; no API keys needed (AI calls fall back offline)
+uv run pytest -q              # 53 tests; no API keys needed (AI calls fall back offline)
 uv run uvicorn app.main:app --port 8000
 ```
 
@@ -279,10 +311,28 @@ app/
   audit_ledger.py        SHA-256 hash-chained audit log
 static/                  Single-page app (Tailwind, Leaflet, Lucide)
 data/                    Sample facilities, inventory and medicines (two regions)
-tests/                   50 tests: allocator invariants, API, clinic workflow
+tests/                   53 tests: allocator invariants, API, scenarios, clinic workflow
+scripts/simulate_impact.py  Before/after simulation (writes docs/impact.svg and docs/impact.json)
 ```
 
 </details>
+
+---
+
+## 💰 What it costs to run
+
+A rough estimate for one district of 20 clinics, at Google's published Gemini API prices (checked 25 Oct 2026):
+
+| Use per month | Assumed size | Cost |
+|---|---|--:|
+| 600 voice reports (transcribe + read) | ~20 s audio, then ~2k tokens in, ~0.3k out | ~$2.10 |
+| 600 transfer checks (Gemini tool call) | ~3.5k tokens in, ~0.4k out | ~$2.50 |
+| 300 CMO questions | ~6k tokens in, ~1.5k out (two languages) | ~$3.00 |
+| 300 read-alouds (Gemini text-to-speech) | ~30 s audio each (25 tokens/s) | ~$2.00 |
+| 80 shelf-photo checks | one image, short answer | ~$0.20 |
+| **Total** | | **≈ $10 a month (under ₹1,000)** |
+
+<sub>gemini-3.8-flash: $0.75 / 1M input, $3.75 / 1M output; gemini-3.8-flash-tts: $9 / 1M audio output ([pricing page](https://ai.google.dev/gemini-api/docs/pricing)). Google has announced these 3.8 prices double from 1 Jan 2027 (≈ $20 a month). Token sizes are our estimates, not measured; Gemini's thinking tokens are billed as output and could raise the total. Hosting runs on Vercel's free tier; a pilot would add a small database for durable storage.</sub>
 
 ---
 

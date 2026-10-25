@@ -431,7 +431,10 @@ class InventoryDomainService:
             authorized_by=req.officer_name,
             approved_at=now_iso,
             idempotency_key=req.idempotency_key,
-            cryptographic_hash=audit_entry.get("current_hash")
+            cryptographic_hash=audit_entry.get("current_hash"),
+            recommendation_snapshot={**rec.model_dump(), "status": "APPROVED", "challan_id": challan_id,
+                                     "authorized_by": req.officer_name, "approved_at": now_iso,
+                                     "cryptographic_hash": audit_entry.get("current_hash")}
         )
 
         consignments[consignment_id] = consignment.model_dump()
@@ -723,7 +726,10 @@ class InventoryDomainService:
                         description=f"Only {avail} units available ({days_cover} days cover remaining). Immediate replenishment or transfer required.",
                         target_medicine_id=item["medicine_id"],
                         target_batch=item.get("batch_number"),
-                        cta_label="Request Stock Transfer"
+                        cta_label="Request Stock Transfer",
+                        title_hi=f"दवा खत्म होने वाली है: {item['medicine_name']}",
+                        description_hi=f"सिर्फ़ {avail} यूनिट बचे हैं ({days_cover} दिन का स्टॉक)। तुरंत नया स्टॉक या ट्रांसफ़र चाहिए।",
+                        cta_label_hi="स्टॉक ट्रांसफ़र माँगें"
                     ))
 
         # 2. Inbound Consignments awaiting inspection and receipt
@@ -737,7 +743,10 @@ class InventoryDomainService:
                     description=f"Dispatched from {c.get('donor_facility_name')} via Challan {c.get('challan_id')}. Awaiting physical count and receipt.",
                     target_consignment_id=c_id,
                     target_medicine_id=c.get("medicine_id"),
-                    cta_label="Inspect & Confirm Receipt"
+                    cta_label="Inspect & Confirm Receipt",
+                    title_hi=f"आने वाली खेप: {c.get('units_dispatched')} यूनिट {c.get('medicine_name')}",
+                    description_hi=f"{c.get('donor_facility_name')} से चालान {c.get('challan_id')} के साथ भेजी गई। पहुँचने पर गिनती करें और रसीद दर्ज करें।",
+                    cta_label_hi="जाँचें और रसीद पक्की करें"
                 ))
 
         # 3. Outbound Consignments awaiting dispatch
@@ -751,7 +760,10 @@ class InventoryDomainService:
                     description=f"Destination: {c.get('recipient_facility_name')}. Stock is reserved. Hand over to courier and confirm dispatch.",
                     target_consignment_id=c_id,
                     target_medicine_id=c.get("medicine_id"),
-                    cta_label="Handover & Confirm Dispatch"
+                    cta_label="Handover & Confirm Dispatch",
+                    title_hi=f"मंज़ूर ट्रांसफ़र: {c.get('units_requested')} यूनिट {c.get('medicine_name')}",
+                    description_hi=f"भेजना है: {c.get('recipient_facility_name')}। स्टॉक आरक्षित है। कूरियर को सौंपें और भेजना पक्का करें।",
+                    cta_label_hi="कूरियर को सौंपें"
                 ))
 
         # 4. Reconciliation Exceptions (Frozen batches)
@@ -765,7 +777,11 @@ class InventoryDomainService:
                     description=item.get("freeze_reason") or "Physical count was below active commitments. Dispatches and issues are blocked pending MOIC investigation.",
                     target_medicine_id=item["medicine_id"],
                     target_batch=item.get("batch_number"),
-                    cta_label="Resolve Reconciliation"
+                    cta_label="Resolve Reconciliation",
+                    title_hi=f"बैच रोका गया: {item['medicine_name']} ({item.get('batch_number')})",
+                    description_hi=(f"बैच रोका गया। कारण: {item['freeze_reason']}" if item.get("freeze_reason")
+                                    else "गिनती में स्टॉक, आरक्षित मात्रा से कम निकला। जाँच पूरी होने तक इस बैच से देना और भेजना बंद है।"),
+                    cta_label_hi="मिलान पूरा करें"
                 ))
 
         # 5. Near-Expiry Batches (< 60 days)
@@ -781,7 +797,10 @@ class InventoryDomainService:
                         description=f"Expires in {days_exp} days ({item['expiry_date']}). Prioritize for dispensing or inter-facility transfer.",
                         target_medicine_id=item["medicine_id"],
                         target_batch=item.get("batch_number"),
-                        cta_label="Flag for Redistribution"
+                        cta_label="Flag for Redistribution",
+                        title_hi=f"एक्सपायरी चेतावनी: बैच {item.get('batch_number')}",
+                        description_hi=f"{days_exp} दिन में एक्सपायर होगा ({item['expiry_date']})। पहले इसी को दें या दूसरे केंद्र को भेजें।",
+                        cta_label_hi="दूसरे केंद्र को भेजने के लिए चिह्नित करें"
                     ))
 
         # Sort: CRITICAL first, then HIGH, then MEDIUM
